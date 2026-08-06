@@ -1,0 +1,59 @@
+@import "tailwindcss";
+
+@theme {
+  --color-ajo-canvas: #FBF6EF;
+  --color-ajo-surface: #FFFFFF;
+  --color-ajo-surface-sunken: #F3ECE0;
+  --color-ajo-ink: #221A14;
+  --color-ajo-ink-soft: #71655A;
+  --color-ajo-ink-faint: #A89C8E;
+  --color-ajo-line: #E8DDCC;
+  --color-ajo-primary: #B4502C;
+  --color-ajo-primary-soft: #F3DFD2;
+  --color-ajo-accent: #C9961E;
+  --color-ajo-accent-soft: #F6E9C7;
+  --color-ajo-success: #3E7D52;
+  --color-ajo-success-soft: #DEEFE2;
+  --color-ajo-danger: #B33B3B;
+  --color-ajo-danger-soft: #F6DEDE;
+  --color-ajo-warning: #B5791E;
+  --color-ajo-warning-soft: #F6E7CD;
+  --font-family-sans: 'Plus Jakarta Sans', system-ui, sans-serif;
+  --radius-card: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --shadow-soft: 0 24px 70px rgba(16, 21, 20, 0.14);
+}
+
+@layer base {
+  body {
+    @apply bg-ajo-canvas text-ajo-ink antialiased;
+    font-family: var(--font-family-sans);
+  }
+}
+
+@layer components {
+  .btn-primary {
+    @apply inline-flex items-center gap-2 rounded-full bg-ajo-primary px-6 py-3 text-sm font-semibold text-white transition hover:-translate-y-0.5 hover:shadow-lg;
+  }
+
+  .btn-secondary {
+    @apply inline-flex items-center gap-2 rounded-full bg-ajo-accent px-6 py-3 text-sm font-semibold text-ajo-ink transition hover:-translate-y-0.5 hover:shadow-lg;
+  }
+
+  .btn-outline {
+    @apply inline-flex items-center gap-2 rounded-full border-2 border-ajo-ink px-6 py-3 text-sm font-semibold text-ajo-ink transition hover:-translate-y-0.5 hover:shadow-lg;
+  }
+
+  .section-title {
+    @apply text-3xl md:text-4xl lg:text-5xl font-bold text-ajo-ink leading-tight;
+  }
+
+  .section-copy {
+    @apply text-base md:text-lg text-ajo-ink-soft leading-relaxed;
+  }
+
+  .eyebrow {
+    @apply inline-block text-sm font-bold text-ajo-primary uppercase tracking-wide mb-4;
+  }
+}

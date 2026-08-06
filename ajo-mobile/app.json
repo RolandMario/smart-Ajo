@@ -1,0 +1,36 @@
+{
+  "expo": {
+    "name": "SmartAjo",
+    "slug": "ajo-mobile",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "scheme": "ajo",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.ajo.mobile"
+    },
+    "android": {
+      "package": "com.ajo.mobile",
+      "adaptiveIcon": {
+        "backgroundColor": "#FBF6EF",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      [
+        "expo-secure-store",
+        {
+          "faceIDPermission": "Allow Ajo to use Face ID to protect your session."
+        }
+      ]
+    ]
+  }
+}

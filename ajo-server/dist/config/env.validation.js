@@ -1,0 +1,66 @@
+"use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.envValidationSchema = void 0;
+const Joi = __importStar(require("joi"));
+exports.envValidationSchema = Joi.object({
+    NODE_ENV: Joi.string()
+        .valid('development', 'production', 'test')
+        .default('development'),
+    PORT: Joi.number().default(5010),
+    MONGODB_URI: Joi.string().default("mongodb+srv://rolandmario2_db_user:5SuYb5yK4k8wVAsQ@ajo.pkwzfdc.mongodb.net/?appName=Ajo"),
+    JWT_ACCESS_SECRET: Joi.string().default("e4d254a0c30b53c696301eb758d3a5f69f9d69f405992ccb26ed5d0e3460b177"),
+    JWT_ACCESS_EXPIRES_IN: Joi.string().default('7d'),
+    TERMII_API_KEY: Joi.string().optional(),
+    TERMII_SENDER_ID: Joi.string().optional(),
+    TERMII_BASE_URL: Joi.string().default('https://api.ng.termii.com'),
+    PAYSTACK_SECRET_KEY: Joi.string().default('sk_test_f6436553a3e96c17fd447658dbde28b42ed70af7'),
+    PAYSTACK_BASE_URL: Joi.string().default('https://api.paystack.co'),
+    WALLET_CURRENCY: Joi.string().default('NGN'),
+    FIREBASE_PROJECT_ID: Joi.string().default("ma-project-497415"),
+    FIREBASE_CLIENT_EMAIL: Joi.string().default("blog-reader@ma-project-497415.iam.gserviceaccount.com"),
+    FIREBASE_PRIVATE_KEY: Joi.string().default("-----BEGIN PRIVATE KEY-----\nMIIEvAIBADANBgkqhkiG9w0BAQEFAASCBKYwggSiAgEAAoIBAQC1vL677cL0AjPm\nGcWrIyIOMnZivXY/t+IBwyfBlpOVMShbpiQOxrpm4o592FFmmmDJlwk0lQQFs0wR\niTeS+5+LlWl3D+I1jhftItOOi21Hf6ahHPJh8+4rQRsR/VuOETxttVnqHvRJxecR\n9oTzSH6nWUxO+EofAT3BKEFK4Dk8so6JfN5QeAq4JNYrBr5u7xafhDFueYoIENM5\nTrvBjOgEWw/LTgcjtZffaBENXBlKnBVRk/9sVVl22fjsD7Y9Nuu++tm4pl4S5GZv\n0vEW4NwKSxRdlyWNzcxBnvkoJHFkOiV4tDeUpa6jy/j5zu0xLkm6HcnjLfRKh6yE\njJVQwmMfAgMBAAECggEAK7prhlpyMzYoeLAw0LnWYuYfeCiwQCqlldj4QutRPW+j\nj1HNkUSd602ODZe0FmUE7tyJmX5Vhm2a2wlSNuqWfAaKZtyKiGpVNXjQwJapx69e\nT5vgclM4Nm4m7lAw7GEXUip1pRCnpOyaaccQPF1wJCIna0TwyL8KteRSuYp0GzdP\nlSo7+4030A4CHLsvxEKCki1D1DffA0JbdmR2uhq597Iu5NPxl/38m+biLTgoMU53\n35yrHvYIwjMwUxRlv8yt06O4XRTKmNh783v5TsvSkEyx+HnrLQmAD+0BuZ7EAXpG\nnUuVManCKbXkj47d/62RmfJC/ILoOA2B3xqKiBD7qQKBgQDgY3beItr66LKPjikG\ndHJvLG9bkCgTYsAPGH7EJgQvQeJxovCwOPohryS9+hRm4DXDyeZ8qi4tgci8BzgE\nv8S0gmjByU8bUpbOoIur4UIYIHlYi6UcM3jTgpW437cEnYdPZ34P1wFZ4l6n9ER/\natkvvmVOGpsayKfz1N1AOJHVwwKBgQDPVxILUYVOEJTmq/m3A212InKnYazsmklN\nhhmSbPdsPXoFRz67GbBdJAOm6HLGu8nEc684P6RsrhNCNuVIxmmqk6Sd66c0Plh1\nBRi60KgLpq+Wn9Tq7irf0c1Nng5MKEdlQu8rql9an/NoeRcTEHtchQiFJ4e/7C5c\nrRSoOI17dQKBgHRxCSlDGzHjeW3njsCLwyqP+4WfbDyLHTF4O6hcNgW0AeeIb7Bz\nENJUChQP53BvX1cnudTtlyMEW3+/m0FTpqcpmWUeq095b0rwoyphraPJjk71wIu+\n5i+Ub0/NwDLD8IizIwbjQw862nX722PntacB/Z4nTl/6yrVMvDfsYzlzAoGAWs05\n9MT9yUNPwnmcQb75iBvr9Eu9bFzhL1dECbE45ilCL9+UpGHKr++evdDcuxXwdd1n\n5g1RF9tgScY6wZVLH03LcPGL50BKguz5eI76mSeljCRxHXWyRxTdgVlvz4BwS/N1\nRL03Rzv3YFBvf4TfUZRdN9spAy8O2r1d55HkvCUCgYAP7eM3oxtu2jNBpx3cZ4BQ\nSay+ix7DsiBzCwC25U2dshGRB8oLz7Um5uOqcF4TWEDeuyLNcgkLm8w4Sd5MVG2D\nVPOMW/ojOZavW9R5W2uYE67vr/8foNIvmrUFowGribqIPqHY34OydozdRTZbiVuL\nNVWH0ZQVxq9V0f4zN4Kjfw==\n-----END PRIVATE KEY-----\n"),
+    OTP_LENGTH: Joi.number().default(6),
+    OTP_EXPIRY_MINUTES: Joi.number().default(10),
+    OTP_MAX_ATTEMPTS: Joi.number().default(5),
+    VTPASS_API_KEY: Joi.string().default('2acd17c4d346b51bf9abde8645e4c821'),
+    VTPASS_PUBLIC_KEY: Joi.string().default('PK_8115ca771578b30a29f9cf3f1244c0fa2c9b6c28542'),
+    VTPASS_SECRET_KEY: Joi.string().default('SK_5329c095bee378757f4f25697a69579731e9b19a32d'),
+    VTPASS_BASE_URL: Joi.string().default('https://sandbox.vtpass.com/api/'),
+    SEED_PLATFORM_ADMIN_EMAIL: Joi.string().email().default('admin@ajo.app'),
+    SEED_PLATFORM_ADMIN_PASSWORD: Joi.string().min(8).default('r@landMari@123'),
+    SEED_PLATFORM_ADMIN_PHONE: Joi.string().default('+2347068497569'),
+});
+//# sourceMappingURL=env.validation.js.map
