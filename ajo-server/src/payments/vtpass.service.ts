@@ -1,7 +1,79 @@
-import { BadRequestException, Injectable, InternalServerErrorException, Logger } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  InternalServerErrorException,
+  Logger,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import axios, { AxiosInstance } from 'axios';
 import { randomUUID } from 'crypto';
+
+interface VTPassTransaction {
+  transactionId?: string;
+  status?: string;
+  commission?: number;
+  customer_name?: string;
+  name?: string;
+  customer_address?: string;
+  address?: string;
+  product_name?: string;
+  current_package?: string;
+  outstanding_balance?: number;
+}
+
+interface VTPassContent {
+  transactions?: VTPassTransaction;
+  variations?: VTPassVariation[];
+  customer_name?: string;
+  name?: string;
+  customer_address?: string;
+  address?: string;
+  product_name?: string;
+  current_package?: string;
+  outstanding_balance?: number;
+}
+
+interface VTPassVariation {
+  variation_code: string;
+  name: string;
+  variation_amount: number;
+  fixedPrice: string;
+}
+
+interface VTPassResponse<T = VTPassContent> {
+  code: string | number;
+  response_description?: string;
+  message?: string;
+  content?: T;
+}
+
+export interface PurchaseResult {
+  requestId: string;
+  externalTransactionId: string;
+  status: string;
+  commission: number;
+}
+
+export interface VerifyProductResult {
+  valid: boolean;
+  name?: string;
+  address?: string;
+  packageInfo?: string;
+  outstanding?: number;
+  message?: string;
+}
+
+export interface ServiceVariation {
+  variationCode: string;
+  name: string;
+  amount: number;
+  fixedPrice: boolean;
+}
+
+export interface QueryTransactionResult {
+  status: string;
+  externalTransactionId?: string;
+}
 
 @Injectable()
 export class VTPassService {
@@ -26,6 +98,7 @@ export class VTPassService {
       },
     });
   }
+
   private getAuthHeaders(method: 'GET' | 'POST'): Record<string, string> {
     if (method === 'GET') {
       return { 'public-key': this.publicKey };
@@ -45,26 +118,60 @@ export class VTPassService {
     return `${datePrefix}${suffix}`;
   }
 
+  private isSuccessCode(code: string | number): boolean {
+    const codeStr =
+      typeof code === 'number' ? String(code) : String(code ?? '');
+    return codeStr === '000' || codeStr === '0';
+  }
+
   private handleError(action: string, error: unknown): never {
     if (axios.isAxiosError(error)) {
-      const data = error.response?.data as { response_description?: string; message?: string } | undefined;
-      const message = data?.response_description ?? data?.message ?? error.message;
+      const data = error.response?.data as
+        | { response_description?: string; message?: string }
+        | undefined;
+      const message =
+        data?.response_description ?? data?.message ?? error.message;
       this.logger.error(`VTpass ${action} failed: ${message}`);
-      if (error.response && error.response.status >= 400 && error.response.status < 500) {
+      if (
+        error.response &&
+        error.response.status >= 400 &&
+        error.response.status < 500
+      ) {
         throw new BadRequestException(`VTpass error: ${message}`);
       }
     } else if (error instanceof Error) {
       this.logger.error(`VTpass ${action} failed: ${error.message}`);
-      throw new InternalServerErrorException(`VTpass ${action} failed: ${error.message}`);
+      throw new InternalServerErrorException(
+        `VTpass ${action} failed: ${error.message}`,
+      );
     } else {
       this.logger.error(`VTpass ${action} failed: ${String(error)}`);
     }
     throw new InternalServerErrorException(`VTpass ${action} failed`);
   }
 
-  async purchaseAirtime(params: { serviceID: string; phone: string; amount: number }): Promise<{ requestId: string; externalTransactionId: string; status: string; commission: number }> {
+  private toPurchaseResult(
+    requestId: string,
+    data: VTPassResponse,
+  ): PurchaseResult {
+    const tx = data.content?.transactions;
+    return {
+      requestId,
+      externalTransactionId: tx?.transactionId ?? requestId,
+      status: tx?.status ?? 'delivered',
+      commission: Number(tx?.commission ?? 0),
+    };
+  }
+
+  async purchaseAirtime(params: {
+    serviceID: string;
+    phone: string;
+    amount: number;
+  }): Promise<PurchaseResult> {
     const requestId = this.getRequestId();
-    this.logger.log(`Initiating airtime purchase: requestId=${requestId}, serviceID=${params.serviceID}, phone=${params.phone}, amount=${params.amount}`);
+    this.logger.log(
+      `Initiating airtime purchase: requestId=${requestId}, serviceID=${params.serviceID}, phone=${params.phone}, amount=${params.amount}`,
+    );
     try {
       const payload = {
         request_id: requestId,
@@ -73,32 +180,41 @@ export class VTPassService {
         phone: params.phone,
       };
       this.logger.debug(`VTpass airtime payload: ${JSON.stringify(payload)}`);
-      const response = await this.client.post('pay', payload, { headers: this.getAuthHeaders('POST') });
+      const response = await this.client.post<VTPassResponse>('pay', payload, {
+        headers: this.getAuthHeaders('POST'),
+      });
       const data = response.data;
       this.logger.log(`VTpass airtime response: ${JSON.stringify(data)}`);
-      const code = typeof data.code === 'number' ? String(data.code) : String(data.code ?? '');
-      if (code !== '000' && code !== '0') {
-        const errorMsg = data.response_description || data.message || 'VTpass purchase failed';
-        this.logger.error(`VTpass airtime failed: code=${code}, message=${errorMsg}`);
+      if (!this.isSuccessCode(data.code)) {
+        const errorMsg =
+          data.response_description || data.message || 'VTpass purchase failed';
+        this.logger.error(
+          `VTpass airtime failed: code=${String(data.code)}, message=${errorMsg}`,
+        );
         throw new BadRequestException(`Airtime purchase failed: ${errorMsg}`);
       }
-      const commission = Number(data.content?.transactions?.commission ?? 0);
-      this.logger.log(`Airtime purchase successful: requestId=${requestId}, transactionId=${data.content?.transactions?.transactionId}, commission=${commission}`);
-      return {
-        requestId,
-        externalTransactionId: data.content?.transactions?.transactionId ?? requestId,
-        status: data.content?.transactions?.status ?? 'delivered',
-        commission,
-      };
+      const result = this.toPurchaseResult(requestId, data);
+      this.logger.log(
+        `Airtime purchase successful: requestId=${requestId}, transactionId=${result.externalTransactionId}, commission=${result.commission}`,
+      );
+      return result;
     } catch (error) {
-      this.logger.error(`Airtime purchase exception: ${error instanceof Error ? error.message : String(error)}`);
+      this.logger.error(
+        `Airtime purchase exception: ${error instanceof Error ? error.message : String(error)}`,
+      );
       return this.handleError('airtime purchase', error);
     }
   }
 
-  async purchaseData(params: { serviceID: string; phone: string; variationCode: string }): Promise<{ requestId: string; externalTransactionId: string; status: string; commission: number }> {
+  async purchaseData(params: {
+    serviceID: string;
+    phone: string;
+    variationCode: string;
+  }): Promise<PurchaseResult> {
     const requestId = this.getRequestId();
-    this.logger.log(`Initiating data purchase: requestId=${requestId}, serviceID=${params.serviceID}, phone=${params.phone}, variationCode=${params.variationCode}`);
+    this.logger.log(
+      `Initiating data purchase: requestId=${requestId}, serviceID=${params.serviceID}, phone=${params.phone}, variationCode=${params.variationCode}`,
+    );
     try {
       const payload = {
         request_id: requestId,
@@ -107,30 +223,31 @@ export class VTPassService {
         variation_code: params.variationCode,
       };
       this.logger.debug(`VTpass data payload: ${JSON.stringify(payload)}`);
-      const response = await this.client.post('pay', payload, { headers: this.getAuthHeaders('POST') });
+      const response = await this.client.post<VTPassResponse>('pay', payload, {
+        headers: this.getAuthHeaders('POST'),
+      });
       const data = response.data;
       this.logger.log(`VTpass data response: ${JSON.stringify(data)}`);
-      const code = typeof data.code === 'number' ? String(data.code) : String(data.code ?? '');
-      if (code !== '000' && code !== '0') {
-        const responseDescription = String(data.response_description ?? '');
-        const isSuccessCode = code === '000' || code === '0';
-        const isSuccessDescription = responseDescription === '000' || responseDescription === '0';
-        if (!isSuccessCode && !isSuccessDescription) {
-          const errorMsg = responseDescription || data.message || 'VTpass data purchase failed';
-          this.logger.error(`VTpass data failed: code=${code}, message=${errorMsg}`);
-          throw new BadRequestException(`Data purchase failed: ${errorMsg}`);
-        }
+      const responseDescription = String(data.response_description ?? '');
+      const isSuccessDescription =
+        responseDescription === '000' || responseDescription === '0';
+      if (!this.isSuccessCode(data.code) && !isSuccessDescription) {
+        const errorMsg =
+          responseDescription || data.message || 'VTpass data purchase failed';
+        this.logger.error(
+          `VTpass data failed: code=${String(data.code)}, message=${errorMsg}`,
+        );
+        throw new BadRequestException(`Data purchase failed: ${errorMsg}`);
       }
-      const commission = Number(data.content?.transactions?.commission ?? 0);
-      this.logger.log(`Data purchase successful: requestId=${requestId}, transactionId=${data.content?.transactions?.transactionId}, commission=${commission}`);
-      return {
-        requestId,
-        externalTransactionId: data.content?.transactions?.transactionId ?? requestId,
-        status: data.content?.transactions?.status ?? 'delivered',
-        commission,
-      };
+      const result = this.toPurchaseResult(requestId, data);
+      this.logger.log(
+        `Data purchase successful: requestId=${requestId}, transactionId=${result.externalTransactionId}, commission=${result.commission}`,
+      );
+      return result;
     } catch (error) {
-      this.logger.error(`Data purchase exception: ${error instanceof Error ? error.message : String(error)}`);
+      this.logger.error(
+        `Data purchase exception: ${error instanceof Error ? error.message : String(error)}`,
+      );
       return this.handleError('data purchase', error);
     }
   }
@@ -140,9 +257,11 @@ export class VTPassService {
     billersCode: string;
     amount: number;
     phone: string;
-  }): Promise<{ requestId: string; externalTransactionId: string; status: string; commission: number }> {
+  }): Promise<PurchaseResult> {
     const requestId = this.getRequestId();
-    this.logger.log(`Initiating cable purchase: requestId=${requestId}, serviceID=${params.serviceID}, billersCode=${params.billersCode}, amount=${params.amount}`);
+    this.logger.log(
+      `Initiating cable purchase: requestId=${requestId}, serviceID=${params.serviceID}, billersCode=${params.billersCode}, amount=${params.amount}`,
+    );
     try {
       const payload = {
         request_id: requestId,
@@ -153,31 +272,32 @@ export class VTPassService {
         subscription_type: 'change',
       };
       this.logger.debug(`VTpass cable payload: ${JSON.stringify(payload)}`);
-      const response = await this.client.post(
-        'pay',
-        payload,
-        { headers: this.getAuthHeaders('POST') },
-      );
+      const response = await this.client.post<VTPassResponse>('pay', payload, {
+        headers: this.getAuthHeaders('POST'),
+      });
 
       const data = response.data;
       this.logger.log(`VTpass cable response: ${JSON.stringify(data)}`);
-      const code = typeof data.code === 'number' ? String(data.code) : String(data.code ?? '');
-      if (code !== '000' && code !== '0') {
-        const errorMsg = data.response_description || data.message || 'VTpass cable purchase failed';
-        this.logger.error(`VTpass cable failed: code=${code}, message=${errorMsg}`);
+      if (!this.isSuccessCode(data.code)) {
+        const errorMsg =
+          data.response_description ||
+          data.message ||
+          'VTpass cable purchase failed';
+        this.logger.error(
+          `VTpass cable failed: code=${String(data.code)}, message=${errorMsg}`,
+        );
         throw new BadRequestException(`Cable purchase failed: ${errorMsg}`);
       }
 
-      const commission = Number(data.content?.transactions?.commission ?? 0);
-      this.logger.log(`Cable purchase successful: requestId=${requestId}, transactionId=${data.content?.transactions?.transactionId}, commission=${commission}`);
-      return {
-        requestId,
-        externalTransactionId: data.content?.transactions?.transactionId ?? requestId,
-        status: data.content?.transactions?.status ?? 'delivered',
-        commission,
-      };
+      const result = this.toPurchaseResult(requestId, data);
+      this.logger.log(
+        `Cable purchase successful: requestId=${requestId}, transactionId=${result.externalTransactionId}, commission=${result.commission}`,
+      );
+      return result;
     } catch (error) {
-      this.logger.error(`Cable purchase exception: ${error instanceof Error ? error.message : String(error)}`);
+      this.logger.error(
+        `Cable purchase exception: ${error instanceof Error ? error.message : String(error)}`,
+      );
       return this.handleError('cable purchase', error);
     }
   }
@@ -187,9 +307,11 @@ export class VTPassService {
     billerCode: string;
     amount: number;
     phone: string;
-  }): Promise<{ requestId: string; externalTransactionId: string; status: string; commission: number }> {
+  }): Promise<PurchaseResult> {
     const requestId = this.getRequestId();
-    this.logger.log(`Initiating electricity purchase: requestId=${requestId}, serviceID=${params.serviceID}, billerCode=${params.billerCode}, amount=${params.amount}`);
+    this.logger.log(
+      `Initiating electricity purchase: requestId=${requestId}, serviceID=${params.serviceID}, billerCode=${params.billerCode}, amount=${params.amount}`,
+    );
     try {
       const payload = {
         request_id: requestId,
@@ -198,32 +320,37 @@ export class VTPassService {
         amount: params.amount,
         phone: params.phone,
       };
-      this.logger.debug(`VTpass electricity payload: ${JSON.stringify(payload)}`);
-      const response = await this.client.post(
-        'pay',
-        payload,
-        { headers: this.getAuthHeaders('POST') },
+      this.logger.debug(
+        `VTpass electricity payload: ${JSON.stringify(payload)}`,
       );
+      const response = await this.client.post<VTPassResponse>('pay', payload, {
+        headers: this.getAuthHeaders('POST'),
+      });
 
       const data = response.data;
       this.logger.log(`VTpass electricity response: ${JSON.stringify(data)}`);
-      const code = typeof data.code === 'number' ? String(data.code) : String(data.code ?? '');
-      if (code !== '000' && code !== '0') {
-        const errorMsg = data.response_description || data.message || 'VTpass electricity purchase failed';
-        this.logger.error(`VTpass electricity failed: code=${code}, message=${errorMsg}`);
-        throw new BadRequestException(`Electricity purchase failed: ${errorMsg}`);
+      if (!this.isSuccessCode(data.code)) {
+        const errorMsg =
+          data.response_description ||
+          data.message ||
+          'VTpass electricity purchase failed';
+        this.logger.error(
+          `VTpass electricity failed: code=${String(data.code)}, message=${errorMsg}`,
+        );
+        throw new BadRequestException(
+          `Electricity purchase failed: ${errorMsg}`,
+        );
       }
 
-      const commission = Number(data.content?.transactions?.commission ?? 0);
-      this.logger.log(`Electricity purchase successful: requestId=${requestId}, transactionId=${data.content?.transactions?.transactionId}, commission=${commission}`);
-      return {
-        requestId,
-        externalTransactionId: data.content?.transactions?.transactionId ?? requestId,
-        status: data.content?.transactions?.status ?? 'delivered',
-        commission,
-      };
+      const result = this.toPurchaseResult(requestId, data);
+      this.logger.log(
+        `Electricity purchase successful: requestId=${requestId}, transactionId=${result.externalTransactionId}, commission=${result.commission}`,
+      );
+      return result;
     } catch (error) {
-      this.logger.error(`Electricity purchase exception: ${error instanceof Error ? error.message : String(error)}`);
+      this.logger.error(
+        `Electricity purchase exception: ${error instanceof Error ? error.message : String(error)}`,
+      );
       return this.handleError('electricity purchase', error);
     }
   }
@@ -231,17 +358,10 @@ export class VTPassService {
   async verifyProduct(params: {
     serviceID: string;
     billersCode: string;
-  }): Promise<{
-    valid: boolean;
-    name?: string;
-    address?: string;
-    packageInfo?: string;
-    outstanding?: number;
-    message?: string;
-  }> {
+  }): Promise<VerifyProductResult> {
     const requestId = this.getRequestId();
     try {
-      const response = await this.client.post(
+      const response = await this.client.post<VTPassResponse>(
         'merchant-verify',
         {
           request_id: requestId,
@@ -252,8 +372,7 @@ export class VTPassService {
       );
 
       const data = response.data;
-      const code = typeof data.code === 'number' ? String(data.code) : String(data.code ?? '');
-      if (code !== '000' && code !== '0') {
+      if (!this.isSuccessCode(data.code)) {
         return {
           valid: false,
           message: data.response_description || 'Verification failed',
@@ -264,15 +383,37 @@ export class VTPassService {
       const content = data.content ?? {};
       return {
         valid: true,
-        name: tx.customer_name ?? tx.name ?? content.customer_name ?? content.name ?? undefined,
-        address: tx.customer_address ?? tx.address ?? content.customer_address ?? content.address ?? undefined,
-        packageInfo: tx.product_name ?? tx.current_package ?? content.product_name ?? content.current_package ?? undefined,
-        outstanding: tx.outstanding_balance ? Number(tx.outstanding_balance) : content.outstanding_balance ? Number(content.outstanding_balance) : undefined,
+        name:
+          tx.customer_name ??
+          tx.name ??
+          content.customer_name ??
+          content.name ??
+          undefined,
+        address:
+          tx.customer_address ??
+          tx.address ??
+          content.customer_address ??
+          content.address ??
+          undefined,
+        packageInfo:
+          tx.product_name ??
+          tx.current_package ??
+          content.product_name ??
+          content.current_package ??
+          undefined,
+        outstanding:
+          tx.outstanding_balance !== undefined
+            ? Number(tx.outstanding_balance)
+            : content.outstanding_balance !== undefined
+              ? Number(content.outstanding_balance)
+              : undefined,
         message: data.response_description,
       };
     } catch (error) {
       if (axios.isAxiosError(error) && error.response?.status === 400) {
-        const data = error.response.data as { response_description?: string };
+        const data = error.response.data as
+          | { response_description?: string }
+          | undefined;
         return {
           valid: false,
           message: data?.response_description ?? 'Verification failed',
@@ -282,32 +423,31 @@ export class VTPassService {
     }
   }
 
-  async getServiceVariations(serviceID: string): Promise<
-    Array<{
-      variationCode: string;
-      name: string;
-      amount: number;
-      fixedPrice: boolean;
-    }>
-  > {
+  async getServiceVariations(serviceID: string): Promise<ServiceVariation[]> {
     try {
-      const response = await this.client.get('service-variations', {
-        params: { serviceID },
-        headers: this.getAuthHeaders('GET'),
-      });
+      const response = await this.client.get<VTPassResponse>(
+        'service-variations',
+        {
+          params: { serviceID },
+          headers: this.getAuthHeaders('GET'),
+        },
+      );
 
       const data = response.data;
-      const code = typeof data.code === 'number' ? String(data.code) : String(data.code ?? '');
       const responseDescription = String(data.response_description ?? '');
-      this.logger.log(`VTpass service-variations raw response code=${code}, description=${responseDescription}`);
-      const isSuccessCode = code === '000' || code === '0';
-      const isSuccessDescription = responseDescription === '000' || responseDescription === '0';
-      if (!isSuccessCode && !isSuccessDescription) {
-        throw new BadRequestException(responseDescription || 'Failed to fetch variations');
+      this.logger.log(
+        `VTpass service-variations raw response code=${String(data.code)}, description=${responseDescription}`,
+      );
+      const isSuccessDescription =
+        responseDescription === '000' || responseDescription === '0';
+      if (!this.isSuccessCode(data.code) && !isSuccessDescription) {
+        throw new BadRequestException(
+          responseDescription || 'Failed to fetch variations',
+        );
       }
 
       const variations = data.content?.variations ?? [];
-      return variations.map((v: Record<string, unknown>) => ({
+      return variations.map((v) => ({
         variationCode: String(v.variation_code),
         name: String(v.name),
         amount: Number(v.variation_amount),
@@ -318,12 +458,9 @@ export class VTPassService {
     }
   }
 
-  async queryTransaction(requestId: string): Promise<{
-    status: string;
-    externalTransactionId?: string;
-  }> {
+  async queryTransaction(requestId: string): Promise<QueryTransactionResult> {
     try {
-      const response = await this.client.post(
+      const response = await this.client.post<VTPassResponse>(
         'requery',
         { request_id: requestId },
         { headers: this.getAuthHeaders('POST') },
