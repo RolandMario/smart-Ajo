@@ -190,14 +190,34 @@ export class VTPassService {
       });
       const data = response.data;
       this.logger.log(`VTpass airtime response: ${JSON.stringify(data)}`);
+      const tx = data.content?.transactions;
       if (!this.isSuccessCode(data.code)) {
-        const errorMsg =
-          data.response_description || data.message || 'VTpass purchase failed';
+        const errorMsg = data.response_description || data.message || 'VTpass purchase failed';
         this.logger.error(
-          `VTpass airtime failed: code=${String(data.code)}, message=${errorMsg}`,
+          `VTpass airtime failed: code=${String(data.code)}, message=${errorMsg}, txStatus=${tx?.status}, txId=${tx?.transactionId}`,
         );
+        // If VTpass reports a pending transaction, attempt a single requery to confirm final state
+        if (tx?.status === 'pending') {
+          this.logger.log(`VTpass airtime pending — requerying requestId=${requestId}`);
+          try {
+            const qr = await this.queryTransaction(requestId);
+            this.logger.log(`VTpass requery result: ${JSON.stringify(qr)}`);
+            if (qr.status === 'delivered' || qr.status === 'success' || qr.status === 'successful') {
+              const result = this.toPurchaseResult(requestId, data);
+              this.logger.log(
+                `Airtime purchase confirmed on requery: requestId=${requestId}, transactionId=${result.externalTransactionId}, commission=${result.commission}`,
+              );
+              return result;
+            }
+            // if requery didn't report success, fall through to throw below
+          } catch (e) {
+            this.logger.error(`VTpass airtime requery failed: ${e instanceof Error ? e.message : String(e)}`);
+            // continue to throw original failure error below
+          }
+        }
         throw new BadRequestException(`Airtime purchase failed: ${errorMsg}`);
       }
+
       const result = this.toPurchaseResult(requestId, data);
       this.logger.log(
         `Airtime purchase successful: requestId=${requestId}, transactionId=${result.externalTransactionId}, commission=${result.commission}`,
