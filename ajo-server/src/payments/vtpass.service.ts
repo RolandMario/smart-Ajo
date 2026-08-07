@@ -126,12 +126,17 @@ export class VTPassService {
 
   private handleError(action: string, error: unknown): never {
     if (axios.isAxiosError(error)) {
-      const data = error.response?.data as
+      const status = error.response?.status;
+      const respData = error.response?.data;
+      // Log HTTP status and full response body to aid debugging
+      this.logger.error(
+        `VTpass ${action} failed: status=${status}, body=${JSON.stringify(respData)}`,
+      );
+      const data = respData as
         | { response_description?: string; message?: string }
         | undefined;
       const message =
         data?.response_description ?? data?.message ?? error.message;
-      this.logger.error(`VTpass ${action} failed: ${message}`);
       if (
         error.response &&
         error.response.status >= 400 &&
