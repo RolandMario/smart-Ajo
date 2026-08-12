@@ -16,6 +16,7 @@ exports.PlatformAdminUsersController = void 0;
 const common_1 = require("@nestjs/common");
 const platform_admin_users_service_1 = require("./platform-admin-users.service");
 const list_users_query_dto_1 = require("./dto/list-users-query.dto");
+const credit_wallet_dto_1 = require("./dto/credit-wallet.dto");
 const jwt_auth_guard_1 = require("../common/guards/jwt-auth.guard");
 const platform_admin_guard_1 = require("../common/guards/platform-admin.guard");
 let PlatformAdminUsersController = class PlatformAdminUsersController {
@@ -28,6 +29,9 @@ let PlatformAdminUsersController = class PlatformAdminUsersController {
     }
     getDetail(id) {
         return this.platformAdminUsersService.getUserDetail(id);
+    }
+    creditWallet(id, dto) {
+        return this.platformAdminUsersService.creditWallet(id, dto.amount, dto.note);
     }
 };
 exports.PlatformAdminUsersController = PlatformAdminUsersController;
@@ -45,6 +49,14 @@ __decorate([
     __metadata("design:paramtypes", [String]),
     __metadata("design:returntype", void 0)
 ], PlatformAdminUsersController.prototype, "getDetail", null);
+__decorate([
+    (0, common_1.Post)(':id/wallet/credit'),
+    __param(0, (0, common_1.Param)('id')),
+    __param(1, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, credit_wallet_dto_1.CreditWalletDto]),
+    __metadata("design:returntype", void 0)
+], PlatformAdminUsersController.prototype, "creditWallet", null);
 exports.PlatformAdminUsersController = PlatformAdminUsersController = __decorate([
     (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard, platform_admin_guard_1.PlatformAdminGuard),
     (0, common_1.Controller)('admin/users'),

@@ -11,6 +11,7 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 var __param = (this && this.__param) || function (paramIndex, decorator) {
     return function (target, key) { decorator(target, key, paramIndex); }
 };
+var BillsService_1;
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.BillsService = void 0;
 const common_1 = require("@nestjs/common");
@@ -22,12 +23,13 @@ const wallet_service_1 = require("../wallet/wallet.service");
 const notifications_service_1 = require("../notifications/notifications.service");
 const notification_events_1 = require("../notifications/notification-events");
 const users_service_1 = require("../users/users.service");
-let BillsService = class BillsService {
+let BillsService = BillsService_1 = class BillsService {
     vtpass;
     walletService;
     usersService;
     notificationsService;
     connection;
+    logger = new common_1.Logger(BillsService_1.name);
     constructor(vtpass, walletService, usersService, notificationsService, connection) {
         this.vtpass = vtpass;
         this.walletService = walletService;
@@ -42,7 +44,7 @@ let BillsService = class BillsService {
     DISCO_SERVICE_ID_MAP = {
         ikedc: 'ikeja-electric',
         ekedc: 'eko-electric',
-        phed: 'phedc',
+        phed: 'portharcourt-electric',
         jed: 'jos-electric',
         aedc: 'abuja-electric',
         kaedco: 'kano-electric',
@@ -87,16 +89,21 @@ let BillsService = class BillsService {
                     throw new common_1.BadRequestException('Insufficient wallet balance');
                 try {
                     const purchaseResult = await purchaseFn();
-                    await this.walletService.confirmBillPayment(reference);
+                    await this.walletService.confirmBillPayment(reference, session);
                     const commission = purchaseResult.commission;
                     if (commission > 0) {
-                        const adminUserId = await this.getPlatformAdminUserId();
-                        await this.walletService.creditBillCommission(adminUserId, commission, {
-                            billReference: reference,
-                            billType: metadata.type || 'unknown',
-                            userPaid: amount,
-                            actualCost: amount - commission,
-                        }, session);
+                        try {
+                            const adminUserId = await this.getPlatformAdminUserId();
+                            await this.walletService.creditBillCommission(adminUserId, commission, {
+                                billReference: reference,
+                                billType: metadata.type || 'unknown',
+                                userPaid: amount,
+                                actualCost: amount - commission,
+                            }, session);
+                        }
+                        catch (commissionError) {
+                            this.logger.error(`Failed to credit bill commission for ${reference}: ${commissionError instanceof Error ? commissionError.message : String(commissionError)}`);
+                        }
                     }
                     return purchaseResult;
                 }
@@ -131,11 +138,11 @@ let BillsService = class BillsService {
         const user = await this.usersService.findById(userId);
         if (!user)
             throw new common_1.NotFoundException('User not found');
-        return this.executeBillTransaction(userId, dto.amount, { type: 'cable', serviceProvider: dto.serviceProvider, smartCardNumber: dto.smartCardNumber, recipient: dto.smartCardNumber }, () => this.vtpass.purchaseCable({ serviceID: dto.serviceProvider, billersCode: dto.smartCardNumber, amount: dto.amount, phone: user.phone }));
+        return this.executeBillTransaction(userId, dto.amount, { type: 'cable', serviceProvider: dto.serviceProvider, smartCardNumber: dto.smartCardNumber, variationCode: dto.variationCode, recipient: dto.smartCardNumber }, () => this.vtpass.purchaseCable({ serviceID: dto.serviceProvider, billersCode: dto.smartCardNumber, amount: dto.amount, phone: user.phone, variationCode: dto.variationCode }));
     }
     async purchaseElectricity(userId, dto) {
         const discoServiceId = this.DISCO_SERVICE_ID_MAP[dto.disco.toLowerCase()] ?? dto.disco.toLowerCase().replace(/\s+/g, '');
-        return this.executeBillTransaction(userId, dto.amount, { type: 'electricity', disco: dto.disco, meterNumber: dto.meterNumber, meterType: dto.meterType, recipient: dto.meterNumber, phone: dto.phone }, () => this.vtpass.purchaseElectricity({ serviceID: discoServiceId, billerCode: dto.meterNumber, amount: dto.amount, phone: dto.phone }));
+        return this.executeBillTransaction(userId, dto.amount, { type: 'electricity', disco: dto.disco, meterNumber: dto.meterNumber, meterType: dto.meterType, recipient: dto.meterNumber, phone: dto.phone }, () => this.vtpass.purchaseElectricity({ serviceID: discoServiceId, billersCode: dto.meterNumber, amount: dto.amount, phone: dto.phone, variationCode: dto.meterType }));
     }
     async getDataPlans(network) {
         const serviceMap = { mtn: 'mtn-data', airtel: 'airtel-data', glo: 'glo-data', '9mobile': 'etisalat-data' };
@@ -150,7 +157,7 @@ let BillsService = class BillsService {
     }
 };
 exports.BillsService = BillsService;
-exports.BillsService = BillsService = __decorate([
+exports.BillsService = BillsService = BillsService_1 = __decorate([
     (0, common_1.Injectable)(),
     __param(4, (0, mongoose_1.InjectConnection)()),
     __metadata("design:paramtypes", [vtpass_service_1.VTPassService,

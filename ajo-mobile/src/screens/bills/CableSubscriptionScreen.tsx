@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { StyleSheet, Text, View, Pressable, FlatList } from "react-native";
+import { StyleSheet, Text, View, Pressable, FlatList, Modal } from "react-native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import type { BillsStackParamList } from "../../navigation/types";
 import { Screen } from "../../components/Screen";
@@ -13,14 +13,21 @@ import { ApiError } from "../../api/api-error";
 
 type Props = NativeStackScreenProps<BillsStackParamList, "CableSubscription">;
 
+type CablePlan = {
+  variationCode: string;
+  name: string;
+  amount: number;
+  fixedPrice: boolean;
+};
+
 const PROVIDERS = ["dstv", "gotv", "startimes"] as const;
 
 export function CableSubscriptionScreen({ navigation }: Props) {
   const [provider, setProvider] = useState<string>("");
   const [smartCard, setSmartCard] = useState("");
-  const [amount, setAmount] = useState("");
-  const [plans, setPlans] = useState<Array<{ variationCode: string; name: string; amount: number; fixedPrice: boolean }>>([]);
-  const [selectedPlan, setSelectedPlan] = useState<{ variationCode: string; name: string; amount: number } | null>(null);
+  const [plans, setPlans] = useState<CablePlan[]>([]);
+  const [selectedPlan, setSelectedPlan] = useState<CablePlan | null>(null);
+  const [plansOpen, setPlansOpen] = useState(false);
   const [loadingPlans, setLoadingPlans] = useState(false);
   const [validating, setValidating] = useState(false);
   const [verified, setVerified] = useState<{ name?: string; packageInfo?: string } | null>(null);
@@ -30,7 +37,6 @@ export function CableSubscriptionScreen({ navigation }: Props) {
     setLoadingPlans(true);
     setPlans([]);
     setSelectedPlan(null);
-    setAmount("");
     setError(null);
     try {
       const data = await listCablePlans(prov);
@@ -84,15 +90,14 @@ export function CableSubscriptionScreen({ navigation }: Props) {
 
   function handleContinue() {
     if (!verified) { setError("Verify smart card first"); return; }
-    const numAmount = Number(amount);
-    if (numAmount < 100) { setError("Minimum amount is ₦100"); return; }
+    if (!selectedPlan) { setError("Select a subscription plan"); return; }
     navigation.navigate("BillConfirmation", {
       serviceType: "cable",
       provider,
       recipient: smartCard,
-      amount: numAmount,
+      amount: selectedPlan.amount,
       customerName: verified?.name,
-      metadata: { smartCardNumber: smartCard, selectedPlan: selectedPlan?.variationCode },
+      metadata: { smartCardNumber: smartCard, variationCode: selectedPlan.variationCode, packageName: selectedPlan.name },
     });
   }
 
@@ -117,32 +122,56 @@ export function CableSubscriptionScreen({ navigation }: Props) {
         </View>
       )}
       {loadingPlans && <LoadingScreen />}
-      {plans.length > 0 && (
+      {verified && plans.length > 0 && (
         <>
-          <Text style={styles.label}>Available Plans</Text>
-          <FlatList
-            data={plans}
-            keyExtractor={(item) => item.variationCode}
-            scrollEnabled={false}
-            renderItem={({ item }) => (
-              <Pressable
-                style={({ pressed }) => [styles.planItem, selectedPlan?.variationCode === item.variationCode && styles.planItemActive, pressed && { opacity: 0.8 }]}
-                onPress={() => {
-                  setSelectedPlan(item);
-                  setAmount(String(item.amount));
+          <Text style={styles.label}>Select a plan</Text>
+          <Pressable
+            style={({ pressed }) => [styles.dropdown, pressed && { opacity: 0.8 }]}
+            onPress={() => setPlansOpen(true)}
+          >
+            <Text style={selectedPlan ? styles.dropdownText : styles.dropdownPlaceholder}>
+              {selectedPlan ? `${selectedPlan.name} — ₦${selectedPlan.amount.toLocaleString()}` : "Choose a plan…"}
+            </Text>
+            <Text style={styles.dropdownCaret}>▾</Text>
+          </Pressable>
+
+          <Modal
+            visible={plansOpen}
+            transparent
+            animationType="slide"
+            onRequestClose={() => setPlansOpen(false)}
+          >
+            <Pressable style={styles.modalBackdrop} onPress={() => setPlansOpen(false)} />
+            <View style={styles.modalSheet}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>Select a plan</Text>
+                <Pressable onPress={() => setPlansOpen(false)} hitSlop={12}>
+                  <Text style={styles.modalClose}>✕</Text>
+                </Pressable>
+              </View>
+              <FlatList
+                data={plans}
+                keyExtractor={(item) => item.variationCode}
+                renderItem={({ item }) => {
+                  const active = selectedPlan?.variationCode === item.variationCode;
+                  return (
+                    <Pressable
+                      style={({ pressed }) => [styles.planItem, active && styles.planItemActive, pressed && { opacity: 0.8 }]}
+                      onPress={() => {
+                        setSelectedPlan(item);
+                        setPlansOpen(false);
+                      }}
+                    >
+                      <Text style={[styles.planName, active && styles.planTextActive]}>{item.name}</Text>
+                      <Text style={[styles.planAmount, active && styles.planTextActive]}>₦{item.amount.toLocaleString()}</Text>
+                    </Pressable>
+                  );
                 }}
-              >
-                <Text style={[styles.planName, selectedPlan?.variationCode === item.variationCode && styles.planTextActive]}>{item.name}</Text>
-                <Text style={[styles.planAmount, selectedPlan?.variationCode === item.variationCode && styles.planTextActive]}>₦{item.amount}</Text>
-              </Pressable>
-            )}
-          />
-        </>
-      )}
-      {verified && (
-        <>
-          <TextField label="Amount (₦)" placeholder="Enter amount" keyboardType="number-pad" value={amount} onChangeText={setAmount} />
-          <Button title="Continue" onPress={handleContinue} disabled={!amount || Number(amount) < 100} />
+              />
+            </View>
+          </Modal>
+
+          <Button title="Continue" onPress={handleContinue} disabled={!selectedPlan} />
         </>
       )}
     </Screen>
@@ -160,9 +189,18 @@ const styles = StyleSheet.create({
   verifiedCard: { backgroundColor: colors.successSoft, padding: spacing.md, borderRadius: radii.md, marginBottom: spacing.lg },
   verifiedLabel: { fontSize: typography.sizes.base, fontWeight: typography.weights.semibold, color: colors.success },
   verifiedText: { fontSize: typography.sizes.sm, color: colors.success, marginTop: spacing.xs },
-  planItem: { flexDirection: "row", justifyContent: "space-between", padding: spacing.md, borderRadius: radii.md, borderWidth: 1, borderColor: colors.line, backgroundColor: colors.surface, marginBottom: spacing.sm },
-  planItemActive: { backgroundColor: colors.primary, borderColor: colors.primary },
-  planName: { fontSize: typography.sizes.sm, color: colors.ink, fontWeight: typography.weights.medium },
-  planAmount: { fontSize: typography.sizes.sm, color: colors.primary, fontWeight: typography.weights.semibold },
+  dropdown: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", borderWidth: 1, borderColor: colors.line, borderRadius: radii.md, paddingHorizontal: spacing.md, paddingVertical: spacing.lg, marginBottom: spacing.lg, backgroundColor: colors.surface },
+  dropdownText: { fontSize: typography.sizes.base, color: colors.ink, fontWeight: typography.weights.medium },
+  dropdownPlaceholder: { fontSize: typography.sizes.base, color: colors.inkSoft },
+  dropdownCaret: { fontSize: typography.sizes.lg, color: colors.inkSoft },
+  modalBackdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.4)" },
+  modalSheet: { backgroundColor: colors.surface, borderTopLeftRadius: radii.lg, borderTopRightRadius: radii.lg, maxHeight: "70%", paddingBottom: spacing.xl },
+  modalHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", padding: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.line },
+  modalTitle: { fontSize: typography.sizes.lg, fontWeight: typography.weights.semibold, color: colors.ink },
+  modalClose: { fontSize: typography.sizes.lg, color: colors.inkSoft, paddingHorizontal: spacing.sm },
+  planItem: { flexDirection: "row", justifyContent: "space-between", padding: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.line },
+  planItemActive: { backgroundColor: colors.primary },
+  planName: { fontSize: typography.sizes.base, color: colors.ink, fontWeight: typography.weights.medium },
+  planAmount: { fontSize: typography.sizes.base, color: colors.primary, fontWeight: typography.weights.semibold },
   planTextActive: { color: colors.white },
 });

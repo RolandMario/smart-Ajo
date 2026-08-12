@@ -8,6 +8,7 @@ import {
 } from '../groups/schemas/group-member.schema';
 import { Group, GroupDocument } from '../groups/schemas/group.schema';
 import { Wallet, WalletDocument } from '../wallet/schemas/wallet.schema';
+import { WalletService } from '../wallet/wallet.service';
 import { ListUsersQueryDto } from './dto/list-users-query.dto';
 
 export interface PaginatedUsers {
@@ -79,6 +80,7 @@ export class PlatformAdminUsersService {
     private groupMemberModel: Model<GroupMemberDocument>,
     @InjectModel(Group.name) private groupModel: Model<GroupDocument>,
     @InjectModel(Wallet.name) private walletModel: Model<WalletDocument>,
+    private walletService: WalletService,
   ) {}
 
   /**
@@ -201,5 +203,27 @@ export class PlatformAdminUsersService {
       createdAt: (user as unknown as { createdAt: Date }).createdAt,
       updatedAt: (user as unknown as { updatedAt: Date }).updatedAt,
     };
+  }
+
+  /**
+   * Credits a user's wallet from the admin console. Guards against invalid
+   * ids / missing users, then delegates to WalletService.creditUserWallet,
+   * which records an ADMIN_CREDIT ledger entry.
+   */
+  async creditWallet(
+    userId: string,
+    amountNaira: number,
+    note?: string,
+  ): Promise<{ balance: number; currency: string }> {
+    if (!Types.ObjectId.isValid(userId)) {
+      throw new NotFoundException('User not found');
+    }
+
+    const user = await this.userModel.findById(userId).lean();
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    return this.walletService.creditUserWallet(userId, amountNaira, note);
   }
 }

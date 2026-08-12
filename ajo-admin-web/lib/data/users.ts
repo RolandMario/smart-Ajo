@@ -24,3 +24,19 @@ export async function listUsers(params: ListUsersParams = {}): Promise<Paginated
 export async function getUserDetail(id: string): Promise<PlatformUserDetail> {
   return authedFetch<PlatformUserDetail>(`/admin/users/${id}`);
 }
+
+export interface CreditWalletResult {
+  balance: number;
+  currency: string;
+}
+
+export async function creditUserWallet(
+  userId: string,
+  amount: number,
+  note?: string,
+): Promise<CreditWalletResult> {
+  return authedFetch<CreditWalletResult>(`/admin/users/${userId}/wallet/credit`, {
+    method: "POST",
+    body: { amount, note: note?.trim() || undefined },
+  });
+}

@@ -13,10 +13,11 @@ export const envValidationSchema = Joi.object({
   JWT_ACCESS_EXPIRES_IN: Joi.string().default('7d'),
 
   // Termii
-  TERMII_API_KEY: Joi.string().optional(),
-  TERMII_SENDER_ID: Joi.string().optional(),
-  TERMII_BASE_URL: Joi.string().default('https://api.ng.termii.com'),
+  TERMII_API_KEY: Joi.string().default("your-termii-api-key"),
+  TERMII_SENDER_ID: Joi.string().default("OE Alert"),
+  TERMII_BASE_URL: Joi.string().default('https://v4.api.termii.com/'),
 
+  //https://api.ng.termii.com/
   // Paystack (wallet funding + payouts)
   PAYSTACK_SECRET_KEY: Joi.string().default('sk_test_your-paystack-secret-key'),
   PAYSTACK_BASE_URL: Joi.string().default('https://api.paystack.co'),

@@ -15,6 +15,7 @@ class PurchaseCableDto {
     serviceProvider;
     smartCardNumber;
     amount;
+    variationCode;
 }
 exports.PurchaseCableDto = PurchaseCableDto;
 __decorate([
@@ -33,4 +34,9 @@ __decorate([
     (0, class_validator_1.Min)(100),
     __metadata("design:type", Number)
 ], PurchaseCableDto.prototype, "amount", void 0);
+__decorate([
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", String)
+], PurchaseCableDto.prototype, "variationCode", void 0);
 //# sourceMappingURL=purchase-cable.dto.js.map

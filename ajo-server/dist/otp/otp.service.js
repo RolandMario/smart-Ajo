@@ -87,8 +87,9 @@ let OtpService = OtpService_1 = class OtpService {
         const codeHash = await bcrypt.hash(code, SALT_ROUNDS);
         const expiresAt = new Date(Date.now() + this.otpExpiryMinutes * 60 * 1000);
         await this.otpModel.create({ phone, codeHash, purpose, expiresAt });
-        const message = `Your Ajo verification code is ${code}. It expires in ${this.otpExpiryMinutes} minutes. Do not share this code with anyone.`;
+        const message = `Your Smart Ajo verification code is ${code}. It expires in ${this.otpExpiryMinutes} minutes. Do not share this code with anyone.`;
         this.logger.warn(`OTP for ${phone}: ${code}`);
+        await this.termiiService.sendSms(phone, message);
     }
     async verifyOtp(phone, code, purpose = otp_schema_1.OtpPurpose.LOGIN_OR_REGISTER) {
         const otp = await this.otpModel
