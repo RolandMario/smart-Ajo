@@ -20,16 +20,19 @@ const user_schema_1 = require("../users/schemas/user.schema");
 const group_member_schema_1 = require("../groups/schemas/group-member.schema");
 const group_schema_1 = require("../groups/schemas/group.schema");
 const wallet_schema_1 = require("../wallet/schemas/wallet.schema");
+const wallet_service_1 = require("../wallet/wallet.service");
 let PlatformAdminUsersService = class PlatformAdminUsersService {
     userModel;
     groupMemberModel;
     groupModel;
     walletModel;
-    constructor(userModel, groupMemberModel, groupModel, walletModel) {
+    walletService;
+    constructor(userModel, groupMemberModel, groupModel, walletModel, walletService) {
         this.userModel = userModel;
         this.groupMemberModel = groupMemberModel;
         this.groupModel = groupModel;
         this.walletModel = walletModel;
+        this.walletService = walletService;
     }
     async listUsers(query) {
         const page = query.page ?? 1;
@@ -126,6 +129,16 @@ let PlatformAdminUsersService = class PlatformAdminUsersService {
             updatedAt: user.updatedAt,
         };
     }
+    async creditWallet(userId, amountNaira, note) {
+        if (!mongoose_2.Types.ObjectId.isValid(userId)) {
+            throw new common_1.NotFoundException('User not found');
+        }
+        const user = await this.userModel.findById(userId).lean();
+        if (!user) {
+            throw new common_1.NotFoundException('User not found');
+        }
+        return this.walletService.creditUserWallet(userId, amountNaira, note);
+    }
 };
 exports.PlatformAdminUsersService = PlatformAdminUsersService;
 exports.PlatformAdminUsersService = PlatformAdminUsersService = __decorate([
@@ -137,6 +150,7 @@ exports.PlatformAdminUsersService = PlatformAdminUsersService = __decorate([
     __metadata("design:paramtypes", [mongoose_2.Model,
         mongoose_2.Model,
         mongoose_2.Model,
-        mongoose_2.Model])
+        mongoose_2.Model,
+        wallet_service_1.WalletService])
 ], PlatformAdminUsersService);
 //# sourceMappingURL=platform-admin-users.service.js.map

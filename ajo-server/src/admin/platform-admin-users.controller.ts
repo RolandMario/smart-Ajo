@@ -1,6 +1,7 @@
-import { Controller, Get, Param, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Query, UseGuards } from '@nestjs/common';
 import { PlatformAdminUsersService } from './platform-admin-users.service';
 import { ListUsersQueryDto } from './dto/list-users-query.dto';
+import { CreditWalletDto } from './dto/credit-wallet.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { PlatformAdminGuard } from '../common/guards/platform-admin.guard';
 
@@ -23,5 +24,14 @@ export class PlatformAdminUsersController {
   @Get(':id')
   getDetail(@Param('id') id: string) {
     return this.platformAdminUsersService.getUserDetail(id);
+  }
+
+  /**
+   * Credits an arbitrary user's wallet. Used by ajo-admin-web to manually
+   * top up a member's balance (e.g. customer support adjustments).
+   */
+  @Post(':id/wallet/credit')
+  creditWallet(@Param('id') id: string, @Body() dto: CreditWalletDto) {
+    return this.platformAdminUsersService.creditWallet(id, dto.amount, dto.note);
   }
 }

@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectConnection } from '@nestjs/mongoose';
 import { Types, Connection } from 'mongoose';
 import { randomUUID } from 'crypto';
@@ -10,6 +10,8 @@ import { UsersService } from '../users/users.service';
 
 @Injectable()
 export class BillsService {
+  private readonly logger = new Logger(BillsService.name);
+
   constructor(
     private vtpass: VTPassService,
     private walletService: WalletService,
@@ -29,7 +31,7 @@ export class BillsService {
   private readonly DISCO_SERVICE_ID_MAP: Record<string, string> = {
     ikedc: 'ikeja-electric',
     ekedc: 'eko-electric',
-    phed: 'phedc',
+    phed: 'portharcourt-electric',
     jed: 'jos-electric',
     aedc: 'abuja-electric',
     kaedco: 'kano-electric',
@@ -77,23 +79,34 @@ export class BillsService {
         if (!debitResult) throw new BadRequestException('Insufficient wallet balance');
         try {
           const purchaseResult = await purchaseFn();
-          // Confirm the bill payment
-          await this.walletService.confirmBillPayment(reference);
-          // Credit the commission to admin wallet (VTPass returns the exact commission)
+          // Confirmed successful external purchase — the user's wallet debit now
+          // must stick, so nothing below may throw into the transaction.
+          await this.walletService.confirmBillPayment(reference, session);
+
+          // Credit the commission to the platform admin wallet (VTPass returns
+          // the exact commission). This must never roll back a successful user
+          // purchase, so guard it: if the admin wallet can't be credited (e.g.
+          // the platform admin hasn't been seeded), log and continue.
           const commission = purchaseResult.commission;
           if (commission > 0) {
-            const adminUserId = await this.getPlatformAdminUserId();
-            await this.walletService.creditBillCommission(
-              adminUserId,
-              commission,
-              {
-                billReference: reference,
-                billType: (metadata.type as string) || 'unknown',
-                userPaid: amount,
-                actualCost: amount - commission,
-              },
-              session,
-            );
+            try {
+              const adminUserId = await this.getPlatformAdminUserId();
+              await this.walletService.creditBillCommission(
+                adminUserId,
+                commission,
+                {
+                  billReference: reference,
+                  billType: (metadata.type as string) || 'unknown',
+                  userPaid: amount,
+                  actualCost: amount - commission,
+                },
+                session,
+              );
+            } catch (commissionError) {
+              this.logger.error(
+                `Failed to credit bill commission for ${reference}: ${commissionError instanceof Error ? commissionError.message : String(commissionError)}`,
+              );
+            }
           }
           return purchaseResult;
         } catch (externalError) {
@@ -128,18 +141,18 @@ export class BillsService {
     );
   }
 
-  async purchaseCable(userId: string, dto: { serviceProvider: string; smartCardNumber: string; amount: number }) {
+  async purchaseCable(userId: string, dto: { serviceProvider: string; smartCardNumber: string; amount: number; variationCode?: string }) {
     const user = await this.usersService.findById(userId);
     if (!user) throw new NotFoundException('User not found');
-    return this.executeBillTransaction(userId, dto.amount, { type: 'cable', serviceProvider: dto.serviceProvider, smartCardNumber: dto.smartCardNumber, recipient: dto.smartCardNumber }, () =>
-      this.vtpass.purchaseCable({ serviceID: dto.serviceProvider, billersCode: dto.smartCardNumber, amount: dto.amount, phone: user.phone })
+    return this.executeBillTransaction(userId, dto.amount, { type: 'cable', serviceProvider: dto.serviceProvider, smartCardNumber: dto.smartCardNumber, variationCode: dto.variationCode, recipient: dto.smartCardNumber }, () =>
+      this.vtpass.purchaseCable({ serviceID: dto.serviceProvider, billersCode: dto.smartCardNumber, amount: dto.amount, phone: user.phone, variationCode: dto.variationCode })
     );
   }
 
   async purchaseElectricity(userId: string, dto: { disco: string; meterNumber: string; meterType: string; amount: number; phone: string }) {
     const discoServiceId = this.DISCO_SERVICE_ID_MAP[dto.disco.toLowerCase()] ?? dto.disco.toLowerCase().replace(/\s+/g, '');
     return this.executeBillTransaction(userId, dto.amount, { type: 'electricity', disco: dto.disco, meterNumber: dto.meterNumber, meterType: dto.meterType, recipient: dto.meterNumber, phone: dto.phone }, () =>
-      this.vtpass.purchaseElectricity({ serviceID: discoServiceId, billerCode: dto.meterNumber, amount: dto.amount, phone: dto.phone })
+      this.vtpass.purchaseElectricity({ serviceID: discoServiceId, billersCode: dto.meterNumber, amount: dto.amount, phone: dto.phone, variationCode: dto.meterType })
     );
   }
 

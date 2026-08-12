@@ -330,8 +330,8 @@ let WalletService = class WalletService {
         ], { session });
         return walletTx[0];
     }
-    async confirmBillPayment(reference) {
-        await this.walletTxModel.updateOne({ reference, status: wallet_enum_1.WalletTransactionStatus.PENDING, type: wallet_enum_1.WalletTransactionType.BILL_PAYMENT }, { $set: { status: wallet_enum_1.WalletTransactionStatus.SUCCESS } });
+    async confirmBillPayment(reference, session) {
+        await this.walletTxModel.updateOne({ reference, status: wallet_enum_1.WalletTransactionStatus.PENDING, type: wallet_enum_1.WalletTransactionType.BILL_PAYMENT }, { $set: { status: wallet_enum_1.WalletTransactionStatus.SUCCESS } }, session ? { session } : undefined);
     }
     async failBillPayment(reference, amountNaira, session) {
         const tx = await this.walletTxModel
@@ -359,6 +359,31 @@ let WalletService = class WalletService {
                 newBalance: notifyNewBalance,
             }));
         }
+    }
+    async creditUserWallet(userId, amountNaira, note) {
+        if (amountNaira <= 0) {
+            throw new common_1.BadRequestException('Amount must be greater than zero');
+        }
+        const wallet = await this.getOrCreateWallet(userId);
+        const balanceBefore = wallet.balance ?? 0;
+        const balanceAfter = balanceBefore + amountNaira;
+        wallet.balance = balanceAfter;
+        await wallet.save();
+        const reference = `admin_credit_${(0, crypto_1.randomUUID)()}`;
+        await this.walletTxModel.create([
+            {
+                wallet: wallet._id,
+                user: wallet.user,
+                type: wallet_enum_1.WalletTransactionType.ADMIN_CREDIT,
+                status: wallet_enum_1.WalletTransactionStatus.SUCCESS,
+                amount: amountNaira,
+                balanceBefore,
+                balanceAfter,
+                reference,
+                metadata: { note: note?.trim() || 'Admin wallet credit' },
+            },
+        ]);
+        return { balance: balanceAfter, currency: wallet.currency };
     }
 };
 exports.WalletService = WalletService;

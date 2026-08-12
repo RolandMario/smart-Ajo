@@ -9,6 +9,7 @@ export declare class BillsService {
     private usersService;
     private notificationsService;
     private connection;
+    private readonly logger;
     constructor(vtpass: VTPassService, walletService: WalletService, usersService: UsersService, notificationsService: NotificationsService, connection: Connection);
     private getPlatformAdminUserId;
     private readonly DISCO_SERVICE_ID_MAP;
@@ -45,6 +46,7 @@ export declare class BillsService {
         serviceProvider: string;
         smartCardNumber: string;
         amount: number;
+        variationCode?: string;
     }): Promise<{
         commission: number;
     }>;
@@ -57,17 +59,7 @@ export declare class BillsService {
     }): Promise<{
         commission: number;
     }>;
-    getDataPlans(network: string): Promise<{
-        variationCode: string;
-        name: string;
-        amount: number;
-        fixedPrice: boolean;
-    }[]>;
-    getCablePlans(provider: string): Promise<{
-        variationCode: string;
-        name: string;
-        amount: number;
-        fixedPrice: boolean;
-    }[]>;
+    getDataPlans(network: string): Promise<import("../payments/vtpass.service").ServiceVariation[]>;
+    getCablePlans(provider: string): Promise<import("../payments/vtpass.service").ServiceVariation[]>;
     getHistory(userId: string): Promise<never[]>;
 }

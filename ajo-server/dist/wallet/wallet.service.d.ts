@@ -59,6 +59,10 @@ export declare class WalletService {
         actualCost: number;
     }, session: ClientSession): Promise<void>;
     debitForBillPayment(userId: Types.ObjectId, amountNaira: number, reference: string, metadata: Record<string, unknown>, session: ClientSession): Promise<WalletTransactionDocument | null>;
-    confirmBillPayment(reference: string): Promise<void>;
+    confirmBillPayment(reference: string, session?: ClientSession): Promise<void>;
     failBillPayment(reference: string, amountNaira: number, session: ClientSession): Promise<void>;
+    creditUserWallet(userId: string, amountNaira: number, note?: string): Promise<{
+        balance: number;
+        currency: string;
+    }>;
 }

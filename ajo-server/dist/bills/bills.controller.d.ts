@@ -34,17 +34,7 @@ export declare class BillsController {
     purchaseElectricity(user: RequestUser, dto: PurchaseElectricityDto): Promise<{
         commission: number;
     }>;
-    getDataPlans(network?: string): Promise<{
-        variationCode: string;
-        name: string;
-        amount: number;
-        fixedPrice: boolean;
-    }[]>;
-    getCablePlans(provider?: string): Promise<{
-        variationCode: string;
-        name: string;
-        amount: number;
-        fixedPrice: boolean;
-    }[]>;
+    getDataPlans(network?: string): Promise<import("../payments/vtpass.service").ServiceVariation[]>;
+    getCablePlans(provider?: string): Promise<import("../payments/vtpass.service").ServiceVariation[]>;
     getHistory(user: RequestUser): Promise<never[]>;
 }

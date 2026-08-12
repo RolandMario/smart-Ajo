@@ -13,6 +13,7 @@ import {
   inviteStatusTone,
   payoutStatusTone,
 } from "@/lib/status-display";
+import { CreditWalletForm } from "./credit-wallet-form";
 
 interface UserDetailPageProps {
   params: Promise<{ id: string }>;
@@ -106,6 +107,14 @@ export default async function UserDetailPage({ params }: UserDetailPageProps) {
             {user.bankAccount && (
               <Stat label="Account name" value={user.bankAccount.accountName} />
             )}
+          </div>
+
+          <div className="mt-6">
+            <CreditWalletForm
+              userId={user.id}
+              currentBalance={user.wallet.balance}
+              currency={user.wallet.currency}
+            />
           </div>
         </Card>
 

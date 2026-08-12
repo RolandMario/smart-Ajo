@@ -1,4 +1,28 @@
 import { ConfigService } from '@nestjs/config';
+export interface PurchaseResult {
+    requestId: string;
+    externalTransactionId: string;
+    status: string;
+    commission: number;
+}
+export interface VerifyProductResult {
+    valid: boolean;
+    name?: string;
+    address?: string;
+    packageInfo?: string;
+    outstanding?: number;
+    message?: string;
+}
+export interface ServiceVariation {
+    variationCode: string;
+    name: string;
+    amount: number;
+    fixedPrice: boolean;
+}
+export interface QueryTransactionResult {
+    status: string;
+    externalTransactionId?: string;
+}
 export declare class VTPassService {
     private configService;
     private readonly logger;
@@ -10,68 +34,37 @@ export declare class VTPassService {
     constructor(configService: ConfigService);
     private getAuthHeaders;
     private getRequestId;
+    private isSuccessCode;
     private handleError;
+    private toPurchaseResult;
     purchaseAirtime(params: {
         serviceID: string;
         phone: string;
         amount: number;
-    }): Promise<{
-        requestId: string;
-        externalTransactionId: string;
-        status: string;
-        commission: number;
-    }>;
+    }): Promise<PurchaseResult>;
     purchaseData(params: {
         serviceID: string;
         phone: string;
         variationCode: string;
-    }): Promise<{
-        requestId: string;
-        externalTransactionId: string;
-        status: string;
-        commission: number;
-    }>;
+    }): Promise<PurchaseResult>;
     purchaseCable(params: {
         serviceID: string;
         billersCode: string;
         amount: number;
         phone: string;
-    }): Promise<{
-        requestId: string;
-        externalTransactionId: string;
-        status: string;
-        commission: number;
-    }>;
+        variationCode?: string;
+    }): Promise<PurchaseResult>;
     purchaseElectricity(params: {
         serviceID: string;
-        billerCode: string;
+        billersCode: string;
         amount: number;
         phone: string;
-    }): Promise<{
-        requestId: string;
-        externalTransactionId: string;
-        status: string;
-        commission: number;
-    }>;
+        variationCode: string;
+    }): Promise<PurchaseResult>;
     verifyProduct(params: {
         serviceID: string;
         billersCode: string;
-    }): Promise<{
-        valid: boolean;
-        name?: string;
-        address?: string;
-        packageInfo?: string;
-        outstanding?: number;
-        message?: string;
-    }>;
-    getServiceVariations(serviceID: string): Promise<Array<{
-        variationCode: string;
-        name: string;
-        amount: number;
-        fixedPrice: boolean;
-    }>>;
-    queryTransaction(requestId: string): Promise<{
-        status: string;
-        externalTransactionId?: string;
-    }>;
+    }): Promise<VerifyProductResult>;
+    getServiceVariations(serviceID: string): Promise<ServiceVariation[]>;
+    queryTransaction(requestId: string): Promise<QueryTransactionResult>;
 }

@@ -4,7 +4,7 @@ import {
   InternalServerErrorException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import axios from 'axios';
+import axios, { AxiosError } from 'axios';
 
 /**
  * Thin wrapper around Termii's generic SMS "send" endpoint.
@@ -25,7 +25,12 @@ export class TermiiService {
   constructor(private configService: ConfigService) {
     this.apiKey = this.configService.get<string>('TERMII_API_KEY')!;
     this.senderId = this.configService.get<string>('TERMII_SENDER_ID')!;
-    this.baseUrl = this.configService.get<string>('TERMII_BASE_URL')!;
+    // Normalize the base URL so a trailing slash in config doesn't produce a
+    // double slash (e.g. https://api.ng.termii.com//api/sms/send) which Termii
+    // rejects with a 404.
+    this.baseUrl = (
+      this.configService.get<string>('TERMII_BASE_URL') ?? ''
+    ).replace(/\/+$/, '');
   }
 
   /**
@@ -44,20 +49,31 @@ export class TermiiService {
           from: this.senderId,
           sms: message,
           type: 'plain',
-          channel: 'generic',
+          channel: 'dnd',
         },
-      );
+       {
+         headers: { 'Content-Type': 'application/json' },
+       },
+     );
 
-      if (response.data?.code && response.data.code !== 'ok') {
-        this.logger.error(
-          `Termii responded with non-ok code: ${JSON.stringify(response.data)}`,
-        );
-        throw new InternalServerErrorException('Failed to send SMS');
-      }
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      this.logger.error(`Termii SMS send failed for ${to}: ${message}`);
-      throw new InternalServerErrorException('Failed to send SMS');
-    }
+     if (response.data?.code && response.data.code !== 'ok') {
+       this.logger.error(
+         `Termii responded with non-ok code: ${JSON.stringify(response.data)}`,
+       );
+       throw new InternalServerErrorException('Failed to send SMS');
+     }
+   } catch (error) {
+     if (error instanceof AxiosError) {
+       const status = error.response?.status;
+       const data = error.response?.data;
+       this.logger.error(
+         `Smart Ajo SMS send failed for ${to}: Status ${status}, Response: ${JSON.stringify(data)}`,
+       );
+     } else {
+       const message = error instanceof Error ? error.message : String(error);
+       this.logger.error(`Smart Ajo SMS send failed for ${to}: ${message}`);
+     }
+     throw new InternalServerErrorException('Failed to send SMS');
+   }
   }
 }

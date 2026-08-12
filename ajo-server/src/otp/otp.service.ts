@@ -61,11 +61,11 @@ export class OtpService {
 
     await this.otpModel.create({ phone, codeHash, purpose, expiresAt });
 
-    const message = `Your Ajo verification code is ${code}. It expires in ${this.otpExpiryMinutes} minutes. Do not share this code with anyone.`;
+    const message = `Your Smart Ajo verification code is ${code}. It expires in ${this.otpExpiryMinutes} minutes. Do not share this code with anyone.`;
 
     this.logger.warn(`OTP for ${phone}: ${code}`);
 
-    // await this.termiiService.sendSms(phone, message);
+    await this.termiiService.sendSms(phone, message);
   }
 
   /**

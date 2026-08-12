@@ -342,6 +342,7 @@ export interface CablePayload {
   smartCardNumber: string;
   amount: number;
   packageName?: string;
+  variationCode?: string;
 }
 
 export interface ElectricityPayload {

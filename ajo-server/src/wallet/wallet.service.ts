@@ -540,11 +540,17 @@ export class WalletService {
 
   /**
    * Confirms a pending BILL_PAYMENT transaction (successful external call).
+   * Must run inside the same session as `debitForBillPayment` so the in-transaction
+   * (uncommitted) PENDING record is visible and the SUCCESS status persists on commit.
    */
-  async confirmBillPayment(reference: string): Promise<void> {
+  async confirmBillPayment(
+    reference: string,
+    session?: ClientSession,
+  ): Promise<void> {
     await this.walletTxModel.updateOne(
       { reference, status: WalletTransactionStatus.PENDING, type: WalletTransactionType.BILL_PAYMENT },
       { $set: { status: WalletTransactionStatus.SUCCESS } },
+      session ? { session } : undefined,
     );
   }
 
@@ -588,5 +594,47 @@ export class WalletService {
         }),
       );
     }
+  }
+
+  /**
+   * Platform-admin-only. Credits `amountNaira` to a user's wallet and records
+   * an ADMIN_CREDIT ledger entry. Unlike FUNDING, this is an immediate,
+   * synchronous internal movement — the balance is updated and the entry is
+   * created as SUCCESS in one go (no Paystack involved).
+   */
+  async creditUserWallet(
+    userId: string,
+    amountNaira: number,
+    note?: string,
+  ): Promise<{ balance: number; currency: string }> {
+    if (amountNaira <= 0) {
+      throw new BadRequestException('Amount must be greater than zero');
+    }
+
+    const wallet = await this.getOrCreateWallet(userId);
+
+    const balanceBefore = wallet.balance ?? 0;
+    const balanceAfter = balanceBefore + amountNaira;
+
+    wallet.balance = balanceAfter;
+    await wallet.save();
+
+    const reference = `admin_credit_${randomUUID()}`;
+
+    await this.walletTxModel.create([
+      {
+        wallet: wallet._id,
+        user: wallet.user,
+        type: WalletTransactionType.ADMIN_CREDIT,
+        status: WalletTransactionStatus.SUCCESS,
+        amount: amountNaira,
+        balanceBefore,
+        balanceAfter,
+        reference,
+        metadata: { note: note?.trim() || 'Admin wallet credit' },
+      },
+    ]);
+
+    return { balance: balanceAfter, currency: wallet.currency };
   }
 }

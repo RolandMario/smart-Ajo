@@ -3,6 +3,7 @@ import { UserDocument } from '../users/schemas/user.schema';
 import { GroupMemberDocument } from '../groups/schemas/group-member.schema';
 import { GroupDocument } from '../groups/schemas/group.schema';
 import { WalletDocument } from '../wallet/schemas/wallet.schema';
+import { WalletService } from '../wallet/wallet.service';
 import { ListUsersQueryDto } from './dto/list-users-query.dto';
 export interface PaginatedUsers {
     users: Array<{
@@ -59,7 +60,12 @@ export declare class PlatformAdminUsersService {
     private groupMemberModel;
     private groupModel;
     private walletModel;
-    constructor(userModel: Model<UserDocument>, groupMemberModel: Model<GroupMemberDocument>, groupModel: Model<GroupDocument>, walletModel: Model<WalletDocument>);
+    private walletService;
+    constructor(userModel: Model<UserDocument>, groupMemberModel: Model<GroupMemberDocument>, groupModel: Model<GroupDocument>, walletModel: Model<WalletDocument>, walletService: WalletService);
     listUsers(query: ListUsersQueryDto): Promise<PaginatedUsers>;
     getUserDetail(userId: string): Promise<UserDetail>;
+    creditWallet(userId: string, amountNaira: number, note?: string): Promise<{
+        balance: number;
+        currency: string;
+    }>;
 }

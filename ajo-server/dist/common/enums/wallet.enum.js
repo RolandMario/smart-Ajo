@@ -10,6 +10,7 @@ var WalletTransactionType;
     WalletTransactionType["SERVICE_FEE_DEBIT"] = "service_fee_debit";
     WalletTransactionType["SERVICE_FEE_CREDIT"] = "service_fee_credit";
     WalletTransactionType["BILL_COMMISSION_CREDIT"] = "bill_commission_credit";
+    WalletTransactionType["ADMIN_CREDIT"] = "admin_credit";
     WalletTransactionType["ADMIN_WITHDRAWAL"] = "admin_withdrawal";
 })(WalletTransactionType || (exports.WalletTransactionType = WalletTransactionType = {}));
 var WalletTransactionStatus;

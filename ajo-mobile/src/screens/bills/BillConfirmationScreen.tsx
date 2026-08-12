@@ -22,7 +22,7 @@ export function BillConfirmationScreen({ navigation, route }: Props) {
       switch (serviceType) {
         case "airtime": await purchaseAirtime({ phone: recipient, amount, network: String(metadata?.network) }); break;
         case "data": await purchaseData({ phone: recipient, dataPlanId: String(metadata?.variationCode), network: provider }); break;
-        case "cable": await purchaseCable({ serviceProvider: provider as any, smartCardNumber: recipient, amount }); break;
+        case "cable": await purchaseCable({ serviceProvider: provider as any, smartCardNumber: recipient, amount, variationCode: String(metadata?.variationCode ?? "") }); break;
         case "electricity": await purchaseElectricity({ disco: String(metadata?.disco), meterNumber: String(metadata?.meterNumber), meterType: String(metadata?.meterType) as any, amount, phone: String(metadata?.phone) }); break;
       }
       navigation.replace("BillSuccess", { serviceType, reference: "completed", amount, recipient });

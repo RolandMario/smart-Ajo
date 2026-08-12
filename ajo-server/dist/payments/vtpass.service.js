@@ -57,12 +57,20 @@ let VTPassService = VTPassService_1 = class VTPassService {
         const suffix = (0, crypto_1.randomUUID)().replace(/-/g, '').slice(0, 16);
         return `${datePrefix}${suffix}`;
     }
+    isSuccessCode(code) {
+        const codeStr = typeof code === 'number' ? String(code) : String(code ?? '');
+        return codeStr === '000' || codeStr === '0';
+    }
     handleError(action, error) {
         if (axios_1.default.isAxiosError(error)) {
-            const data = error.response?.data;
+            const status = error.response?.status;
+            const respData = error.response?.data;
+            this.logger.error(`VTpass ${action} failed: status=${status}, body=${JSON.stringify(respData)}`);
+            const data = respData;
             const message = data?.response_description ?? data?.message ?? error.message;
-            this.logger.error(`VTpass ${action} failed: ${message}`);
-            if (error.response && error.response.status >= 400 && error.response.status < 500) {
+            if (error.response &&
+                error.response.status >= 400 &&
+                error.response.status < 500) {
                 throw new common_1.BadRequestException(`VTpass error: ${message}`);
             }
         }
@@ -75,6 +83,15 @@ let VTPassService = VTPassService_1 = class VTPassService {
         }
         throw new common_1.InternalServerErrorException(`VTpass ${action} failed`);
     }
+    toPurchaseResult(requestId, data) {
+        const tx = data.content?.transactions;
+        return {
+            requestId,
+            externalTransactionId: tx?.transactionId ?? requestId,
+            status: tx?.status ?? 'delivered',
+            commission: Number(tx?.commission ?? 0),
+        };
+    }
     async purchaseAirtime(params) {
         const requestId = this.getRequestId();
         this.logger.log(`Initiating airtime purchase: requestId=${requestId}, serviceID=${params.serviceID}, phone=${params.phone}, amount=${params.amount}`);
@@ -86,23 +103,34 @@ let VTPassService = VTPassService_1 = class VTPassService {
                 phone: params.phone,
             };
             this.logger.debug(`VTpass airtime payload: ${JSON.stringify(payload)}`);
-            const response = await this.client.post('pay', payload, { headers: this.getAuthHeaders('POST') });
+            const response = await this.client.post('pay', payload, {
+                headers: this.getAuthHeaders('POST'),
+            });
             const data = response.data;
             this.logger.log(`VTpass airtime response: ${JSON.stringify(data)}`);
-            const code = typeof data.code === 'number' ? String(data.code) : String(data.code ?? '');
-            if (code !== '000' && code !== '0') {
-                const errorMsg = data.response_description || data.message || 'VTpass purchase failed';
-                this.logger.error(`VTpass airtime failed: code=${code}, message=${errorMsg}`);
-                throw new common_1.BadRequestException(`Airtime purchase failed: ${errorMsg}`);
+            const tx = data.content?.transactions;
+            if (this.isSuccessCode(data.code) && tx?.status !== 'failed') {
+                const result = this.toPurchaseResult(requestId, data);
+                this.logger.log(`Airtime purchase successful: requestId=${requestId}, transactionId=${result.externalTransactionId}, commission=${result.commission}`);
+                return result;
             }
-            const commission = Number(data.content?.transactions?.commission ?? 0);
-            this.logger.log(`Airtime purchase successful: requestId=${requestId}, transactionId=${data.content?.transactions?.transactionId}, commission=${commission}`);
-            return {
-                requestId,
-                externalTransactionId: data.content?.transactions?.transactionId ?? requestId,
-                status: data.content?.transactions?.status ?? 'delivered',
-                commission,
-            };
+            this.logger.log(`VTpass airtime not confirmed (code=${String(data.code)}, txStatus=${tx?.status}) — requerying requestId=${requestId}`);
+            try {
+                const qr = await this.queryTransaction(requestId);
+                this.logger.log(`VTpass airtime requery result: ${JSON.stringify(qr)}`);
+                if (qr.status === 'delivered' || qr.status === 'success' || qr.status === 'successful') {
+                    const result = this.toPurchaseResult(requestId, data);
+                    this.logger.log(`Airtime purchase confirmed on requery: requestId=${requestId}, transactionId=${result.externalTransactionId}, commission=${result.commission}`);
+                    return result;
+                }
+                this.logger.warn(`VTpass airtime requery did not confirm delivery — status=${qr.status}, txId=${qr.externalTransactionId}`);
+            }
+            catch (e) {
+                this.logger.error(`VTpass airtime requery failed: ${e instanceof Error ? e.message : String(e)}`);
+            }
+            const errorMsg = data.response_description || data.message || 'VTpass purchase failed';
+            this.logger.error(`VTpass airtime failed: code=${String(data.code)}, message=${errorMsg}, txStatus=${tx?.status}, txId=${tx?.transactionId}`);
+            throw new common_1.BadRequestException(`Airtime purchase failed: ${errorMsg}`);
         }
         catch (error) {
             this.logger.error(`Airtime purchase exception: ${error instanceof Error ? error.message : String(error)}`);
@@ -120,28 +148,21 @@ let VTPassService = VTPassService_1 = class VTPassService {
                 variation_code: params.variationCode,
             };
             this.logger.debug(`VTpass data payload: ${JSON.stringify(payload)}`);
-            const response = await this.client.post('pay', payload, { headers: this.getAuthHeaders('POST') });
+            const response = await this.client.post('pay', payload, {
+                headers: this.getAuthHeaders('POST'),
+            });
             const data = response.data;
             this.logger.log(`VTpass data response: ${JSON.stringify(data)}`);
-            const code = typeof data.code === 'number' ? String(data.code) : String(data.code ?? '');
-            if (code !== '000' && code !== '0') {
-                const responseDescription = String(data.response_description ?? '');
-                const isSuccessCode = code === '000' || code === '0';
-                const isSuccessDescription = responseDescription === '000' || responseDescription === '0';
-                if (!isSuccessCode && !isSuccessDescription) {
-                    const errorMsg = responseDescription || data.message || 'VTpass data purchase failed';
-                    this.logger.error(`VTpass data failed: code=${code}, message=${errorMsg}`);
-                    throw new common_1.BadRequestException(`Data purchase failed: ${errorMsg}`);
-                }
+            const responseDescription = String(data.response_description ?? '');
+            const isSuccessDescription = responseDescription === '000' || responseDescription === '0';
+            if (!this.isSuccessCode(data.code) && !isSuccessDescription) {
+                const errorMsg = responseDescription || data.message || 'VTpass data purchase failed';
+                this.logger.error(`VTpass data failed: code=${String(data.code)}, message=${errorMsg}`);
+                throw new common_1.BadRequestException(`Data purchase failed: ${errorMsg}`);
             }
-            const commission = Number(data.content?.transactions?.commission ?? 0);
-            this.logger.log(`Data purchase successful: requestId=${requestId}, transactionId=${data.content?.transactions?.transactionId}, commission=${commission}`);
-            return {
-                requestId,
-                externalTransactionId: data.content?.transactions?.transactionId ?? requestId,
-                status: data.content?.transactions?.status ?? 'delivered',
-                commission,
-            };
+            const result = this.toPurchaseResult(requestId, data);
+            this.logger.log(`Data purchase successful: requestId=${requestId}, transactionId=${result.externalTransactionId}, commission=${result.commission}`);
+            return result;
         }
         catch (error) {
             this.logger.error(`Data purchase exception: ${error instanceof Error ? error.message : String(error)}`);
@@ -150,7 +171,7 @@ let VTPassService = VTPassService_1 = class VTPassService {
     }
     async purchaseCable(params) {
         const requestId = this.getRequestId();
-        this.logger.log(`Initiating cable purchase: requestId=${requestId}, serviceID=${params.serviceID}, billersCode=${params.billersCode}, amount=${params.amount}`);
+        this.logger.log(`Initiating cable purchase: requestId=${requestId}, serviceID=${params.serviceID}, billersCode=${params.billersCode}, amount=${params.amount}, variationCode=${params.variationCode}`);
         try {
             const payload = {
                 request_id: requestId,
@@ -158,26 +179,25 @@ let VTPassService = VTPassService_1 = class VTPassService {
                 billersCode: params.billersCode,
                 amount: params.amount,
                 phone: params.phone,
-                subscription_type: 'change',
+                subscription_type: 'renew',
+                variation_code: params.variationCode,
             };
             this.logger.debug(`VTpass cable payload: ${JSON.stringify(payload)}`);
-            const response = await this.client.post('pay', payload, { headers: this.getAuthHeaders('POST') });
+            const response = await this.client.post('pay', payload, {
+                headers: this.getAuthHeaders('POST'),
+            });
             const data = response.data;
             this.logger.log(`VTpass cable response: ${JSON.stringify(data)}`);
-            const code = typeof data.code === 'number' ? String(data.code) : String(data.code ?? '');
-            if (code !== '000' && code !== '0') {
-                const errorMsg = data.response_description || data.message || 'VTpass cable purchase failed';
-                this.logger.error(`VTpass cable failed: code=${code}, message=${errorMsg}`);
+            if (!this.isSuccessCode(data.code)) {
+                const errorMsg = data.response_description ||
+                    data.message ||
+                    'VTpass cable purchase failed';
+                this.logger.error(`VTpass cable failed: code=${String(data.code)}, message=${errorMsg}`);
                 throw new common_1.BadRequestException(`Cable purchase failed: ${errorMsg}`);
             }
-            const commission = Number(data.content?.transactions?.commission ?? 0);
-            this.logger.log(`Cable purchase successful: requestId=${requestId}, transactionId=${data.content?.transactions?.transactionId}, commission=${commission}`);
-            return {
-                requestId,
-                externalTransactionId: data.content?.transactions?.transactionId ?? requestId,
-                status: data.content?.transactions?.status ?? 'delivered',
-                commission,
-            };
+            const result = this.toPurchaseResult(requestId, data);
+            this.logger.log(`Cable purchase successful: requestId=${requestId}, transactionId=${result.externalTransactionId}, commission=${result.commission}`);
+            return result;
         }
         catch (error) {
             this.logger.error(`Cable purchase exception: ${error instanceof Error ? error.message : String(error)}`);
@@ -186,33 +206,32 @@ let VTPassService = VTPassService_1 = class VTPassService {
     }
     async purchaseElectricity(params) {
         const requestId = this.getRequestId();
-        this.logger.log(`Initiating electricity purchase: requestId=${requestId}, serviceID=${params.serviceID}, billerCode=${params.billerCode}, amount=${params.amount}`);
+        this.logger.log(`Initiating electricity purchase: requestId=${requestId}, serviceID=${params.serviceID}, billersCode=${params.billersCode}, amount=${params.amount}, variationCode=${params.variationCode}`);
         try {
             const payload = {
                 request_id: requestId,
                 serviceID: params.serviceID,
-                billerCode: params.billerCode,
+                billersCode: params.billersCode,
                 amount: params.amount,
                 phone: params.phone,
+                variation_code: params.variationCode,
             };
             this.logger.debug(`VTpass electricity payload: ${JSON.stringify(payload)}`);
-            const response = await this.client.post('pay', payload, { headers: this.getAuthHeaders('POST') });
+            const response = await this.client.post('pay', payload, {
+                headers: this.getAuthHeaders('POST'),
+            });
             const data = response.data;
             this.logger.log(`VTpass electricity response: ${JSON.stringify(data)}`);
-            const code = typeof data.code === 'number' ? String(data.code) : String(data.code ?? '');
-            if (code !== '000' && code !== '0') {
-                const errorMsg = data.response_description || data.message || 'VTpass electricity purchase failed';
-                this.logger.error(`VTpass electricity failed: code=${code}, message=${errorMsg}`);
+            if (!this.isSuccessCode(data.code)) {
+                const errorMsg = data.response_description ||
+                    data.message ||
+                    'VTpass electricity purchase failed';
+                this.logger.error(`VTpass electricity failed: code=${String(data.code)}, message=${errorMsg}`);
                 throw new common_1.BadRequestException(`Electricity purchase failed: ${errorMsg}`);
             }
-            const commission = Number(data.content?.transactions?.commission ?? 0);
-            this.logger.log(`Electricity purchase successful: requestId=${requestId}, transactionId=${data.content?.transactions?.transactionId}, commission=${commission}`);
-            return {
-                requestId,
-                externalTransactionId: data.content?.transactions?.transactionId ?? requestId,
-                status: data.content?.transactions?.status ?? 'delivered',
-                commission,
-            };
+            const result = this.toPurchaseResult(requestId, data);
+            this.logger.log(`Electricity purchase successful: requestId=${requestId}, transactionId=${result.externalTransactionId}, commission=${result.commission}`);
+            return result;
         }
         catch (error) {
             this.logger.error(`Electricity purchase exception: ${error instanceof Error ? error.message : String(error)}`);
@@ -228,8 +247,7 @@ let VTPassService = VTPassService_1 = class VTPassService {
                 billersCode: params.billersCode,
             }, { headers: this.getAuthHeaders('POST') });
             const data = response.data;
-            const code = typeof data.code === 'number' ? String(data.code) : String(data.code ?? '');
-            if (code !== '000' && code !== '0') {
+            if (!this.isSuccessCode(data.code)) {
                 return {
                     valid: false,
                     message: data.response_description || 'Verification failed',
@@ -239,10 +257,26 @@ let VTPassService = VTPassService_1 = class VTPassService {
             const content = data.content ?? {};
             return {
                 valid: true,
-                name: tx.customer_name ?? tx.name ?? content.customer_name ?? content.name ?? undefined,
-                address: tx.customer_address ?? tx.address ?? content.customer_address ?? content.address ?? undefined,
-                packageInfo: tx.product_name ?? tx.current_package ?? content.product_name ?? content.current_package ?? undefined,
-                outstanding: tx.outstanding_balance ? Number(tx.outstanding_balance) : content.outstanding_balance ? Number(content.outstanding_balance) : undefined,
+                name: tx.customer_name ??
+                    tx.name ??
+                    content.customer_name ??
+                    content.name ??
+                    undefined,
+                address: tx.customer_address ??
+                    tx.address ??
+                    content.customer_address ??
+                    content.address ??
+                    undefined,
+                packageInfo: tx.product_name ??
+                    tx.current_package ??
+                    content.product_name ??
+                    content.current_package ??
+                    undefined,
+                outstanding: tx.outstanding_balance !== undefined
+                    ? Number(tx.outstanding_balance)
+                    : content.outstanding_balance !== undefined
+                        ? Number(content.outstanding_balance)
+                        : undefined,
                 message: data.response_description,
             };
         }
@@ -264,12 +298,10 @@ let VTPassService = VTPassService_1 = class VTPassService {
                 headers: this.getAuthHeaders('GET'),
             });
             const data = response.data;
-            const code = typeof data.code === 'number' ? String(data.code) : String(data.code ?? '');
             const responseDescription = String(data.response_description ?? '');
-            this.logger.log(`VTpass service-variations raw response code=${code}, description=${responseDescription}`);
-            const isSuccessCode = code === '000' || code === '0';
+            this.logger.log(`VTpass service-variations raw response code=${String(data.code)}, description=${responseDescription}`);
             const isSuccessDescription = responseDescription === '000' || responseDescription === '0';
-            if (!isSuccessCode && !isSuccessDescription) {
+            if (!this.isSuccessCode(data.code) && !isSuccessDescription) {
                 throw new common_1.BadRequestException(responseDescription || 'Failed to fetch variations');
             }
             const variations = data.content?.variations ?? [];

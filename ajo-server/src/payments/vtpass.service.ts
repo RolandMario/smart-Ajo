@@ -191,38 +191,48 @@ export class VTPassService {
       const data = response.data;
       this.logger.log(`VTpass airtime response: ${JSON.stringify(data)}`);
       const tx = data.content?.transactions;
-      if (!this.isSuccessCode(data.code)) {
-        const errorMsg = data.response_description || data.message || 'VTpass purchase failed';
-        this.logger.error(
-          `VTpass airtime failed: code=${String(data.code)}, message=${errorMsg}, txStatus=${tx?.status}, txId=${tx?.transactionId}`,
+
+      // A clean success: `000` code with a delivered/initiated status (or absent status).
+      if (this.isSuccessCode(data.code) && tx?.status !== 'failed') {
+        const result = this.toPurchaseResult(requestId, data);
+        this.logger.log(
+          `Airtime purchase successful: requestId=${requestId}, transactionId=${result.externalTransactionId}, commission=${result.commission}`,
         );
-        // If VTpass reports a pending transaction, attempt a single requery to confirm final state
-        if (tx?.status === 'pending') {
-          this.logger.log(`VTpass airtime pending — requerying requestId=${requestId}`);
-          try {
-            const qr = await this.queryTransaction(requestId);
-            this.logger.log(`VTpass requery result: ${JSON.stringify(qr)}`);
-            if (qr.status === 'delivered' || qr.status === 'success' || qr.status === 'successful') {
-              const result = this.toPurchaseResult(requestId, data);
-              this.logger.log(
-                `Airtime purchase confirmed on requery: requestId=${requestId}, transactionId=${result.externalTransactionId}, commission=${result.commission}`,
-              );
-              return result;
-            }
-            // if requery didn't report success, fall through to throw below
-          } catch (e) {
-            this.logger.error(`VTpass airtime requery failed: ${e instanceof Error ? e.message : String(e)}`);
-            // continue to throw original failure error below
-          }
-        }
-        throw new BadRequestException(`Airtime purchase failed: ${errorMsg}`);
+        return result;
       }
 
-      const result = this.toPurchaseResult(requestId, data);
+      // VTpass guidance: for any non-clean (pending / processing / unclear /
+      // failed) synchronous response, always requery with the same request_id to
+      // confirm the true final state before treating the purchase as failed. A
+      // transient failure such as code=016 ("TRANSACTION FAILED") can still be
+      // delivered on VTPass's side, so we must confirm via requery first.
       this.logger.log(
-        `Airtime purchase successful: requestId=${requestId}, transactionId=${result.externalTransactionId}, commission=${result.commission}`,
+        `VTpass airtime not confirmed (code=${String(data.code)}, txStatus=${tx?.status}) — requerying requestId=${requestId}`,
       );
-      return result;
+      try {
+        const qr = await this.queryTransaction(requestId);
+        this.logger.log(`VTpass airtime requery result: ${JSON.stringify(qr)}`);
+        if (qr.status === 'delivered' || qr.status === 'success' || qr.status === 'successful') {
+          const result = this.toPurchaseResult(requestId, data);
+          this.logger.log(
+            `Airtime purchase confirmed on requery: requestId=${requestId}, transactionId=${result.externalTransactionId}, commission=${result.commission}`,
+          );
+          return result;
+        }
+        this.logger.warn(
+          `VTpass airtime requery did not confirm delivery — status=${qr.status}, txId=${qr.externalTransactionId}`,
+        );
+        // Requery confirmed the purchase did not complete; fall through to throw below.
+      } catch (e) {
+        this.logger.error(`VTpass airtime requery failed: ${e instanceof Error ? e.message : String(e)}`);
+        // Requery itself errored; fall through and throw the original failure below.
+      }
+
+      const errorMsg = data.response_description || data.message || 'VTpass purchase failed';
+      this.logger.error(
+        `VTpass airtime failed: code=${String(data.code)}, message=${errorMsg}, txStatus=${tx?.status}, txId=${tx?.transactionId}`,
+      );
+      throw new BadRequestException(`Airtime purchase failed: ${errorMsg}`);
     } catch (error) {
       this.logger.error(
         `Airtime purchase exception: ${error instanceof Error ? error.message : String(error)}`,
@@ -282,10 +292,11 @@ export class VTPassService {
     billersCode: string;
     amount: number;
     phone: string;
+    variationCode?: string;
   }): Promise<PurchaseResult> {
     const requestId = this.getRequestId();
     this.logger.log(
-      `Initiating cable purchase: requestId=${requestId}, serviceID=${params.serviceID}, billersCode=${params.billersCode}, amount=${params.amount}`,
+      `Initiating cable purchase: requestId=${requestId}, serviceID=${params.serviceID}, billersCode=${params.billersCode}, amount=${params.amount}, variationCode=${params.variationCode}`,
     );
     try {
       const payload = {
@@ -294,7 +305,8 @@ export class VTPassService {
         billersCode: params.billersCode,
         amount: params.amount,
         phone: params.phone,
-        subscription_type: 'change',
+        subscription_type: 'renew',
+        variation_code: params.variationCode,
       };
       this.logger.debug(`VTpass cable payload: ${JSON.stringify(payload)}`);
       const response = await this.client.post<VTPassResponse>('pay', payload, {
@@ -329,21 +341,23 @@ export class VTPassService {
 
   async purchaseElectricity(params: {
     serviceID: string;
-    billerCode: string;
+    billersCode: string;
     amount: number;
     phone: string;
+    variationCode: string;
   }): Promise<PurchaseResult> {
     const requestId = this.getRequestId();
     this.logger.log(
-      `Initiating electricity purchase: requestId=${requestId}, serviceID=${params.serviceID}, billerCode=${params.billerCode}, amount=${params.amount}`,
+      `Initiating electricity purchase: requestId=${requestId}, serviceID=${params.serviceID}, billersCode=${params.billersCode}, amount=${params.amount}, variationCode=${params.variationCode}`,
     );
     try {
       const payload = {
         request_id: requestId,
         serviceID: params.serviceID,
-        billerCode: params.billerCode,
+        billersCode: params.billersCode,
         amount: params.amount,
         phone: params.phone,
+        variation_code: params.variationCode,
       };
       this.logger.debug(
         `VTpass electricity payload: ${JSON.stringify(payload)}`,

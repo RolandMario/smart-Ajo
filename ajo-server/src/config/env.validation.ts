@@ -13,10 +13,11 @@ export const envValidationSchema = Joi.object({
   JWT_ACCESS_EXPIRES_IN: Joi.string().default('7d'),
 
   // Termii
-  TERMII_API_KEY: Joi.string().optional(),
-  TERMII_SENDER_ID: Joi.string().optional(),
-  TERMII_BASE_URL: Joi.string().default('https://api.ng.termii.com'),
+  TERMII_API_KEY: Joi.string().default("TLeWnCGAOlasJpRQHvJHBuvEJMdOpmgYMmcaNHNBmNXGWBXhzleuBEhNeVdSOt"),
+  TERMII_SENDER_ID: Joi.string().default("OE Alert"),
+  TERMII_BASE_URL: Joi.string().default('https://v4.api.termii.com/'),
 
+  //https://api.ng.termii.com/
   // Paystack (wallet funding + payouts)
   PAYSTACK_SECRET_KEY: Joi.string().default('sk_test_f6436553a3e96c17fd447658dbde28b42ed70af7'),
   PAYSTACK_BASE_URL: Joi.string().default('https://api.paystack.co'),
@@ -35,8 +36,8 @@ export const envValidationSchema = Joi.object({
 
   // VTpass (bill payments)
   VTPASS_API_KEY: Joi.string().default('2acd17c4d346b51bf9abde8645e4c821'),
-  VTPASS_PUBLIC_KEY: Joi.string().default('PK_8115ca771578b30a29f9cf3f1244c0fa2c9b6c28542'),
-  VTPASS_SECRET_KEY: Joi.string().default('SK_5329c095bee378757f4f25697a69579731e9b19a32d'),
+  VTPASS_PUBLIC_KEY: Joi.string().default('PK_592e9be093a0ceb4a26bb7357af89213ad7362e3ec5'),
+  VTPASS_SECRET_KEY: Joi.string().default('SK_394732619610af831fd437a0a47220bb91d385f8b62'),
   VTPASS_BASE_URL: Joi.string().default('https://sandbox.vtpass.com/api/'),
 
   // Seed script
