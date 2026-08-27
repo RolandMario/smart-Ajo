@@ -2,8 +2,8 @@ import { Metadata } from 'next'
 import Link from 'next/link'
 
 export const metadata: Metadata = {
-  title: 'Privacy Policy - Ajo',
-  description: 'Learn how Ajo collects, uses, and protects your personal information.',
+  title: 'Privacy Policy - Digital Smart Environment',
+  description: 'Learn how Digital Smart Environment and the Ajo platform collect, use, and protect your personal information.',
 }
 
 export default function PrivacyPolicyPage() {
@@ -129,9 +129,9 @@ export default function PrivacyPolicyPage() {
                 <div className="bg-ajo-surface-sunken p-6 rounded-card">
                   <p className="font-semibold text-ajo-ink">Data Protection Officer</p>
                   <p>Ajo Platform</p>
-                  <p>Email: <a href="mailto:privacy@ajo.app" className="text-ajo-primary hover:underline">privacy@ajo.app</a></p>
-                  <p>Phone: +234-XXX-XXXX-XXX</p>
-                  <p className="mt-2">Lagos, Nigeria</p>
+                  <p>Email: <a href="mailto:roland.ayuk@digitalsmartenvironment.com" className="text-ajo-primary hover:underline">hello@digitalsmartenvironment.com</a></p>
+                  
+                  <p className="mt-2">No 1 Oguntolo street, Ijaiye, Lagos, Nigeria</p>
                   <p className="text-sm mt-2">We aim to respond to all privacy requests within 30 days.</p>
                 </div>
               </section>

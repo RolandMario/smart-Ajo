@@ -150,6 +150,9 @@ let PaystackService = PaystackService_1 = class PaystackService {
     isTestMode() {
         return this.secretKey.startsWith('sk_test_');
     }
+    testTransferOtp() {
+        return this.configService.get('PAYSTACK_TRANSFER_OTP') ?? '123456';
+    }
     async resolveOtp(transferCode, otp) {
         try {
             const response = await this.client.post('/transfer/finalize_transfer', {

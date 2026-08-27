@@ -11,6 +11,7 @@ import { Request } from 'express';
 import { PaystackService } from '../payments/paystack.service';
 import { WalletService } from '../wallet/wallet.service';
 import { CyclesService } from '../cycles/cycles.service';
+import { SavingsService } from '../savings/savings.service';
 import { TransferStatus } from '../common/enums/wallet.enum';
 
 interface PaystackWebhookEvent {
@@ -40,6 +41,7 @@ export class WebhookController {
     private paystack: PaystackService,
     private walletService: WalletService,
     private cyclesService: CyclesService,
+    private savingsService: SavingsService,
   ) {}
 
   @Post()
@@ -142,6 +144,19 @@ export class WebhookController {
     const payout = await this.cyclesService.findPayoutByReference(reference);
 
     if (!payout) {
+      // Not a cycle payout — check for an individual savings withdrawal.
+      const savingPlan =
+        await this.savingsService.findSavingPlanByWithdrawalReference(
+          reference,
+        );
+      if (savingPlan) {
+        this.logger.log(
+          `Savings withdrawal finalized via webhook: ref=${reference}`,
+        );
+        await this.savingsService.completeWithdrawal(reference);
+        return;
+      }
+
       this.logger.warn(
         `transfer.success: no payout found for reference ${reference}`,
       );
@@ -195,9 +210,22 @@ export class WebhookController {
     const payout = await this.cyclesService.findPayoutByReference(reference);
 
     if (!payout) {
-      this.logger.warn(
-        `transfer.failed: no payout found for reference ${reference}`,
-      );
+      // Not a cycle payout — check for an individual savings withdrawal.
+      const savingPlan =
+        await this.savingsService.findSavingPlanByWithdrawalReference(
+          reference,
+        );
+      if (savingPlan) {
+        const reason = (data.reason as string | undefined) ?? 'Transfer failed';
+        this.logger.warn(
+          `Savings withdrawal failed via webhook: ref=${reference}, reason=${reason}`,
+        );
+        await this.savingsService.failWithdrawal(reference, reason);
+      } else {
+        this.logger.warn(
+          `transfer.failed: no payout found for reference ${reference}`,
+        );
+      }
       return;
     }
 
@@ -230,7 +258,20 @@ export class WebhookController {
 
     const payout = await this.cyclesService.findPayoutByReference(reference);
 
-    if (!payout) return;
+    if (!payout) {
+      // Not a cycle payout — check for an individual savings withdrawal.
+      const savingPlan =
+        await this.savingsService.findSavingPlanByWithdrawalReference(
+          reference,
+        );
+      if (savingPlan) {
+        this.logger.warn(
+          `Savings withdrawal reversed via webhook: ref=${reference}`,
+        );
+        await this.savingsService.failWithdrawal(reference, 'Reversed');
+      }
+      return;
+    }
 
     const group = await this.cyclesService.findGroupById(payout.group);
 

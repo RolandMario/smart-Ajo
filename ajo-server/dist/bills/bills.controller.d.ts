@@ -22,19 +22,13 @@ export declare class BillsController {
         packageInfo: string | undefined;
         outstanding: number | undefined;
     }>;
-    purchaseAirtime(user: RequestUser, dto: PurchaseAirtimeDto): Promise<{
-        commission: number;
-    }>;
-    purchaseData(user: RequestUser, dto: PurchaseDataDto): Promise<{
-        commission: number;
-    }>;
-    purchaseCable(user: RequestUser, dto: PurchaseCableDto): Promise<{
-        commission: number;
-    }>;
-    purchaseElectricity(user: RequestUser, dto: PurchaseElectricityDto): Promise<{
-        commission: number;
-    }>;
+    purchaseAirtime(user: RequestUser, dto: PurchaseAirtimeDto): Promise<import("./bills.service").BillReceipt>;
+    purchaseData(user: RequestUser, dto: PurchaseDataDto): Promise<import("./bills.service").BillReceipt>;
+    purchaseCable(user: RequestUser, dto: PurchaseCableDto): Promise<import("./bills.service").BillReceipt>;
+    purchaseElectricity(user: RequestUser, dto: PurchaseElectricityDto): Promise<import("./bills.service").BillReceipt>;
+    getServices(): Promise<string[]>;
     getDataPlans(network?: string): Promise<import("../payments/vtpass.service").ServiceVariation[]>;
     getCablePlans(provider?: string): Promise<import("../payments/vtpass.service").ServiceVariation[]>;
-    getHistory(user: RequestUser): Promise<never[]>;
+    getHistory(user: RequestUser): Promise<import("./bills.service").BillReceipt[]>;
+    getReceipt(user: RequestUser, reference: string): Promise<import("./bills.service").BillReceipt>;
 }

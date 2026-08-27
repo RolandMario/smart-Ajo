@@ -6,7 +6,17 @@ import React, {
   useMemo,
   useState,
 } from "react";
+import { AppState } from "react-native";
 import { hydrateToken, setToken, clearToken } from "./token-storage";
+import {
+  SESSION_IDLE_TIMEOUT_MS,
+  clearSessionBackgrounded,
+  clearSessionIdleState,
+  markSessionBackgrounded,
+  markSessionSeen,
+  sessionBackgroundedElapsed,
+  sessionLastSeenElapsed,
+} from "./session-idle";
 import {
   fetchCurrentUser,
   verifyOtp as verifyOtpRequest,
@@ -49,6 +59,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     let cancelled = false;
 
     async function bootstrap() {
+      // Auto-logout: if the app was closed/minimized for more than 3 minutes,
+      // drop the stored token rather than silently restoring the session.
+      const backgroundedElapsed = await sessionBackgroundedElapsed();
+      const lastSeenElapsed = await sessionLastSeenElapsed();
+      const timedOut =
+        backgroundedElapsed !== null
+          ? backgroundedElapsed > SESSION_IDLE_TIMEOUT_MS
+          : lastSeenElapsed !== null &&
+            lastSeenElapsed > SESSION_IDLE_TIMEOUT_MS;
+
+      if (timedOut) {
+        await clearToken();
+        await clearSessionIdleState();
+        if (!cancelled) setStatus("signedOut");
+        return;
+      }
+
+      await markSessionSeen();
       const token = await hydrateToken();
 
       if (!token) {
@@ -110,6 +138,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signOut = useCallback(async () => {
     await clearToken();
+    await clearSessionIdleState();
     setUser(null);
     setStatus("signedOut");
   }, []);
@@ -126,6 +155,39 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         await signOut();
       }
     }
+  }, [signOut]);
+
+  // Auto-logout when the user closes/minimizes the app for more than 3
+  // minutes. Normal "minimize" is caught here (app goes to background); a
+  // cold relaunch is handled by the bootstrap check using the persisted
+  // timestamps.
+  useEffect(() => {
+    let active = true;
+
+    async function handleForeground() {
+      const bgElapsed = await sessionBackgroundedElapsed();
+      if (bgElapsed !== null && bgElapsed > SESSION_IDLE_TIMEOUT_MS) {
+        if (active) void signOut();
+        return;
+      }
+      await clearSessionBackgrounded();
+      await markSessionSeen();
+    }
+
+    const listener = (next: string) => {
+      if (next === "background" || next === "inactive") {
+        void markSessionBackgrounded();
+      } else if (next === "active") {
+        void handleForeground();
+      }
+    };
+
+    const subscription = AppState.addEventListener("change", listener);
+
+    return () => {
+      active = false;
+      subscription.remove();
+    };
   }, [signOut]);
 
   const value = useMemo(

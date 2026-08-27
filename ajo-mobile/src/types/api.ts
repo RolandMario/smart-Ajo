@@ -179,7 +179,18 @@ export interface CurrentCycleResponse {
 
 // ---- Wallet types ----
 
-export type WalletTransactionType = "funding" | "contribution_debit" | "contribution_refund";
+/** Mirrors WalletTransactionType in ajo-server's wallet.enum.ts. */
+export type WalletTransactionType =
+  | "funding"
+  | "contribution_debit"
+  | "contribution_refund"
+  | "bill_payment"
+  | "service_fee_debit"
+  | "service_fee_credit"
+  | "bill_commission_credit"
+  | "admin_credit"
+  | "admin_withdrawal"
+  | "savings_debit";
 export type WalletTransactionStatus = "pending" | "success" | "failed";
 
 export interface WalletTransaction {
@@ -251,7 +262,12 @@ export type NotificationType =
   | "payout_success"
   | "payout_failed"
   | "payout_reversed"
-  | "wallet_funded";
+  | "wallet_funded"
+  | "saving_created"
+  | "saving_debited"
+  | "saving_insufficient"
+  | "saving_completed"
+  | "saving_withdrawn";
 
 export interface AppNotification {
   _id: string;
@@ -301,6 +317,12 @@ export interface PaginationParams {
 export type BillServiceType = "airtime" | "data" | "cable" | "electricity";
 export type BillStatus = "pending" | "success" | "failed";
 
+/**
+ * Payload of GET /bills/services — the service categories the admin has
+ * enabled for the member app (each backed by an active provider).
+ */
+export type BillServicesResponse = BillServiceType[];
+
 export interface BillTransaction {
   _id: string;
   user: string;
@@ -329,12 +351,12 @@ export interface DataPayload {
   network: string;
 }
 
+/** A single purchasable data plan returned by GET /bills/data-plans. */
 export interface DataPlan {
-  id: string;
+  variationCode: string;
   name: string;
   amount: number;
-  network: string;
-  size: string;
+  fixedPrice?: boolean;
 }
 
 export interface CablePayload {
@@ -343,6 +365,8 @@ export interface CablePayload {
   amount: number;
   packageName?: string;
   variationCode?: string;
+  /** Verified subscriber name, shown on the receipt. */
+  customerName?: string;
 }
 
 export interface ElectricityPayload {
@@ -351,6 +375,8 @@ export interface ElectricityPayload {
   meterType: "prepaid" | "postpaid";
   amount: number;
   phone: string;
+  /** Verified customer name, shown on the receipt. */
+  customerName?: string;
 }
 
 export interface ValidateMeterPayload {
@@ -371,4 +397,61 @@ export interface ValidationResult {
   packageInfo?: string;
   outstanding?: number;
   message?: string;
+}
+
+// ---- Individual savings plan types ----
+
+export type SavingPlanStatus = "active" | "completed" | "withdrawn" | "deleted";
+export type SavingTransactionType = "saving_debit" | "saving_withdrawal" | "saving_refund";
+export type SavingDurationUnit = "days" | "months" | "years";
+
+export interface SavingPlan {
+  _id: string;
+  user: string;
+  name: string;
+  amount: number;
+  frequency: ContributionFrequency;
+  durationUnit: SavingDurationUnit;
+  durationValue: number;
+  /** Legacy: present only on plans created before durationUnit/durationValue existed (3 | 6 | 12). */
+  durationMonths?: number;
+  intervalCount: number;
+  cycleNumber: number;
+  collectedCount: number;
+  savingsBalance: number;
+  lifetimeSaved: number;
+  status: SavingPlanStatus;
+  nextDueAt: string;
+  startAt: string;
+  endAt?: string;
+  withdrawnAt?: string;
+  deletedAt?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SavingTransaction {
+  _id: string;
+  plan: string;
+  user: string;
+  type: SavingTransactionType;
+  amount: number;
+  reference: string;
+  cycleNumber: number;
+  metadata?: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SavingPlanDetail {
+  plan: SavingPlan;
+  transactions: SavingTransaction[];
+}
+
+export interface CreateSavingPlanPayload {
+  name: string;
+  amount: number;
+  frequency: ContributionFrequency;
+  durationUnit: SavingDurationUnit;
+  durationValue: number;
 }

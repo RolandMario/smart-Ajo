@@ -49,6 +49,7 @@ export declare class PaystackService {
         reference: string;
     }): Promise<InitiateTransferResult>;
     isTestMode(): boolean;
+    testTransferOtp(): string;
     resolveOtp(transferCode: string, otp: string): Promise<{
         status: string;
     }>;

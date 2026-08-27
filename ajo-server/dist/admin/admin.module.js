@@ -20,17 +20,26 @@ const platform_admin_management_service_1 = require("./platform-admin-management
 const platform_admin_management_controller_1 = require("./platform-admin-management.controller");
 const platform_admin_wallet_service_1 = require("./platform-admin-wallet.service");
 const platform_admin_wallet_controller_1 = require("./platform-admin-wallet.controller");
+const platform_admin_bills_controller_1 = require("./platform-admin-bills.controller");
 const groups_module_1 = require("../groups/groups.module");
 const cycles_module_1 = require("../cycles/cycles.module");
 const users_module_1 = require("../users/users.module");
 const wallet_module_1 = require("../wallet/wallet.module");
 const payments_module_1 = require("../payments/payments.module");
+const bills_module_1 = require("../bills/bills.module");
 let AdminModule = class AdminModule {
 };
 exports.AdminModule = AdminModule;
 exports.AdminModule = AdminModule = __decorate([
     (0, common_1.Module)({
-        imports: [groups_module_1.GroupsModule, cycles_module_1.CyclesModule, users_module_1.UsersModule, wallet_module_1.WalletModule, payments_module_1.PaymentsModule],
+        imports: [
+            groups_module_1.GroupsModule,
+            cycles_module_1.CyclesModule,
+            users_module_1.UsersModule,
+            wallet_module_1.WalletModule,
+            payments_module_1.PaymentsModule,
+            bills_module_1.BillsModule,
+        ],
         controllers: [
             group_dashboard_controller_1.GroupDashboardController,
             platform_admin_users_controller_1.PlatformAdminUsersController,
@@ -38,6 +47,7 @@ exports.AdminModule = AdminModule = __decorate([
             platform_admin_finance_controller_1.PlatformAdminFinanceController,
             platform_admin_management_controller_1.PlatformAdminManagementController,
             platform_admin_wallet_controller_1.PlatformAdminWalletController,
+            platform_admin_bills_controller_1.PlatformAdminBillsController,
         ],
         providers: [
             group_dashboard_service_1.GroupDashboardService,

@@ -311,6 +311,7 @@ browse every group.
 |--------|----------------------|------------------------------|----------------|-------|
 | GET    | `/admin/groups`      | Bearer JWT, `platform_admin` | `search?` (name substring), `status?`, `page?` (default 1), `limit?` (default 20, max 100) | Paginated group list with settings and current cycle number, no member/cycle detail. |
 | GET    | `/admin/groups/:id`  | Bearer JWT, `platform_admin` | — | Full detail: settings, central wallet (`GroupWallet`) balance, the group admin, every member's standing, the full cycle history with a paid/defaulted/pending breakdown per cycle, and every payout attempt (including failed/reversed, with `failureReason`) — not just the current one. |
+| PATCH  | `/admin/groups/:id/auto-collect` | Bearer JWT, `platform_admin` | Body `{ enabled: boolean }` | Platform-admin override of the group's auto-collect setting (the same flag the group admin toggles from the mobile app). Enabling lets the scheduler auto-debit due contributions and proceed with payout automatically; disabling returns collection/withdrawal to a manual group-admin action. |
 
 Both routes are guarded the same way as the Sub-phase B endpoints.
 

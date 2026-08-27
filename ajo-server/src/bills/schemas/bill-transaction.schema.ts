@@ -16,7 +16,11 @@ export class BillTransaction {
   user!: Types.ObjectId;
 
   /** 'airtime' | 'data' | 'cable' | 'electricity' */
-  @Prop({ type: String, required: true, enum: ['airtime', 'data', 'cable', 'electricity'] })
+  @Prop({
+    type: String,
+    required: true,
+    enum: ['airtime', 'data', 'cable', 'electricity'],
+  })
   type!: string;
 
   @Prop({
@@ -55,7 +59,8 @@ export class BillTransaction {
   walletTransaction?: Types.ObjectId;
 }
 
-export const BillTransactionSchema = SchemaFactory.createForClass(BillTransaction);
+export const BillTransactionSchema =
+  SchemaFactory.createForClass(BillTransaction);
 
 // Index for listing a user's history reverse-chronologically.
 BillTransactionSchema.index({ user: 1, createdAt: -1 });

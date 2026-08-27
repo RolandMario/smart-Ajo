@@ -1,5 +1,10 @@
 import { authedFetch } from "./authed-client";
-import type { BillTransaction, AirtimePayload, DataPayload, CablePayload, ElectricityPayload, DataPlan, ValidationResult } from "../types/api";
+import type { BillTransaction, AirtimePayload, DataPayload, CablePayload, ElectricityPayload, DataPlan, ValidationResult, BillServiceType } from "../types/api";
+
+/** Service categories the admin has enabled for the member app. */
+export async function getBillServices(): Promise<BillServiceType[]> {
+  return authedFetch<BillServiceType[]>("/bills/services");
+}
 
 export async function validateMeter(disco: string, meterNumber: string, meterType: "prepaid" | "postpaid"): Promise<ValidationResult> {
   return authedFetch<ValidationResult>("/bills/validate/meter", { method: "POST", body: { disco, meterNumber, meterType } });
@@ -30,11 +35,15 @@ export async function listDataPlans(network: string): Promise<DataPlan[]> {
 }
 
 export async function listCablePlans(provider: string): Promise<
-  Array<{ variationCode: string; name: string; amount: number; fixedPrice: boolean }>
+  { variationCode: string; name: string; amount: number; fixedPrice: boolean }[]
 > {
   return authedFetch(`/bills/cable-plans?provider=${encodeURIComponent(provider)}`);
 }
 
 export async function getBillHistory(): Promise<BillTransaction[]> {
   return authedFetch<BillTransaction[]>("/bills/history");
+}
+
+export async function getReceipt(reference: string): Promise<BillTransaction> {
+  return authedFetch<BillTransaction>(`/bills/receipts/${encodeURIComponent(reference)}`);
 }

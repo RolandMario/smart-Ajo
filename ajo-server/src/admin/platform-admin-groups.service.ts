@@ -341,7 +341,10 @@ export class PlatformAdminGroupsService {
    * Updates the service fee for a group. Only platform admins can do this.
    * The new fee applies to all future contribution collections.
    */
-  async updateServiceFee(groupId: string, serviceFee: number | undefined): Promise<GroupDetail> {
+  async updateServiceFee(
+    groupId: string,
+    serviceFee: number | undefined,
+  ): Promise<GroupDetail> {
     if (!Types.ObjectId.isValid(groupId)) {
       throw new NotFoundException('Group not found');
     }
@@ -355,6 +358,37 @@ export class PlatformAdminGroupsService {
       group.serviceFee = serviceFee;
       await group.save();
     }
+
+    return this.getGroupDetail(groupId);
+  }
+
+  /**
+   * Overrides the group's auto-collect setting on behalf of a platform
+   * admin. This writes the same `autoCollectEnabled` flag the group's own
+   * admin controls from the mobile app, so a platform toggle here can
+   * override (and be overridden by) the group admin — whichever was set
+   * last wins.
+   *
+   * When enabled (true), the AutoCollectScheduler auto-debits member
+   * wallets for due cycles and the payout proceeds automatically. When
+   * disabled (false), collection/withdrawal stays a manual group-admin
+   * action.
+   */
+  async setAutoCollect(
+    groupId: string,
+    enabled: boolean,
+  ): Promise<GroupDetail> {
+    if (!Types.ObjectId.isValid(groupId)) {
+      throw new NotFoundException('Group not found');
+    }
+
+    const group = await this.groupModel.findById(groupId);
+    if (!group) {
+      throw new NotFoundException('Group not found');
+    }
+
+    group.autoCollectEnabled = enabled;
+    await group.save();
 
     return this.getGroupDetail(groupId);
   }

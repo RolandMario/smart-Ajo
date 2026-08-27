@@ -17,6 +17,7 @@ class PurchaseElectricityDto {
     meterType;
     amount;
     phone;
+    customerName;
 }
 exports.PurchaseElectricityDto = PurchaseElectricityDto;
 __decorate([
@@ -45,4 +46,9 @@ __decorate([
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
 ], PurchaseElectricityDto.prototype, "phone", void 0);
+__decorate([
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", String)
+], PurchaseElectricityDto.prototype, "customerName", void 0);
 //# sourceMappingURL=purchase-electricity.dto.js.map

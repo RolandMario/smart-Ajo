@@ -31,7 +31,11 @@ __decorate([
     __metadata("design:type", mongoose_2.Types.ObjectId)
 ], BillTransaction.prototype, "user", void 0);
 __decorate([
-    (0, mongoose_1.Prop)({ type: String, required: true, enum: ['airtime', 'data', 'cable', 'electricity'] }),
+    (0, mongoose_1.Prop)({
+        type: String,
+        required: true,
+        enum: ['airtime', 'data', 'cable', 'electricity'],
+    }),
     __metadata("design:type", String)
 ], BillTransaction.prototype, "type", void 0);
 __decorate([

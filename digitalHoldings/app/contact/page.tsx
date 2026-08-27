@@ -61,8 +61,8 @@ export default function ContactPage() {
             Contact Us
           </h1>
           <p className="mt-3 text-lg text-gray-600 max-w-2xl">
-            Have a question or want to work with us? We’d love to hear from you.
-            Fill out the form or reach us through any of the channels below.
+            Have a question or want to work with Digital Smart Environment on your next project? We'd love to hear
+            from you. Fill out the form or reach us through any of the channels below.
           </p>
         </div>
       </div>
@@ -224,10 +224,10 @@ export default function ContactPage() {
                   <div>
                     <p className="text-sm font-medium text-gray-900">Email</p>
                     <a
-                      href="mailto:hello@yourcompany.ng"
+                      href="mailto:hello@digitalsmartenvironment.com"
                       className="mt-1 text-sm text-gray-600 hover:text-blue-600 transition"
                     >
-                      rolandmario2@gmail.com
+                      hello@digitalsmartenvironment.com
                     </a>
                   </div>
                 </div>

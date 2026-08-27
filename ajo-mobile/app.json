@@ -30,7 +30,8 @@
         {
           "faceIDPermission": "Allow Ajo to use Face ID to protect your session."
         }
-      ]
+      ],
+      "expo-sharing"
     ]
   }
 }

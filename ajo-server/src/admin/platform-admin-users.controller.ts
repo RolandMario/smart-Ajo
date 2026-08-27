@@ -1,4 +1,12 @@
-import { Body, Controller, Get, Param, Post, Query, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Post,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 import { PlatformAdminUsersService } from './platform-admin-users.service';
 import { ListUsersQueryDto } from './dto/list-users-query.dto';
 import { CreditWalletDto } from './dto/credit-wallet.dto';
@@ -32,6 +40,10 @@ export class PlatformAdminUsersController {
    */
   @Post(':id/wallet/credit')
   creditWallet(@Param('id') id: string, @Body() dto: CreditWalletDto) {
-    return this.platformAdminUsersService.creditWallet(id, dto.amount, dto.note);
+    return this.platformAdminUsersService.creditWallet(
+      id,
+      dto.amount,
+      dto.note,
+    );
   }
 }

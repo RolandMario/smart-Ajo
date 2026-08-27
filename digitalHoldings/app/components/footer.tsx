@@ -23,12 +23,12 @@ export default function Footer() {
             <div className="space-y-4">
               <div className="flex items-center gap-3">
                 <div className="flex h-10 w-10 items-center justify-center rounded-full bg-ajo-primary">
-                  <span className="text-xl font-bold text-white">A</span>
+                  <span className="text-xl font-bold text-white">D</span>
                 </div>
-                <span className="text-xl font-bold text-ajo-ink">Ajo</span>
+                <span className="text-xl font-bold text-ajo-ink">Digital Smart<br />Environment</span>
               </div>
               <p className="text-sm text-ajo-inkSoft leading-relaxed">
-                Digital savings and investment platform. Save together, thrive together.
+                A forward-thinking technology company specializing in the design, development, and delivery of innovative digital solutions. Ajo is one of our flagship projects.
               </p>
             </div>
 
@@ -37,7 +37,7 @@ export default function Footer() {
               <nav className="flex flex-col space-y-2 text-sm">
                 <a href="/#about" className="text-ajo-inkSoft hover:text-ajo-ink transition">About</a>
                 <a href="/#services" className="text-ajo-inkSoft hover:text-ajo-ink transition">Services</a>
-                <a href="/#how-it-works" className="text-ajo-inkSoft hover:text-ajo-ink transition">How It Works</a>
+                <a href="/#projects" className="text-ajo-inkSoft hover:text-ajo-ink transition">Projects</a>
                 <a href="/#why-us" className="text-ajo-inkSoft hover:text-ajo-ink transition">Why Us</a>
                 <Link href="/privacy-policy" className="text-ajo-inkSoft hover:text-ajo-ink transition">Privacy Policy</Link>
                 <Link href="/terms-and-conditions" className="text-ajo-inkSoft hover:text-ajo-ink transition">Terms & Conditions</Link>
@@ -47,26 +47,26 @@ export default function Footer() {
             <div className="space-y-4">
               <h3 className="font-semibold text-ajo-ink">Services</h3>
               <nav className="flex flex-col space-y-2 text-sm">
-                <a href="/#services" className="text-ajo-inkSoft hover:text-ajo-ink transition">Create Groups</a>
-                <a href="/#services" className="text-ajo-inkSoft hover:text-ajo-ink transition">Join Groups</a>
-                <a href="/#services" className="text-ajo-inkSoft hover:text-ajo-ink transition">Automated Savings</a>
-                <a href="/#services" className="text-ajo-inkSoft hover:text-ajo-ink transition">Rotating Payouts</a>
+                <a href="/#services" className="text-ajo-inkSoft hover:text-ajo-ink transition">Custom Software Development</a>
+                <a href="/#services" className="text-ajo-inkSoft hover:text-ajo-ink transition">Mobile & Web Apps</a>
+                <a href="/#services" className="text-ajo-inkSoft hover:text-ajo-ink transition">Responsive Website Design</a>
+                <a href="/#services" className="text-ajo-inkSoft hover:text-ajo-ink transition">Digital Transformation</a>
               </nav>
             </div>
 
             <div className="space-y-4">
               <h3 className="font-semibold text-ajo-ink">Get in Touch</h3>
               <div className="space-y-2 text-sm">
-                <a href="/contact" className="flex items-center gap-2 text-ajo-inkSoft hover:text-ajo-ink transition">
+                <a href="mailto:hello@digitalsmartenvironment.com" className="flex items-center gap-2 text-ajo-inkSoft hover:text-ajo-ink transition">
                   <Mail className="h-4 w-4" />
-                  rolandmario2@gmail.com
+                  hello@digitalsmartenvironment.com
                 </a>
               </div>
             </div>
           </div>
 
           <div className="mt-8 border-t border-ajo-line pt-8 text-center text-sm text-ajo-inkSoft">
-            <p>&copy; 2026 Ajo Digital Smart Environment. All rights reserved. <Link href="/privacy-policy" className="font-semibold hover:text-ajo-ink">Privacy Policy</Link> · <Link href="/terms-and-conditions" className="font-semibold hover:text-ajo-ink">Terms & Conditions</Link></p>
+            <p>&copy; 2026 Digital Smart Environment. All rights reserved. <Link href="/privacy-policy" className="font-semibold hover:text-ajo-ink">Privacy Policy</Link> · <Link href="/terms-and-conditions" className="font-semibold hover:text-ajo-ink">Terms & Conditions</Link></p>
           </div>
         </div>
       </footer>

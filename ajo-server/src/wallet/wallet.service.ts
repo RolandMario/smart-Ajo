@@ -44,7 +44,10 @@ export class WalletService {
     let wallet = await this.walletModel.findOne({ user: userObjectId });
 
     if (!wallet) {
-      wallet = await this.walletModel.create({ user: userObjectId, balance: 0 });
+      wallet = await this.walletModel.create({
+        user: userObjectId,
+        balance: 0,
+      });
     }
 
     return wallet;
@@ -371,7 +374,84 @@ export class WalletService {
     return true;
   }
 
-  // ---- Service fee credit (used by CyclesService) ---------------------------
+  // ---- Savings plan debits (used by SavingsService) -------------------------
+
+  /**
+   * Attempts to debit `amountNaira` from the member's wallet into an
+   * individual savings plan. Mirrors `debitForContribution`: idempotent by
+   * reference, session-transactional, returns `false` (no changes) if the
+   * balance is insufficient.
+   */
+  async debitForSavings(
+    userId: Types.ObjectId,
+    amountNaira: number,
+    refs: { savingPlan: Types.ObjectId },
+    reference: string,
+    session: ClientSession,
+  ): Promise<boolean> {
+    const successTx = await this.walletTxModel.findOne({
+      reference,
+      status: WalletTransactionStatus.SUCCESS,
+    });
+
+    if (successTx) {
+      return true;
+    }
+
+    await this.walletTxModel.deleteOne({
+      reference,
+      status: { $ne: WalletTransactionStatus.SUCCESS },
+    });
+
+    const wallet = await this.walletModel
+      .findOne({ user: userId })
+      .session(session);
+
+    if (!wallet) {
+      return false;
+    }
+
+    const balance = wallet.balance ?? 0;
+    if (balance < amountNaira) {
+      return false;
+    }
+
+    const balanceBefore = balance;
+    const balanceAfter = balanceBefore - amountNaira;
+
+    wallet.balance = balanceAfter;
+    await wallet.save({ session });
+
+    try {
+      await this.walletTxModel.create(
+        [
+          {
+            wallet: wallet._id,
+            user: userId,
+            type: WalletTransactionType.SAVINGS_DEBIT,
+            status: WalletTransactionStatus.SUCCESS,
+            amount: amountNaira,
+            balanceBefore,
+            balanceAfter,
+            reference,
+            metadata: { savingPlan: refs.savingPlan.toString() },
+          },
+        ],
+        { session, ordered: true },
+      );
+    } catch (err: any) {
+      const code = err?.code ?? err?.err?.code;
+      const message = String(err?.message ?? err);
+      const isDuplicateKey =
+        code === 11000 || code === '11000' || message.includes('E11000');
+      if (isDuplicateKey) {
+        return true;
+      }
+      throw err;
+    }
+
+    return true;
+  }
 
   /**
    * Credits the platform admin's wallet with a service fee collected from
@@ -548,7 +628,11 @@ export class WalletService {
     session?: ClientSession,
   ): Promise<void> {
     await this.walletTxModel.updateOne(
-      { reference, status: WalletTransactionStatus.PENDING, type: WalletTransactionType.BILL_PAYMENT },
+      {
+        reference,
+        status: WalletTransactionStatus.PENDING,
+        type: WalletTransactionType.BILL_PAYMENT,
+      },
       { $set: { status: WalletTransactionStatus.SUCCESS } },
       session ? { session } : undefined,
     );
@@ -568,9 +652,7 @@ export class WalletService {
 
     if (!tx) return;
 
-    const wallet = await this.walletModel
-      .findById(tx.wallet)
-      .session(session);
+    const wallet = await this.walletModel.findById(tx.wallet).session(session);
 
     if (!wallet) return;
 

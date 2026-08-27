@@ -45,6 +45,9 @@ let BillsController = class BillsController {
     purchaseElectricity(user, dto) {
         return this.bills.purchaseElectricity(user.userId, dto);
     }
+    getServices() {
+        return this.bills.getActiveServiceTypes();
+    }
     getDataPlans(network = 'mtn') {
         return this.bills.getDataPlans(network);
     }
@@ -53,6 +56,9 @@ let BillsController = class BillsController {
     }
     getHistory(user) {
         return this.bills.getHistory(user.userId);
+    }
+    getReceipt(user, reference) {
+        return this.bills.getReceipt(user.userId, reference);
     }
 };
 exports.BillsController = BillsController;
@@ -105,6 +111,12 @@ __decorate([
     __metadata("design:returntype", void 0)
 ], BillsController.prototype, "purchaseElectricity", null);
 __decorate([
+    (0, common_1.Get)('services'),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", void 0)
+], BillsController.prototype, "getServices", null);
+__decorate([
     (0, common_1.Get)('data-plans'),
     __param(0, (0, common_1.Query)('network')),
     __metadata("design:type", Function),
@@ -125,6 +137,14 @@ __decorate([
     __metadata("design:paramtypes", [Object]),
     __metadata("design:returntype", void 0)
 ], BillsController.prototype, "getHistory", null);
+__decorate([
+    (0, common_1.Get)('receipts/:reference'),
+    __param(0, (0, current_user_decorator_1.CurrentUser)()),
+    __param(1, (0, common_1.Param)('reference')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, String]),
+    __metadata("design:returntype", void 0)
+], BillsController.prototype, "getReceipt", null);
 exports.BillsController = BillsController = __decorate([
     (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
     (0, common_1.Controller)('bills'),

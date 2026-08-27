@@ -1,4 +1,11 @@
-import { IsDefined, IsEnum, IsIn, IsNumber, IsString, Min } from 'class-validator';
+import {
+  IsDefined,
+  IsEnum,
+  IsIn,
+  IsNumber,
+  IsString,
+  Min,
+} from 'class-validator';
 
 export class PurchaseAirtimeDto {
   @IsDefined()

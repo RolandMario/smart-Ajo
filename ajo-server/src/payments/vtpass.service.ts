@@ -19,6 +19,12 @@ interface VTPassTransaction {
   product_name?: string;
   current_package?: string;
   outstanding_balance?: number;
+  /** Electricity vending: the recharge token + unit count returned on success. */
+  token?: string;
+  units?: string | number;
+  main_token?: string;
+  mainToken?: string;
+  disco_name?: string;
 }
 
 interface VTPassContent {
@@ -31,6 +37,11 @@ interface VTPassContent {
   product_name?: string;
   current_package?: string;
   outstanding_balance?: number;
+  token?: string;
+  units?: string | number;
+  main_token?: string;
+  mainToken?: string;
+  disco_name?: string;
 }
 
 interface VTPassVariation {
@@ -52,6 +63,13 @@ export interface PurchaseResult {
   externalTransactionId: string;
   status: string;
   commission: number;
+  /**
+   * Extra user-facing details the provider returned on success, e.g. an
+   * electricity recharge `token`/`units`, or the customer/package info from
+   * a cable or meter vending response. Stored alongside the bill transaction
+   * so receipts can show them.
+   */
+  providerData?: Record<string, unknown>;
 }
 
 export interface VerifyProductResult {
@@ -160,11 +178,60 @@ export class VTPassService {
     data: VTPassResponse,
   ): PurchaseResult {
     const tx = data.content?.transactions;
+    const content = data.content ?? {};
+
+    // Whitelist the user-facing fields worth persisting on a receipt. VTPass
+    // nest most of these under `content.transactions`, but also mirror key
+    // values at the top level of `content` (e.g. electricity token/units).
+    const providerData: Record<string, unknown> = {};
+    const add = (key: string, ...values: unknown[]) => {
+      for (const value of values) {
+        if (value !== undefined && value !== null && value !== '') {
+          providerData[key] = value;
+          return;
+        }
+      }
+    };
+    add(
+      'token',
+      tx?.token,
+      content.token,
+      tx?.main_token,
+      content.main_token,
+      tx?.mainToken,
+      content.mainToken,
+    );
+    add('units', tx?.units, content.units);
+    add('discoName', tx?.disco_name, content.disco_name);
+    add(
+      'customerName',
+      tx?.customer_name,
+      tx?.name,
+      content.customer_name,
+      content.name,
+    );
+    add(
+      'customerAddress',
+      tx?.customer_address,
+      tx?.address,
+      content.customer_address,
+      content.address,
+    );
+    add(
+      'packageName',
+      tx?.product_name,
+      tx?.current_package,
+      content.product_name,
+      content.current_package,
+    );
+    add('outstanding', tx?.outstanding_balance, content.outstanding_balance);
+
     return {
       requestId,
       externalTransactionId: tx?.transactionId ?? requestId,
       status: tx?.status ?? 'delivered',
       commission: Number(tx?.commission ?? 0),
+      ...(Object.keys(providerData).length > 0 ? { providerData } : {}),
     };
   }
 
@@ -212,7 +279,11 @@ export class VTPassService {
       try {
         const qr = await this.queryTransaction(requestId);
         this.logger.log(`VTpass airtime requery result: ${JSON.stringify(qr)}`);
-        if (qr.status === 'delivered' || qr.status === 'success' || qr.status === 'successful') {
+        if (
+          qr.status === 'delivered' ||
+          qr.status === 'success' ||
+          qr.status === 'successful'
+        ) {
           const result = this.toPurchaseResult(requestId, data);
           this.logger.log(
             `Airtime purchase confirmed on requery: requestId=${requestId}, transactionId=${result.externalTransactionId}, commission=${result.commission}`,
@@ -224,11 +295,14 @@ export class VTPassService {
         );
         // Requery confirmed the purchase did not complete; fall through to throw below.
       } catch (e) {
-        this.logger.error(`VTpass airtime requery failed: ${e instanceof Error ? e.message : String(e)}`);
+        this.logger.error(
+          `VTpass airtime requery failed: ${e instanceof Error ? e.message : String(e)}`,
+        );
         // Requery itself errored; fall through and throw the original failure below.
       }
 
-      const errorMsg = data.response_description || data.message || 'VTpass purchase failed';
+      const errorMsg =
+        data.response_description || data.message || 'VTpass purchase failed';
       this.logger.error(
         `VTpass airtime failed: code=${String(data.code)}, message=${errorMsg}, txStatus=${tx?.status}, txId=${tx?.transactionId}`,
       );

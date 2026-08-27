@@ -85,11 +85,29 @@ let VTPassService = VTPassService_1 = class VTPassService {
     }
     toPurchaseResult(requestId, data) {
         const tx = data.content?.transactions;
+        const content = data.content ?? {};
+        const providerData = {};
+        const add = (key, ...values) => {
+            for (const value of values) {
+                if (value !== undefined && value !== null && value !== '') {
+                    providerData[key] = value;
+                    return;
+                }
+            }
+        };
+        add('token', tx?.token, content.token, tx?.main_token, content.main_token, tx?.mainToken, content.mainToken);
+        add('units', tx?.units, content.units);
+        add('discoName', tx?.disco_name, content.disco_name);
+        add('customerName', tx?.customer_name, tx?.name, content.customer_name, content.name);
+        add('customerAddress', tx?.customer_address, tx?.address, content.customer_address, content.address);
+        add('packageName', tx?.product_name, tx?.current_package, content.product_name, content.current_package);
+        add('outstanding', tx?.outstanding_balance, content.outstanding_balance);
         return {
             requestId,
             externalTransactionId: tx?.transactionId ?? requestId,
             status: tx?.status ?? 'delivered',
             commission: Number(tx?.commission ?? 0),
+            ...(Object.keys(providerData).length > 0 ? { providerData } : {}),
         };
     }
     async purchaseAirtime(params) {
@@ -118,7 +136,9 @@ let VTPassService = VTPassService_1 = class VTPassService {
             try {
                 const qr = await this.queryTransaction(requestId);
                 this.logger.log(`VTpass airtime requery result: ${JSON.stringify(qr)}`);
-                if (qr.status === 'delivered' || qr.status === 'success' || qr.status === 'successful') {
+                if (qr.status === 'delivered' ||
+                    qr.status === 'success' ||
+                    qr.status === 'successful') {
                     const result = this.toPurchaseResult(requestId, data);
                     this.logger.log(`Airtime purchase confirmed on requery: requestId=${requestId}, transactionId=${result.externalTransactionId}, commission=${result.commission}`);
                     return result;

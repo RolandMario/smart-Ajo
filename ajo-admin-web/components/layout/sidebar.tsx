@@ -7,6 +7,7 @@ const NAV_ITEMS = [
   { href: "/users", label: "Users" },
   { href: "/groups", label: "Groups" },
   { href: "/finance", label: "Finance" },
+  { href: "/bills", label: "Bills" },
   { href: "/admins", label: "Admins" },
 ];
 

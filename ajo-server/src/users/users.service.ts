@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
+import { Model, Types } from 'mongoose';
 import { User, UserDocument } from './schemas/user.schema';
 import { BankAccount } from './schemas/bank-account.schema';
 import { Role } from '../common/enums/role.enum';
@@ -23,6 +23,21 @@ export class UsersService {
 
   findById(id: string) {
     return this.userModel.findById(id);
+  }
+
+  /**
+   * Batch-fetches users by id for platform-admin list views. Returns only
+   * the public identity fields the admin console displays (avoids N+1
+   * queries when enriching ledgers like the bill transactions screen).
+   */
+  async findByIds(
+    ids: (string | Types.ObjectId)[],
+  ): Promise<Array<{ _id: Types.ObjectId; name?: string; phone: string }>> {
+    if (ids.length === 0) return [];
+    return this.userModel
+      .find({ _id: { $in: ids } })
+      .select('name phone email')
+      .lean();
   }
 
   /**

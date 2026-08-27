@@ -26,6 +26,7 @@ const webhooks_module_1 = require("./webhooks/webhooks.module");
 const notifications_module_1 = require("./notifications/notifications.module");
 const admin_module_1 = require("./admin/admin.module");
 const bills_module_1 = require("./bills/bills.module");
+const savings_module_1 = require("./savings/savings.module");
 let AppModule = class AppModule {
 };
 exports.AppModule = AppModule;
@@ -56,6 +57,7 @@ exports.AppModule = AppModule = __decorate([
             notifications_module_1.NotificationsModule,
             admin_module_1.AdminModule,
             bills_module_1.BillsModule,
+            savings_module_1.SavingsModule,
         ],
         controllers: [app_controller_1.AppController],
         providers: [app_service_1.AppService],

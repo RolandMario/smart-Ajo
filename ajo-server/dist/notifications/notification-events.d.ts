@@ -101,5 +101,28 @@ export declare const NotificationEvents: {
         amount: number;
         newBalance: number;
     }): SendNotificationParams;
+    savingCreated(params: EventParams & {
+        planName: string;
+        amount: number;
+        frequency: string;
+    }): SendNotificationParams;
+    savingDebited(params: EventParams & {
+        planName: string;
+        amount: number;
+        newBalance: number;
+    }): SendNotificationParams;
+    savingInsufficient(params: EventParams & {
+        planName: string;
+        amount: number;
+        currentBalance: number;
+    }): SendNotificationParams;
+    savingCompleted(params: EventParams & {
+        planName: string;
+        total: number;
+    }): SendNotificationParams;
+    savingWithdrawn(params: EventParams & {
+        planName: string;
+        amount: number;
+    }): SendNotificationParams;
 };
 export {};

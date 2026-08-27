@@ -578,14 +578,16 @@ export class GroupsService {
    * preserved. A new Cycle 1 is created with the member at position 1
    * as the recipient.
    */
-  async continueGroup(adminUserId: string, groupId: string, dto: ContinueGroupDto) {
+  async continueGroup(
+    adminUserId: string,
+    groupId: string,
+    dto: ContinueGroupDto,
+  ) {
     const group = await this.groupAccess.getGroupOrThrow(groupId);
     await this.groupAccess.assertGroupAdmin(group._id, adminUserId);
 
     if (group.status !== GroupStatus.COMPLETED) {
-      throw new BadRequestException(
-        'Only completed groups can be continued',
-      );
+      throw new BadRequestException('Only completed groups can be continued');
     }
 
     // Apply optional updates
@@ -685,9 +687,7 @@ export class GroupsService {
     await this.groupAccess.assertGroupAdmin(group._id, adminUserId);
 
     if (group.status !== GroupStatus.COMPLETED) {
-      throw new BadRequestException(
-        'Only completed groups can be terminated',
-      );
+      throw new BadRequestException('Only completed groups can be terminated');
     }
 
     group.autoCollectEnabled = false;
@@ -695,8 +695,10 @@ export class GroupsService {
     await group.save();
 
     // Notify all members
-    const members = await this.groupMemberModel
-      .find({ group: group._id, inviteStatus: InviteStatus.ACCEPTED });
+    const members = await this.groupMemberModel.find({
+      group: group._id,
+      inviteStatus: InviteStatus.ACCEPTED,
+    });
     const memberIds = members.map((m) => m.user.toString());
 
     void this.notificationsService.send(

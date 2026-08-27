@@ -164,10 +164,14 @@ let AuthService = class AuthService {
     async forgotPassword(dto) {
         const user = await this.usersService.findByPhone(dto.phone);
         if (!user) {
-            return { message: 'If an account with that phone exists, an OTP has been sent.' };
+            return {
+                message: 'If an account with that phone exists, an OTP has been sent.',
+            };
         }
         await this.otpService.requestOtp(dto.phone);
-        return { message: 'If an account with that phone exists, an OTP has been sent.' };
+        return {
+            message: 'If an account with that phone exists, an OTP has been sent.',
+        };
     }
     async resetPassword(dto) {
         await this.otpService.verifyOtp(dto.phone, dto.code);

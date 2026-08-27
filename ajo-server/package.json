@@ -20,7 +20,9 @@
     "test:e2e": "jest --config ./test/jest-e2e.json",
     "seed:platform-admin": "ts-node -r tsconfig-paths/register src/database/seeds/seed-platform-admin.ts",
     "seed:fix-wallet-balances": "ts-node -r tsconfig-paths/register src/database/seeds/fix-wallet-balances.ts",
-    "seed:resolve-pending-payouts": "ts-node -r tsconfig-paths/register src/database/seeds/resolve-pending-payouts.ts"
+    "seed:resolve-pending-payouts": "ts-node -r tsconfig-paths/register src/database/seeds/resolve-pending-payouts.ts",
+    "seed:fix-savings-plan-durations": "ts-node -r tsconfig-paths/register src/database/seeds/fix-savings-plan-durations.ts",
+    "seed:fix-savings-withdrawal-lock": "ts-node -r tsconfig-paths/register src/database/seeds/fix-savings-withdrawal-lock.ts"
   },
   "dependencies": {
     "@nestjs/common": "^11.0.1",

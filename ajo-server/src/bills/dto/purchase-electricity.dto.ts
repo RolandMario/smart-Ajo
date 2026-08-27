@@ -1,4 +1,11 @@
-import { IsDefined, IsEnum, IsNumber, IsString, Min } from 'class-validator';
+import {
+  IsDefined,
+  IsEnum,
+  IsNumber,
+  IsOptional,
+  IsString,
+  Min,
+} from 'class-validator';
 
 export class PurchaseElectricityDto {
   @IsDefined()
@@ -21,4 +28,9 @@ export class PurchaseElectricityDto {
   @IsDefined()
   @IsString()
   phone!: string;
+
+  /** Verified customer name, shown on the receipt. */
+  @IsOptional()
+  @IsString()
+  customerName?: string;
 }

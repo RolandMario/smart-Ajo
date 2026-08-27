@@ -34,6 +34,13 @@ export enum NotificationType {
 
   // Wallet
   WALLET_FUNDED = 'wallet_funded', // top-up confirmed
+
+  // Individual savings plans
+  SAVING_CREATED = 'saving_created', // a savings plan was created
+  SAVING_DEBITED = 'saving_debited', // an interval was auto-collected
+  SAVING_INSUFFICIENT = 'saving_insufficient', // wallet too low for an interval
+  SAVING_COMPLETED = 'saving_completed', // a full cycle finished, withdraw ready
+  SAVING_WITHDRAWN = 'saving_withdrawn', // savings paid out to the bank
 }
 
 /**

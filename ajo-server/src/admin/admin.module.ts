@@ -11,11 +11,13 @@ import { PlatformAdminManagementService } from './platform-admin-management.serv
 import { PlatformAdminManagementController } from './platform-admin-management.controller';
 import { PlatformAdminWalletService } from './platform-admin-wallet.service';
 import { PlatformAdminWalletController } from './platform-admin-wallet.controller';
+import { PlatformAdminBillsController } from './platform-admin-bills.controller';
 import { GroupsModule } from '../groups/groups.module';
 import { CyclesModule } from '../cycles/cycles.module';
 import { UsersModule } from '../users/users.module';
 import { WalletModule } from '../wallet/wallet.module';
 import { PaymentsModule } from '../payments/payments.module';
+import { BillsModule } from '../bills/bills.module';
 
 /**
  * Five distinct audiences live in this module:
@@ -37,7 +39,14 @@ import { PaymentsModule } from '../payments/payments.module';
  * distinction in mind if this module grows further.
  */
 @Module({
-  imports: [GroupsModule, CyclesModule, UsersModule, WalletModule, PaymentsModule],
+  imports: [
+    GroupsModule,
+    CyclesModule,
+    UsersModule,
+    WalletModule,
+    PaymentsModule,
+    BillsModule,
+  ],
   controllers: [
     GroupDashboardController,
     PlatformAdminUsersController,
@@ -45,6 +54,7 @@ import { PaymentsModule } from '../payments/payments.module';
     PlatformAdminFinanceController,
     PlatformAdminManagementController,
     PlatformAdminWalletController,
+    PlatformAdminBillsController,
   ],
   providers: [
     GroupDashboardService,

@@ -109,9 +109,13 @@ as Sub-phase B:
   history with a paid/defaulted/pending breakdown per cycle, and the
   complete payout history — including failed and reversed transfers with
   their `failureReason`, not just successful ones, matching the backend's
-  deliberate "show the failures too" design.
+  deliberate "show the failures too" design. The **Auto-collect** setting
+  is an interactive switch (`components/auto-collect-toggle.tsx`) so
+  platform staff can override the flag the group admin controls from the
+  mobile app.
 - `lib/data/groups.ts` — typed data-access functions (`listGroups`,
-  `getGroupDetail`), same shape as `lib/data/users.ts`.
+  `getGroupDetail`, `updateServiceFee`, `updateGroupAutoCollect`), same
+  shape as `lib/data/users.ts`.
 - `lib/status-display.ts` gained `cycleStatusTone` and
   `transferStatusTone` alongside the existing group/invite/payout
   helpers.

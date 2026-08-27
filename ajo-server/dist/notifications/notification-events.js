@@ -66,7 +66,9 @@ exports.NotificationEvents = {
         };
     },
     groupContinued(params) {
-        const due = params.dueDate.toLocaleDateString('en-NG', { dateStyle: 'medium' });
+        const due = params.dueDate.toLocaleDateString('en-NG', {
+            dateStyle: 'medium',
+        });
         return {
             ...params,
             type: notification_enum_1.NotificationType.GROUP_CONTINUED,
@@ -199,6 +201,49 @@ exports.NotificationEvents = {
             type: notification_enum_1.NotificationType.WALLET_FUNDED,
             title: 'Wallet Funded',
             body: `₦${params.amount.toLocaleString()} has been added to your Ajo wallet. New balance: ₦${params.newBalance.toLocaleString()}.`,
+        };
+    },
+    savingCreated(params) {
+        return {
+            ...params,
+            type: notification_enum_1.NotificationType.SAVING_CREATED,
+            title: 'Savings Plan Started',
+            body: `Your "${params.planName}" savings plan is live. Ajo will auto-save ₦${params.amount.toLocaleString()} ${params.frequency}.`,
+        };
+    },
+    savingDebited(params) {
+        return {
+            ...params,
+            type: notification_enum_1.NotificationType.SAVING_DEBITED,
+            title: 'Auto-Savings Collected',
+            body: `₦${params.amount.toLocaleString()} saved to "${params.planName}". Plan balance: ₦${params.newBalance.toLocaleString()}.`,
+        };
+    },
+    savingInsufficient(params) {
+        return {
+            ...params,
+            type: notification_enum_1.NotificationType.SAVING_INSUFFICIENT,
+            title: 'Top-Up Needed for Savings',
+            body: `Your wallet balance (₦${params.currentBalance.toLocaleString()}) is too low for the ₦${params.amount.toLocaleString()} "${params.planName}" auto-save. Please top up.`,
+            smsEnabled: true,
+        };
+    },
+    savingCompleted(params) {
+        return {
+            ...params,
+            type: notification_enum_1.NotificationType.SAVING_COMPLETED,
+            title: 'Savings Cycle Complete 🎉',
+            body: `You've saved ₦${params.total.toLocaleString()} in "${params.planName}". Your savings are ready to withdraw.`,
+            smsEnabled: true,
+        };
+    },
+    savingWithdrawn(params) {
+        return {
+            ...params,
+            type: notification_enum_1.NotificationType.SAVING_WITHDRAWN,
+            title: 'Savings Withdrawn',
+            body: `₦${params.amount.toLocaleString()} from "${params.planName}" has been sent to your bank account.`,
+            smsEnabled: true,
         };
     },
 };

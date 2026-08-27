@@ -17,6 +17,7 @@ import { WebhooksModule } from './webhooks/webhooks.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { AdminModule } from './admin/admin.module';
 import { BillsModule } from './bills/bills.module';
+import { SavingsModule } from './savings/savings.module';
 
 @Module({
   imports: [
@@ -44,6 +45,7 @@ import { BillsModule } from './bills/bills.module';
     NotificationsModule,
     AdminModule,
     BillsModule,
+    SavingsModule,
   ],
   controllers: [AppController],
   providers: [AppService],
