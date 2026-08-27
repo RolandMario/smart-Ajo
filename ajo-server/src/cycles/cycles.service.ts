@@ -412,7 +412,10 @@ export class CyclesService {
 
   async getCurrentCycle(userId: string, groupId: string) {
     const group = await this.groupAccess.getGroupOrThrow(groupId);
-    const membership = await this.groupAccess.assertAcceptedMember(group._id, userId);
+    const membership = await this.groupAccess.assertAcceptedMember(
+      group._id,
+      userId,
+    );
 
     if (!group.currentCycleNumber) {
       throw new BadRequestException('This group has not been activated yet');
@@ -432,7 +435,11 @@ export class CyclesService {
         .lean<PopulatedContribution[]>(),
     ]);
 
-    return { cycle: populatedCycle, contributions, isAdmin: membership.isGroupAdmin };
+    return {
+      cycle: populatedCycle,
+      contributions,
+      isAdmin: membership.isGroupAdmin,
+    };
   }
 
   // ---- Wallet contribution debit (replaces manual mark-paid) ------------------
@@ -739,17 +746,17 @@ export class CyclesService {
 
       if (transfer.status === 'success') {
         await this.finalizeSuccessfulPayout(payout!, cycle, group);
-      } else if (
-        transfer.status === 'otp' &&
-        this.paystack.isTestMode()
-      ) {
+      } else if (transfer.status === 'otp' && this.paystack.isTestMode()) {
         // In test mode, Paystack returns 'otp' for transfers. Auto-resolve
         // with the test OTP so the payout completes without requiring a
         // webhook callback (which won't reach localhost).
         this.logger.log(
           `Test mode: resolving OTP for transfer ${transfer.transferCode}`,
         );
-        await this.paystack.resolveOtp(transfer.transferCode, '123456');
+        await this.paystack.resolveOtp(
+          transfer.transferCode,
+          this.paystack.testTransferOtp(),
+        );
         await this.finalizeSuccessfulPayout(payout!, cycle, group);
       } else {
         // 'pending' or 'otp' in live mode — webhook will finalize.
@@ -806,7 +813,7 @@ export class CyclesService {
         const allMembers = await this.groupMemberModel
           .find({ group: group._id, inviteStatus: InviteStatus.ACCEPTED })
           .session(session);
-        
+
         for (const member of allMembers) {
           if (member._id.toString() !== recipientMember?._id.toString()) {
             member.payoutStatus = PayoutStatus.PENDING;

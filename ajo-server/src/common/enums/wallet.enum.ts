@@ -21,6 +21,7 @@ export enum WalletTransactionType {
   BILL_COMMISSION_CREDIT = 'bill_commission_credit',
   ADMIN_CREDIT = 'admin_credit',
   ADMIN_WITHDRAWAL = 'admin_withdrawal',
+  SAVINGS_DEBIT = 'savings_debit',
 }
 
 /**

@@ -437,8 +437,10 @@ let GroupsService = class GroupsService {
         group.autoCollectEnabled = false;
         group.status = group_enum_1.GroupStatus.TERMINATED;
         await group.save();
-        const members = await this.groupMemberModel
-            .find({ group: group._id, inviteStatus: group_enum_1.InviteStatus.ACCEPTED });
+        const members = await this.groupMemberModel.find({
+            group: group._id,
+            inviteStatus: group_enum_1.InviteStatus.ACCEPTED,
+        });
         const memberIds = members.map((m) => m.user.toString());
         void this.notificationsService.send(notification_events_1.NotificationEvents.groupTerminated({
             userIds: memberIds,

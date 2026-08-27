@@ -1,4 +1,5 @@
 import type { NavigatorScreenParams } from "@react-navigation/native";
+import type { WalletTransaction } from "../types/api";
 
 export type AuthStackParamList = {
   Splash: undefined;
@@ -43,6 +44,9 @@ export type BillsStackParamList = {
     reference: string;
     amount: number;
     recipient: string;
+    provider: string;
+    externalReference?: string;
+    createdAt?: string;
   };
 };
 
@@ -59,6 +63,26 @@ export type WalletStackParamList = {
   FundWallet: undefined;
   BankAccount: undefined;
   SelectBank: undefined;
+  CreateSavingsPlan: undefined;
+  SavingsPlans: undefined;
+  SavingsPlanDetail: { planId: string };
+  TransactionReceipt: { transaction: WalletTransaction };
+};
+
+/**
+ * Screens reachable from the Profile tab. Several wallet screens are
+ * mounted here so profile users can reach them without tab-hopping.
+ */
+export type ProfileStackParamList = {
+  ProfileMain: undefined;
+  EditProfile: undefined;
+  WalletHome: undefined;
+  FundWallet: undefined;
+  BankAccount: undefined;
+  CreateSavingsPlan: undefined;
+  SavingsPlans: undefined;
+  SavingsPlanDetail: { planId: string };
+  Notifications: undefined;
 };
 
 export type RootStackParamList = {

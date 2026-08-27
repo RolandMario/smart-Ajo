@@ -1,4 +1,8 @@
-import { Injectable, UnauthorizedException, ConflictException } from '@nestjs/common';
+import {
+  Injectable,
+  UnauthorizedException,
+  ConflictException,
+} from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import { OtpService } from '../otp/otp.service';
@@ -91,7 +95,9 @@ export class AuthService {
   async register(dto: RegisterDto) {
     const existing = await this.usersService.findByPhone(dto.phone);
     if (existing) {
-      throw new ConflictException('An account with this phone number already exists');
+      throw new ConflictException(
+        'An account with this phone number already exists',
+      );
     }
 
     const passwordHash = await bcrypt.hash(dto.password, 10);
@@ -157,11 +163,15 @@ export class AuthService {
     const user = await this.usersService.findByPhone(dto.phone);
     if (!user) {
       // Don't reveal whether the phone exists — just send OTP if it does
-      return { message: 'If an account with that phone exists, an OTP has been sent.' };
+      return {
+        message: 'If an account with that phone exists, an OTP has been sent.',
+      };
     }
 
     await this.otpService.requestOtp(dto.phone);
-    return { message: 'If an account with that phone exists, an OTP has been sent.' };
+    return {
+      message: 'If an account with that phone exists, an OTP has been sent.',
+    };
   }
 
   async resetPassword(dto: ResetPasswordDto) {

@@ -4,4 +4,5 @@ export declare class PurchaseElectricityDto {
     meterType: 'prepaid' | 'postpaid';
     amount: number;
     phone: string;
+    customerName?: string;
 }

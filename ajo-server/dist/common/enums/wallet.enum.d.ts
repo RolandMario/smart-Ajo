@@ -7,7 +7,8 @@ export declare enum WalletTransactionType {
     SERVICE_FEE_CREDIT = "service_fee_credit",
     BILL_COMMISSION_CREDIT = "bill_commission_credit",
     ADMIN_CREDIT = "admin_credit",
-    ADMIN_WITHDRAWAL = "admin_withdrawal"
+    ADMIN_WITHDRAWAL = "admin_withdrawal",
+    SAVINGS_DEBIT = "savings_debit"
 }
 export declare enum WalletTransactionStatus {
     PENDING = "pending",

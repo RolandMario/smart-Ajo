@@ -104,10 +104,7 @@ export class GroupsController {
    * in the admin web panel.
    */
   @Post(':id/terminate')
-  terminate(
-    @CurrentUser() user: RequestUser,
-    @Param('id') id: string,
-  ) {
+  terminate(@CurrentUser() user: RequestUser, @Param('id') id: string) {
     return this.groupsService.terminateGroup(user.userId, id);
   }
 }

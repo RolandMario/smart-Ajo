@@ -44,9 +44,7 @@ async function run() {
       getModelToken(Payout.name),
     );
     const cycleModel = app.get<Model<CycleDocument>>(getModelToken(Cycle.name));
-    const groupModel = app.get<Model<GroupDocument>>(
-      getModelToken('Group'),
-    );
+    const groupModel = app.get<Model<GroupDocument>>(getModelToken('Group'));
     const cyclesService = app.get(CyclesService);
 
     const pendingPayouts = await payoutModel.find({
@@ -84,10 +82,11 @@ async function run() {
         `  Resolving OTP for payout ${payoutDoc._id.toString()} (transfer: ${payoutDoc.paystackTransferCode})...`,
       );
 
-      let otpResolved = false;
       try {
-        await paystack.resolveOtp(payoutDoc.paystackTransferCode, '123456');
-        otpResolved = true;
+        await paystack.resolveOtp(
+          payoutDoc.paystackTransferCode,
+          paystack.testTransferOtp(),
+        );
         console.log(`  OTP resolved successfully.`);
       } catch (err) {
         console.warn(

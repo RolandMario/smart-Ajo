@@ -41,10 +41,8 @@ async function run() {
                 continue;
             }
             console.log(`  Resolving OTP for payout ${payoutDoc._id.toString()} (transfer: ${payoutDoc.paystackTransferCode})...`);
-            let otpResolved = false;
             try {
-                await paystack.resolveOtp(payoutDoc.paystackTransferCode, '123456');
-                otpResolved = true;
+                await paystack.resolveOtp(payoutDoc.paystackTransferCode, paystack.testTransferOtp());
                 console.log(`  OTP resolved successfully.`);
             }
             catch (err) {

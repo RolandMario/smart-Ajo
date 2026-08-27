@@ -2,8 +2,8 @@ import { Metadata } from 'next'
 import Link from 'next/link'
 
 export const metadata: Metadata = {
-  title: 'Terms and Conditions - Ajo',
-  description: 'Read the terms and conditions for using the Ajo platform.',
+  title: 'Terms and Conditions - Digital Smart Environment',
+  description: 'Read the terms and conditions for using the Digital Smart Environment website and the Ajo platform.',
 }
 
 export default function TermsAndConditionsPage() {
@@ -142,9 +142,9 @@ export default function TermsAndConditionsPage() {
                 <p className="mb-4">For questions, concerns, or notices regarding these Terms:</p>
                 <div className="bg-ajo-surface-sunken p-6 rounded-card">
                   <p className="font-semibold text-ajo-ink">Ajo Platform</p>
-                  <p>Email: <a href="mailto:legal@ajo.app" className="text-ajo-primary hover:underline">legal@ajo.app</a></p>
-                  <p>Support: <a href="mailto:support@ajo.app" className="text-ajo-primary hover:underline">support@ajo.app</a></p>
-                  <p className="mt-2">Lagos, Nigeria</p>
+                  <p>Email: <a href="mailto:roland.ayuk@digitalsmartenvironment.com" className="text-ajo-primary hover:underline">legal@digitalsmartenvironment.com</a></p>
+                  <p>Support: <a href="mailto:roland.ayuk@digitalsmartenvironment.com" className="text-ajo-primary hover:underline">support@digitalsmartenvironment.com</a></p>
+                  <p className="mt-2">No 1 Oguntolo street, Ijaiye, Lagos, Nigeria</p>
                   <p className="text-sm mt-2">We aim to respond to all inquiries within 5 business days.</p>
                 </div>
               </section>

@@ -51,29 +51,29 @@ export class TermiiService {
           type: 'plain',
           channel: 'dnd',
         },
-       {
-         headers: { 'Content-Type': 'application/json' },
-       },
-     );
+        {
+          headers: { 'Content-Type': 'application/json' },
+        },
+      );
 
-     if (response.data?.code && response.data.code !== 'ok') {
-       this.logger.error(
-         `Termii responded with non-ok code: ${JSON.stringify(response.data)}`,
-       );
-       throw new InternalServerErrorException('Failed to send SMS');
-     }
-   } catch (error) {
-     if (error instanceof AxiosError) {
-       const status = error.response?.status;
-       const data = error.response?.data;
-       this.logger.error(
-         `Smart Ajo SMS send failed for ${to}: Status ${status}, Response: ${JSON.stringify(data)}`,
-       );
-     } else {
-       const message = error instanceof Error ? error.message : String(error);
-       this.logger.error(`Smart Ajo SMS send failed for ${to}: ${message}`);
-     }
-     throw new InternalServerErrorException('Failed to send SMS');
-   }
+      if (response.data?.code && response.data.code !== 'ok') {
+        this.logger.error(
+          `Termii responded with non-ok code: ${JSON.stringify(response.data)}`,
+        );
+        throw new InternalServerErrorException('Failed to send SMS');
+      }
+    } catch (error) {
+      if (error instanceof AxiosError) {
+        const status = error.response?.status;
+        const data = error.response?.data;
+        this.logger.error(
+          `Smart Ajo SMS send failed for ${to}: Status ${status}, Response: ${JSON.stringify(data)}`,
+        );
+      } else {
+        const message = error instanceof Error ? error.message : String(error);
+        this.logger.error(`Smart Ajo SMS send failed for ${to}: ${message}`);
+      }
+      throw new InternalServerErrorException('Failed to send SMS');
+    }
   }
 }

@@ -323,3 +323,76 @@ export interface PlatformAdminListItem {
   isActive: boolean;
   createdAt: string;
 }
+
+// ---- Platform admin: Bill / VTU services (multi-provider) ------------------
+
+export type BillServiceType = "airtime" | "data" | "cable" | "electricity";
+export type BillProviderKey = "vtpass" | "gladtidings";
+
+export interface BillProviderConfigItem {
+  serviceType: BillServiceType;
+  activeProvider: BillProviderKey;
+  lastSyncedAt?: string;
+  lastSyncStatus: string;
+  planTotal: number;
+  planActive: number;
+  configured: boolean;
+}
+
+export interface BillServicePlanAdmin {
+  id: string;
+  serviceType: BillServiceType;
+  provider: BillProviderKey;
+  externalId: string;
+  name: string;
+  bucket: string;
+  amount: number;
+  fixedPrice: boolean;
+  isActive: boolean;
+  updatedAt?: string;
+}
+
+export interface PaginatedBillServicePlans {
+  plans: BillServicePlanAdmin[];
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
+}
+
+// ---- Platform admin: Bill transactions & receipts --------------------------
+
+export type BillStatus = "pending" | "success" | "failed";
+
+export interface PlatformBillTransaction {
+  id: string;
+  user: { id: string; name?: string; phone: string };
+  type: BillServiceType;
+  status: BillStatus;
+  amount: number;
+  reference: string;
+  externalReference?: string;
+  provider: string;
+  recipient: string;
+  metadata?: Record<string, unknown>;
+  walletTransaction?: string;
+  createdAt: string;
+  updatedAt?: string;
+}
+
+export interface PaginatedBillTransactions {
+  transactions: PlatformBillTransaction[];
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
+}
+
+export interface SyncBillPlansResult {
+  serviceType: string;
+  provider: BillProviderKey;
+  total: number;
+  created: number;
+  updated: number;
+  removed: number;
+}

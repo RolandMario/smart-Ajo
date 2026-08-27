@@ -12,6 +12,7 @@ var WalletTransactionType;
     WalletTransactionType["BILL_COMMISSION_CREDIT"] = "bill_commission_credit";
     WalletTransactionType["ADMIN_CREDIT"] = "admin_credit";
     WalletTransactionType["ADMIN_WITHDRAWAL"] = "admin_withdrawal";
+    WalletTransactionType["SAVINGS_DEBIT"] = "savings_debit";
 })(WalletTransactionType || (exports.WalletTransactionType = WalletTransactionType = {}));
 var WalletTransactionStatus;
 (function (WalletTransactionStatus) {

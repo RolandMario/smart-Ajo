@@ -4,6 +4,7 @@ export interface PurchaseResult {
     externalTransactionId: string;
     status: string;
     commission: number;
+    providerData?: Record<string, unknown>;
 }
 export interface VerifyProductResult {
     valid: boolean;

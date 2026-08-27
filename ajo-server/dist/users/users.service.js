@@ -34,6 +34,14 @@ let UsersService = class UsersService {
     findById(id) {
         return this.userModel.findById(id);
     }
+    async findByIds(ids) {
+        if (ids.length === 0)
+            return [];
+        return this.userModel
+            .find({ _id: { $in: ids } })
+            .select('name phone email')
+            .lean();
+    }
     async findOrCreateByPhone(phone) {
         let user = await this.userModel.findOne({ phone });
         if (!user) {

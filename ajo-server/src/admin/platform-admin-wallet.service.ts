@@ -102,7 +102,8 @@ export class PlatformAdminWalletService {
       },
     ]);
 
-    const totalCommissionBalance = totalCommissionResult.length > 0 ? totalCommissionResult[0].total : 0;
+    const totalCommissionBalance =
+      totalCommissionResult.length > 0 ? totalCommissionResult[0].total : 0;
 
     return {
       balance: wallet.balance ?? 0,
@@ -233,8 +234,7 @@ export class PlatformAdminWalletService {
       const refundSession = await this.connection.startSession();
       try {
         await refundSession.withTransaction(async () => {
-          const w = await this.walletService
-            .getOrCreateWallet(adminUserId);
+          const w = await this.walletService.getOrCreateWallet(adminUserId);
 
           w.balance = (w.balance ?? 0) + amountNaira;
           await w.save({ session: refundSession });

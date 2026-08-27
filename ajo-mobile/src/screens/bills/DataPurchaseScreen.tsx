@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from "react";
-import { StyleSheet, Text, View, Pressable, FlatList } from "react-native";
+import { StyleSheet, Text, View, Pressable } from "react-native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import type { BillsStackParamList } from "../../navigation/types";
 import { Screen } from "../../components/Screen";
@@ -10,6 +10,7 @@ import { LoadingScreen } from "../../components/LoadingScreen";
 import { colors, radii, spacing, typography } from "../../theme";
 import { listDataPlans } from "../../api/bills";
 import { ApiError } from "../../api/api-error";
+import type { DataPlan } from "../../types/api";
 
 type Props = NativeStackScreenProps<BillsStackParamList, "DataPurchase">;
 
@@ -26,21 +27,86 @@ const FILTER_TABS: { label: string; value: PlanCategory }[] = [
   { label: "Yearly", value: "yearly" },
 ];
 
-function classifyPlan(name: string): PlanCategory | null {
-  const n = name.toLowerCase().replace(/[^a-z0-9\s-]/g, " ").replace(/-/g, " ");
-  if (/\byear\b|\bannual\b/.test(n)) return "yearly";
-  if (/\bmonth\b/.test(n)) return "monthly";
-  if (/\bweek\b|\bweekly\b/.test(n)) return "weekly";
-  if (/\b2\s*days?\b|\btwo\s*days?\b/.test(n)) return "2-days";
-  if (/\bdaily\b|\b1\s*days?\b|\bday\b/.test(n)) return "daily";
-  return null;
+/**
+ * Extract the validity/period of a data plan from its provider name.
+ * Handles everyday labels ("MTN 1GB Daily"), numeric validity ("Airtel 2GB
+ * 30 Days", "GLO 7 Days"), and plan-coded names ("MTN SME 6GB 31DAYS").
+ * Returns the period used by the "Filter by Period" chips plus a
+ * human-friendly duration label rendered on the plan card.
+ */
+function planDuration(name: string): { period: PlanCategory | null; label: string } {
+  const n = ` ${name.toLowerCase().replace(/-/g, " ")} `.replace(/\s+/g, " ");
+
+  // Explicit named validity takes precedence, in descending order.
+  if (/\b(year|yearly|annual|12\s*months?)\b/.test(n)) {
+    return { period: "yearly", label: "Yearly" };
+  }
+  if (/\b(week|weekly)\b/.test(n)) {
+    if (/\b2\s*weeks?\b/.test(n)) return { period: "2-days", label: "2 Weeks" };
+    return { period: "weekly", label: "Weekly" };
+  }
+  if (/\btwo\s*days?\b|\b2\s*days?\b/.test(n)) return { period: "2-days", label: "2 Days" };
+  if (/\b(daily|1\s*day)\b/.test(n)) return { period: "daily", label: "Daily" };
+
+  // Numeric "N days" / "N months" validity.
+  const months = n.match(/(\d+)\s*months?/);
+  if (months) {
+    const m = parseInt(months[1], 10);
+    return {
+      period: m >= 12 ? "yearly" : "monthly",
+      label: m === 1 ? "1 Month" : `${m} Months`,
+    };
+  }
+  const days = n.match(/(\d+)\s*days?/);
+  if (days) {
+    const d = parseInt(days[1], 10);
+    if (d === 2) return { period: "2-days", label: "2 Days" };
+    if (d === 7) return { period: "weekly", label: "7 Days" };
+    if (d >= 28 && d <= 31) return { period: "monthly", label: `${d} Days` };
+    if (d >= 360) return { period: "yearly", label: `${d} Days` };
+    return { period: "daily", label: `${d} Days` };
+  }
+
+  // Common plan-type keyword embedded in provider names.
+  if (/\bmonthly\b/.test(n)) return { period: "monthly", label: "Monthly" };
+
+  return { period: null, label: name };
+}
+
+/**
+ * Extract the data volume (size) from a provider plan name, e.g. "5GB",
+ * "500MB", or "1.5GB" from names like "MTN 5GB", "GLO 2GB Daily" or
+ * "MTN SME 6GB 31DAYS". Falls back to the raw name when no volume is found.
+ */
+function planSize(name: string): string {
+  const m = name.match(/(\d+(?:\.\d+)?\s*(?:gb|mb|tb))/i);
+  if (m) {
+    return m[1].toUpperCase().replace(/\s+/g, "");
+  }
+  return name;
+}
+
+/** Number of plan cards laid out across each grid row. */
+const GRID_COLUMNS = 3;
+
+/**
+ * Split an array into a multi-dimensional grid: an array of rows, where each
+ * row holds up to `GRID_COLUMNS` cells. Used to lay the plan cards out in
+ * columns.
+ */
+function chunk<T>(array: T[], size: number): T[][] {
+  const rows: T[][] = [];
+  for (let i = 0; i < array.length; i += size) {
+    rows.push(array.slice(i, i + size));
+  }
+  return rows;
 }
 
 export function DataPurchaseScreen({ navigation }: Props) {
   const [phone, setPhone] = useState("");
   const [network, setNetwork] = useState("");
-  const [plans, setPlans] = useState<any[]>([]);
-  const [selectedPlan, setSelectedPlan] = useState<any>(null);
+  const [plans, setPlans] = useState<DataPlan[]>([]);
+  const [selectedPlan, setSelectedPlan] = useState<DataPlan | null>(null);
   const [loadingPlans, setLoadingPlans] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [activeFilter, setActiveFilter] = useState<PlanCategory>("all");
@@ -81,8 +147,8 @@ export function DataPurchaseScreen({ navigation }: Props) {
   const availableCategories = useMemo(() => {
     const categories = new Set<PlanCategory>();
     for (const p of plans) {
-      const cat = classifyPlan(p.name);
-      if (cat) categories.add(cat);
+      const { period } = planDuration(p.name);
+      if (period) categories.add(period);
     }
     return categories;
   }, [plans]);
@@ -96,8 +162,11 @@ export function DataPurchaseScreen({ navigation }: Props) {
 
   const filteredPlans = useMemo(() => {
     if (activeFilter === "all") return plans;
-    return plans.filter((p) => classifyPlan(p.name) === activeFilter);
+    return plans.filter((p) => planDuration(p.name).period === activeFilter);
   }, [plans, activeFilter]);
+
+  // Multi-dimensional layout: rows of `GRID_COLUMNS` cards each.
+  const grid = useMemo(() => chunk(filteredPlans, GRID_COLUMNS), [filteredPlans]);
 
   function handleContinue() {
     if (!phone.trim() || phone.length < 10) { setError("Enter a valid phone number"); return; }
@@ -148,23 +217,49 @@ export function DataPurchaseScreen({ navigation }: Props) {
               </Pressable>
             ))}
           </View>
-          <FlatList
-            data={filteredPlans}
-            keyExtractor={(item) => `${item.variationCode}-${item.name}-${item.amount}`}
-            scrollEnabled={false}
-            ListEmptyComponent={
-              <Text style={styles.emptyText}>No plans match this filter.</Text>
-            }
-            renderItem={({ item }) => (
-              <Pressable
-                style={({ pressed }) => [styles.planItem, selectedPlan?.variationCode === item.variationCode && styles.planItemActive, pressed && { opacity: 0.8 }]}
-                onPress={() => setSelectedPlan(item)}
-              >
-                <Text style={[styles.planName, selectedPlan?.variationCode === item.variationCode && styles.planTextActive]}>{item.name}</Text>
-                <Text style={[styles.planAmount, selectedPlan?.variationCode === item.variationCode && styles.planTextActive]}>₦{item.amount}</Text>
-              </Pressable>
-            )}
-          />
+          {grid.length === 0 ? (
+            <Text style={styles.emptyText}>No plans match this filter.</Text>
+          ) : (
+            grid.map((row, rowIndex) => (
+              <View key={rowIndex} style={styles.planGridRow}>
+                {row.map((item) => {
+                  const active = selectedPlan?.variationCode === item.variationCode;
+                  const duration = planDuration(item.name);
+                  return (
+                    <Pressable
+                      key={`${item.variationCode}-${item.name}-${item.amount}`}
+                      style={({ pressed }) => [
+                        styles.planCard,
+                        active && styles.planCardActive,
+                        pressed && { opacity: 0.85, transform: [{ scale: 0.985 }] },
+                      ]}
+                      onPress={() => setSelectedPlan(item)}
+                    >
+                      <Text
+                        style={[styles.planName, active && styles.planTextActive]}
+                        numberOfLines={1}
+                      >
+                        {planSize(item.name)}
+                      </Text>
+                      <View style={[styles.durationBadge, active && styles.durationBadgeActive]}>
+                        <Text style={[styles.durationText, active && styles.durationTextActive]}>
+                          {duration.label}
+                        </Text>
+                      </View>
+                      <View style={styles.planCardFooter}>
+                        <Text style={[styles.planAmount, active && styles.planTextActive]}>
+                          ₦{item.amount.toLocaleString()}
+                        </Text>
+                        {item.fixedPrice && !active && (
+                          <Text style={styles.fixedText}>Fixed</Text>
+                        )}
+                      </View>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            ))
+          )}
         </>
       )}
       {error && !loadingPlans && (
@@ -189,10 +284,25 @@ const styles = StyleSheet.create({
   filterChipActive: { backgroundColor: colors.primary, borderColor: colors.primary },
   filterChipText: { fontSize: typography.sizes.xs, fontWeight: typography.weights.semibold, color: colors.ink },
   filterChipTextActive: { color: colors.white },
-  planItem: { flexDirection: "row", justifyContent: "space-between", padding: spacing.md, borderRadius: radii.md, borderWidth: 1, borderColor: colors.line, backgroundColor: colors.surface, marginBottom: spacing.sm },
-  planItemActive: { backgroundColor: colors.primary, borderColor: colors.primary },
-  planName: { fontSize: typography.sizes.sm, color: colors.ink, fontWeight: typography.weights.medium },
-  planAmount: { fontSize: typography.sizes.sm, color: colors.primary, fontWeight: typography.weights.semibold },
+  planGridRow: { flexDirection: "row", gap: spacing.sm, marginBottom: spacing.md },
+  planCard: {
+    flex: 1,
+    gap: spacing.sm,
+    padding: spacing.md,
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    borderColor: colors.line,
+    backgroundColor: colors.surface,
+  },
+  planCardActive: { backgroundColor: colors.primary, borderColor: colors.primary },
+  planCardFooter: { marginTop: "auto", gap: spacing.xs },
+  planName: { fontSize: typography.sizes.sm, color: colors.ink, fontWeight: typography.weights.semibold, lineHeight: 18 },
+  durationBadge: { alignSelf: "flex-start", paddingHorizontal: spacing.sm, paddingVertical: spacing.xs, borderRadius: radii.full, backgroundColor: colors.primarySoft },
+  durationBadgeActive: { backgroundColor: "rgba(255,255,255,0.22)" },
+  durationText: { fontSize: typography.sizes.xs, fontWeight: typography.weights.semibold, color: colors.primary },
+  durationTextActive: { color: colors.white },
+  planAmount: { fontSize: typography.sizes.lg, color: colors.primary, fontWeight: typography.weights.bold },
+  fixedText: { fontSize: typography.sizes.xs, color: colors.inkFaint },
   planTextActive: { color: colors.white },
   emptyText: { fontSize: typography.sizes.sm, color: colors.inkFaint, textAlign: "center", marginVertical: spacing.lg },
 });

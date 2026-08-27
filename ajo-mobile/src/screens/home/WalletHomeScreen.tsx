@@ -1,28 +1,52 @@
 import React, { useCallback, useState } from "react";
 import {
   FlatList,
-  Linking,
   Pressable,
   StyleSheet,
   Text,
   View,
 } from "react-native";
+import type { CompositeScreenProps } from "@react-navigation/native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useFocusEffect } from "@react-navigation/native";
-import type { GroupsStackParamList } from "../../navigation/types";
+import type { BottomTabScreenProps } from "@react-navigation/bottom-tabs";
+import type {
+  MainTabParamList,
+  WalletStackParamList,
+} from "../../navigation/types";
 import { Screen } from "../../components/Screen";
 import { Button } from "../../components/Button";
 import { ErrorBanner } from "../../components/ErrorBanner";
 import { LoadingScreen } from "../../components/LoadingScreen";
 import { ApiError } from "../../api/api-error";
-import { getWalletSummary, initializeFunding, verifyFunding } from "../../api/wallet";
-import type { WalletSummary, WalletTransaction } from "../../types/api";
+import { getWalletSummary } from "../../api/wallet";
+import type { WalletSummary } from "../../types/api";
 import { colors, radii, spacing, typography } from "../../theme";
-import { formatNaira, formatDateTime, statusLabel } from "../../utils/format";
+import { formatNaira, formatDateTime } from "../../utils/format";
 
-type Props = NativeStackScreenProps<GroupsStackParamList, "GroupsList">; // Not ideal but we need to navigate to Wallet
+type Props = CompositeScreenProps<
+  NativeStackScreenProps<WalletStackParamList, "WalletHome">,
+  BottomTabScreenProps<MainTabParamList, "Wallet">
+>;
 
-export function WalletHomeScreen({ navigation }: any) {
+const TRANSACTION_TYPE_LABELS: Record<string, string> = {
+  funding: "Wallet Funding",
+  contribution_debit: "Contribution",
+  contribution_refund: "Contribution Refund",
+  bill_payment: "Bill Payment",
+  service_fee_debit: "Service Fee",
+  service_fee_credit: "Service Fee Credit",
+  bill_commission_credit: "Bill Commission",
+  admin_credit: "Wallet Credit",
+  admin_withdrawal: "Withdrawal",
+  savings_debit: "Savings",
+};
+
+function transactionTypeLabel(type: string): string {
+  return TRANSACTION_TYPE_LABELS[type] ?? type.replace(/_/g, " ");
+}
+
+export function WalletHomeScreen({ navigation }: Props) {
   const [summary, setSummary] = useState<WalletSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -88,6 +112,27 @@ export function WalletHomeScreen({ navigation }: any) {
         />
       </View>
 
+      <View style={styles.savingsRow}>
+        <Button
+          title="Create Savings"
+          onPress={() => navigation.navigate("CreateSavingsPlan")}
+          style={styles.savingsButton}
+        />
+        <Button
+          title="Ajo"
+          variant="secondary"
+          onPress={() => navigation.navigate("GroupsTab", { screen: "GroupsList" })}
+          style={styles.savingsButton}
+        />
+      </View>
+      <Pressable
+        style={styles.savingsLink}
+        onPress={() => navigation.navigate("SavingsPlans")}
+        accessibilityRole="button"
+      >
+        <Text style={styles.savingsLinkText}>View my savings plans</Text>
+      </Pressable>
+
       <Text style={styles.sectionTitle}>Recent Transactions</Text>
 
       <FlatList
@@ -105,14 +150,15 @@ export function WalletHomeScreen({ navigation }: any) {
           </View>
         }
         renderItem={({ item }) => (
-          <View style={styles.transactionRow}>
+          <Pressable
+            style={({ pressed }) => [styles.transactionRow, pressed && { opacity: 0.7 }]}
+            onPress={() => navigation.navigate("TransactionReceipt", { transaction: item })}
+            accessibilityRole="button"
+            accessibilityLabel={`View receipt for ${transactionTypeLabel(item.type)}`}
+          >
             <View style={styles.transactionInfo}>
               <Text style={styles.transactionType}>
-                {item.type === "funding"
-                  ? "Wallet Funding"
-                  : item.type === "contribution_debit"
-                  ? "Contribution"
-                  : item.type}
+                {transactionTypeLabel(item.type)}
               </Text>
               <Text style={styles.transactionDate}>
                 {formatDateTime(item.createdAt)}
@@ -141,7 +187,7 @@ export function WalletHomeScreen({ navigation }: any) {
                 </View>
               )}
             </View>
-          </View>
+          </Pressable>
         )}
       />
     </Screen>
@@ -186,6 +232,25 @@ const styles = StyleSheet.create({
   },
   actionButton: {
     flex: 1,
+  },
+  savingsRow: {
+    flexDirection: "row",
+    gap: spacing.sm,
+    marginBottom: spacing.xl,
+  },
+  savingsButton: {
+    flex: 1,
+  },
+  savingsLink: {
+    alignSelf: "flex-start",
+    marginTop: -spacing.md,
+    marginBottom: spacing.lg,
+  },
+  savingsLinkText: {
+    fontSize: typography.sizes.sm,
+    fontWeight: typography.weights.medium,
+    color: colors.primary,
+    textDecorationLine: "underline",
   },
   sectionTitle: {
     fontSize: typography.sizes.lg,

@@ -11,14 +11,20 @@ type EventParams = Omit<SendNotificationParams, 'type' | 'title' | 'body'>;
 export const NotificationEvents = {
   // ---- Bill payments ---------------------------------------------------------
 
-  billPaymentSuccess(params: EventParams & { amount: number; serviceType: string; recipient: string }): SendNotificationParams {
+  billPaymentSuccess(
+    params: EventParams & {
+      amount: number;
+      serviceType: string;
+      recipient: string;
+    },
+  ): SendNotificationParams {
     return {
       ...params,
       type: NotificationType.WALLET_FUNDED,
       title: 'Bill Payment Successful',
       body: `Your ${params.serviceType} payment of \u20A6${params.amount} to ${params.recipient} was successful.`,
       smsEnabled: true,
-    } as SendNotificationParams;
+    };
   },
 
   // ---- Invites ---------------------------------------------------------------
@@ -102,9 +108,16 @@ export const NotificationEvents = {
   },
 
   groupContinued(
-    params: EventParams & { groupName: string; cycleNumber: number; contributionAmount: number; dueDate: Date },
+    params: EventParams & {
+      groupName: string;
+      cycleNumber: number;
+      contributionAmount: number;
+      dueDate: Date;
+    },
   ): SendNotificationParams {
-    const due = params.dueDate.toLocaleDateString('en-NG', { dateStyle: 'medium' });
+    const due = params.dueDate.toLocaleDateString('en-NG', {
+      dateStyle: 'medium',
+    });
     return {
       ...params,
       type: NotificationType.GROUP_CONTINUED,
@@ -325,6 +338,78 @@ export const NotificationEvents = {
       type: NotificationType.WALLET_FUNDED,
       title: 'Wallet Funded',
       body: `₦${params.amount.toLocaleString()} has been added to your Ajo wallet. New balance: ₦${params.newBalance.toLocaleString()}.`,
+    };
+  },
+
+  // ---- Individual savings plans ----------------------------------------------
+
+  savingCreated(
+    params: EventParams & {
+      planName: string;
+      amount: number;
+      frequency: string;
+    },
+  ): SendNotificationParams {
+    return {
+      ...params,
+      type: NotificationType.SAVING_CREATED,
+      title: 'Savings Plan Started',
+      body: `Your "${params.planName}" savings plan is live. Ajo will auto-save ₦${params.amount.toLocaleString()} ${params.frequency}.`,
+    };
+  },
+
+  savingDebited(
+    params: EventParams & {
+      planName: string;
+      amount: number;
+      newBalance: number;
+    },
+  ): SendNotificationParams {
+    return {
+      ...params,
+      type: NotificationType.SAVING_DEBITED,
+      title: 'Auto-Savings Collected',
+      body: `₦${params.amount.toLocaleString()} saved to "${params.planName}". Plan balance: ₦${params.newBalance.toLocaleString()}.`,
+    };
+  },
+
+  savingInsufficient(
+    params: EventParams & {
+      planName: string;
+      amount: number;
+      currentBalance: number;
+    },
+  ): SendNotificationParams {
+    return {
+      ...params,
+      type: NotificationType.SAVING_INSUFFICIENT,
+      title: 'Top-Up Needed for Savings',
+      body: `Your wallet balance (₦${params.currentBalance.toLocaleString()}) is too low for the ₦${params.amount.toLocaleString()} "${params.planName}" auto-save. Please top up.`,
+      smsEnabled: true,
+    };
+  },
+
+  savingCompleted(
+    params: EventParams & { planName: string; total: number },
+  ): SendNotificationParams {
+    return {
+      ...params,
+      type: NotificationType.SAVING_COMPLETED,
+      title: 'Savings Cycle Complete 🎉',
+      body: `You've saved ₦${params.total.toLocaleString()} in "${params.planName}". Your savings are ready to withdraw.`,
+      smsEnabled: true,
+    };
+  },
+
+  savingWithdrawn(
+    params: EventParams & { planName: string; amount: number },
+  ): SendNotificationParams {
+    return {
+      ...params,
+      type: NotificationType.SAVING_WITHDRAWN,
+      title: 'Savings Withdrawn',
+      body: `₦${params.amount.toLocaleString()} from "${params.planName}" has been sent to your bank account.`,
+      smsEnabled: true,
     };
   },
 };

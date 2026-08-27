@@ -47,6 +47,9 @@ export declare class WalletService {
         cycle: Types.ObjectId;
         contribution: Types.ObjectId;
     }, session: ClientSession, serviceFee?: number): Promise<boolean>;
+    debitForSavings(userId: Types.ObjectId, amountNaira: number, refs: {
+        savingPlan: Types.ObjectId;
+    }, reference: string, session: ClientSession): Promise<boolean>;
     creditServiceFee(adminUserId: string, amount: number, refs: {
         group: Types.ObjectId;
         cycle: Types.ObjectId;

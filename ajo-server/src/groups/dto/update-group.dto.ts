@@ -1,4 +1,12 @@
-import { IsOptional, IsString, IsInt, Min, Max, IsEnum, MinLength } from 'class-validator';
+import {
+  IsOptional,
+  IsString,
+  IsInt,
+  Min,
+  Max,
+  IsEnum,
+  MinLength,
+} from 'class-validator';
 import { ContributionFrequency } from '../../common/enums/group.enum';
 
 export class UpdateGroupDto {

@@ -15,7 +15,7 @@ async function run() {
   const app = await NestFactory.createApplicationContext(AppModule);
 
   try {
-    const connection = app.get(InjectConnection) as Connection;
+    const connection = app.get(InjectConnection);
 
     if (!connection.db) {
       console.error('Database connection not available');

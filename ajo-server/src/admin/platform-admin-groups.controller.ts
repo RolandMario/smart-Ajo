@@ -10,6 +10,7 @@ import {
 import { PlatformAdminGroupsService } from './platform-admin-groups.service';
 import { ListGroupsQueryDto } from './dto/list-groups-query.dto';
 import { UpdateServiceFeeDto } from './dto/update-service-fee.dto';
+import { SetAutoCollectDto } from './dto/set-auto-collect.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { PlatformAdminGuard } from '../common/guards/platform-admin.guard';
 
@@ -34,10 +35,12 @@ export class PlatformAdminGroupsController {
   }
 
   @Patch(':id/service-fee')
-  updateServiceFee(
-    @Param('id') id: string,
-    @Body() dto: UpdateServiceFeeDto,
-  ) {
+  updateServiceFee(@Param('id') id: string, @Body() dto: UpdateServiceFeeDto) {
     return this.platformAdminGroupsService.updateServiceFee(id, dto.serviceFee);
+  }
+
+  @Patch(':id/auto-collect')
+  setAutoCollect(@Param('id') id: string, @Body() dto: SetAutoCollectDto) {
+    return this.platformAdminGroupsService.setAutoCollect(id, dto.enabled);
   }
 }

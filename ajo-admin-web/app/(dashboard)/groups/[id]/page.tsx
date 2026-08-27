@@ -5,7 +5,9 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Stat } from "@/components/ui/stat";
 import { ServiceFeeEditor } from "@/components/service-fee-editor";
-import { getGroupDetail, updateServiceFee } from "@/lib/data/groups";
+import { AutoCollectToggle } from "@/components/auto-collect-toggle";
+import { getGroupDetail, updateGroupAutoCollect, updateServiceFee } from "@/lib/data/groups";
+import type { PlatformGroupDetail } from "@/lib/types/api";
 import { ApiError } from "@/lib/api/api-error";
 import { formatCurrency, formatDate } from "@/lib/format";
 import {
@@ -24,7 +26,7 @@ interface GroupDetailPageProps {
 export default async function GroupDetailPage({ params }: GroupDetailPageProps) {
   const { id } = await params;
 
-  let group;
+  let group: PlatformGroupDetail;
   try {
     group = await getGroupDetail(id);
   } catch (error) {
@@ -32,6 +34,16 @@ export default async function GroupDetailPage({ params }: GroupDetailPageProps) 
       notFound();
     }
     throw error;
+  }
+
+  async function handleToggleAutoCollect(enabled: boolean) {
+    "use server";
+    await updateGroupAutoCollect(group.id, enabled);
+  }
+
+  async function handleUpdateServiceFee(updateGroupId: string, fee: number) {
+    "use server";
+    await updateServiceFee(updateGroupId, fee);
   }
 
   return (
@@ -67,11 +79,10 @@ export default async function GroupDetailPage({ params }: GroupDetailPageProps) 
             <Stat
               label="Auto-collect"
               value={
-                group.autoCollectEnabled ? (
-                  <Badge tone="success">On</Badge>
-                ) : (
-                  <Badge tone="neutral">Off</Badge>
-                )
+                <AutoCollectToggle
+                  enabled={group.autoCollectEnabled}
+                  onToggle={handleToggleAutoCollect}
+                />
               }
             />
             <Stat label="Current cycle" value={group.currentCycleNumber ?? "—"} />
@@ -94,9 +105,10 @@ export default async function GroupDetailPage({ params }: GroupDetailPageProps) 
             <Stat
               label="Service fee"
               value={
-                <ServiceFeeEditorWrapper
+                <ServiceFeeEditor
                   groupId={group.id}
                   currentFee={group.serviceFee}
+                  onUpdate={handleUpdateServiceFee}
                 />
               }
             />
@@ -271,28 +283,5 @@ export default async function GroupDetailPage({ params }: GroupDetailPageProps) 
         </Card>
       </div>
     </>
-  );
-}
-
-async function ServiceFeeEditorWrapper({
-  groupId,
-  currentFee,
-}: {
-  groupId: string;
-  currentFee: number;
-}) {
-  'use server';
-  
-  async function handleUpdate(updateGroupId: string, fee: number) {
-    'use server';
-    await updateServiceFee(updateGroupId, fee);
-  }
-
-  return (
-    <ServiceFeeEditor
-      groupId={groupId}
-      currentFee={currentFee}
-      onUpdate={handleUpdate}
-    />
   );
 }

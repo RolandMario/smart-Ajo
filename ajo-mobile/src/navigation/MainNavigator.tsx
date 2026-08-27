@@ -1,8 +1,9 @@
 import React from "react";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
-import type { MainTabParamList, GroupsStackParamList, WalletStackParamList, BillsStackParamList } from "./types";
+import type { MainTabParamList, GroupsStackParamList, WalletStackParamList, ProfileStackParamList, BillsStackParamList } from "./types";
 import { Ionicons } from "@expo/vector-icons";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { GroupsListScreen } from "../screens/home/GroupsListScreen";
 import { CreateGroupScreen } from "../screens/home/CreateGroupScreen";
 import { GroupDetailScreen } from "../screens/home/GroupDetailScreen";
@@ -16,8 +17,12 @@ import { CycleDetailScreen } from "../screens/home/CycleDetailScreen";
 import { CurrentCycleScreen } from "../screens/home/CurrentCycleScreen";
 import { ContinueGroupScreen } from "../screens/home/ContinueGroupScreen";
 import { WalletHomeScreen } from "../screens/home/WalletHomeScreen";
+import { TransactionReceiptScreen } from "../screens/wallet/TransactionReceiptScreen";
 import { FundWalletScreen } from "../screens/home/FundWalletScreen";
 import { BankAccountScreen } from "../screens/home/BankAccountScreen";
+import { CreateSavingsPlanScreen } from "../screens/savings/CreateSavingsPlanScreen";
+import { SavingsPlansListScreen } from "../screens/savings/SavingsPlansListScreen";
+import { SavingsPlanDetailScreen } from "../screens/savings/SavingsPlanDetailScreen";
 import { NotificationsScreen } from "../screens/home/NotificationsScreen";
 import { EditProfileScreen } from "../screens/home/EditProfileScreen";
 import { ProfileScreen } from "../screens/home/ProfileScreen";
@@ -33,8 +38,12 @@ import { colors } from "../theme";
 const Tab = createBottomTabNavigator<MainTabParamList>();
 const GroupsStack = createNativeStackNavigator<GroupsStackParamList>();
 const WalletStack = createNativeStackNavigator<WalletStackParamList>();
-const ProfileStack = createNativeStackNavigator();
+const ProfileStack = createNativeStackNavigator<ProfileStackParamList>();
 const BillsStack = createNativeStackNavigator<BillsStackParamList>();
+
+/** Height of the tab bar content (labels/icons), excluding the device's bottom
+ * safe-area (home indicator / gesture bar / Android system nav bar). */
+const TAB_BAR_HEIGHT = 49;
 
 function GroupsStackNavigator() {
   return (
@@ -137,6 +146,26 @@ function WalletStackNavigator() {
         component={BankAccountScreen}
         options={{ title: "Bank Account" }}
       />
+      <WalletStack.Screen
+        name="CreateSavingsPlan"
+        component={CreateSavingsPlanScreen}
+        options={{ title: "Create Savings" }}
+      />
+      <WalletStack.Screen
+        name="SavingsPlans"
+        component={SavingsPlansListScreen}
+        options={{ title: "My Savings" }}
+      />
+      <WalletStack.Screen
+        name="SavingsPlanDetail"
+        component={SavingsPlanDetailScreen}
+        options={{ title: "Savings Plan" }}
+      />
+      <WalletStack.Screen
+        name="TransactionReceipt"
+        component={TransactionReceiptScreen}
+        options={{ title: "Receipt" }}
+      />
     </WalletStack.Navigator>
   );
 }
@@ -178,6 +207,21 @@ function ProfileStackNavigator() {
         options={{ title: "Bank Account" }}
       />
       <ProfileStack.Screen
+        name="CreateSavingsPlan"
+        component={CreateSavingsPlanScreen}
+        options={{ title: "Create Savings" }}
+      />
+      <ProfileStack.Screen
+        name="SavingsPlans"
+        component={SavingsPlansListScreen}
+        options={{ title: "My Savings" }}
+      />
+      <ProfileStack.Screen
+        name="SavingsPlanDetail"
+        component={SavingsPlanDetailScreen}
+        options={{ title: "Savings Plan" }}
+      />
+      <ProfileStack.Screen
         name="Notifications"
         component={NotificationsScreen}
         options={{ title: "Notifications" }}
@@ -206,6 +250,8 @@ function BillsStackNavigator() {
 }
 
 export function MainNavigator() {
+  const insets = useSafeAreaInsets();
+
   return (
     <Tab.Navigator
       screenOptions={{
@@ -214,22 +260,16 @@ export function MainNavigator() {
         tabBarStyle: {
           backgroundColor: colors.surface,
           borderTopColor: colors.line,
+          // Explicitly pad the tab bar above the device's bottom safe-area
+          // (home indicator / gesture bar / Android system nav bar) and grow
+          // its height to match, so it never hides underneath on a built app.
+          height: TAB_BAR_HEIGHT + insets.bottom,
+          paddingBottom: insets.bottom,
         },
         tabBarActiveTintColor: colors.primary,
         tabBarInactiveTintColor: colors.inkFaint,
       }}
     >
-      <Tab.Screen
-        name="GroupsTab"
-        component={GroupsStackNavigator}
-        options={({ route }) => ({
-          title: "My Groups",
-          headerShown: false,
-          tabBarIcon: ({ focused, color, size }: { focused: boolean; color: string; size: number }) => (
-            <Ionicons name={focused ? "people" : "people-outline"} size={size} color={color} />
-          ),
-        })}
-      />
       <Tab.Screen
         name="Wallet"
         component={WalletStackNavigator}
@@ -238,6 +278,17 @@ export function MainNavigator() {
           headerShown: false,
           tabBarIcon: ({ focused, color, size }: { focused: boolean; color: string; size: number }) => (
             <Ionicons name={focused ? "wallet" : "wallet-outline"} size={size} color={color} />
+          ),
+        })}
+      />
+      <Tab.Screen
+        name="GroupsTab"
+        component={GroupsStackNavigator}
+        options={({ route }) => ({
+          title: "My Groups",
+          headerShown: false,
+          tabBarIcon: ({ focused, color, size }: { focused: boolean; color: string; size: number }) => (
+            <Ionicons name={focused ? "people" : "people-outline"} size={size} color={color} />
           ),
         })}
       />

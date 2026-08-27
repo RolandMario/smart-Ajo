@@ -1,10 +1,4 @@
-import {
-  Body,
-  Controller,
-  Get,
-  Post,
-  UseGuards,
-} from '@nestjs/common';
+import { Body, Controller, Get, Post, UseGuards } from '@nestjs/common';
 import { PlatformAdminWalletService } from './platform-admin-wallet.service';
 import { WithdrawAdminWalletDto } from './dto/withdraw-admin-wallet.dto';
 import { SetBankAccountDto } from '../wallet/dto/set-bank-account.dto';

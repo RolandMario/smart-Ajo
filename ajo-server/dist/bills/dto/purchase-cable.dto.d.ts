@@ -3,4 +3,5 @@ export declare class PurchaseCableDto {
     smartCardNumber: string;
     amount: number;
     variationCode?: string;
+    customerName?: string;
 }

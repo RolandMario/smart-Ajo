@@ -17,7 +17,12 @@ export declare enum NotificationType {
     PAYOUT_FAILED = "payout_failed",
     PAYOUT_REVERSED = "payout_reversed",
     CYCLE_ADVANCED = "cycle_advanced",
-    WALLET_FUNDED = "wallet_funded"
+    WALLET_FUNDED = "wallet_funded",
+    SAVING_CREATED = "saving_created",
+    SAVING_DEBITED = "saving_debited",
+    SAVING_INSUFFICIENT = "saving_insufficient",
+    SAVING_COMPLETED = "saving_completed",
+    SAVING_WITHDRAWN = "saving_withdrawn"
 }
 export declare enum NotificationChannel {
     PUSH = "push",

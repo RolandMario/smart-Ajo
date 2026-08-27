@@ -285,7 +285,11 @@ let CyclesService = CyclesService_1 = class CyclesService {
                 .populate('user', MEMBER_USER_FIELDS)
                 .lean(),
         ]);
-        return { cycle: populatedCycle, contributions, isAdmin: membership.isGroupAdmin };
+        return {
+            cycle: populatedCycle,
+            contributions,
+            isAdmin: membership.isGroupAdmin,
+        };
     }
     async collectContributions(adminUserId, groupId, cycleId) {
         const group = await this.groupAccess.getGroupOrThrow(groupId);
@@ -458,10 +462,9 @@ let CyclesService = CyclesService_1 = class CyclesService {
             if (transfer.status === 'success') {
                 await this.finalizeSuccessfulPayout(payout, cycle, group);
             }
-            else if (transfer.status === 'otp' &&
-                this.paystack.isTestMode()) {
+            else if (transfer.status === 'otp' && this.paystack.isTestMode()) {
                 this.logger.log(`Test mode: resolving OTP for transfer ${transfer.transferCode}`);
-                await this.paystack.resolveOtp(transfer.transferCode, '123456');
+                await this.paystack.resolveOtp(transfer.transferCode, this.paystack.testTransferOtp());
                 await this.finalizeSuccessfulPayout(payout, cycle, group);
             }
             else {

@@ -101,4 +101,5 @@ export declare class PlatformAdminGroupsService {
     listGroups(query: ListGroupsQueryDto): Promise<PaginatedGroups>;
     getGroupDetail(groupId: string): Promise<GroupDetail>;
     updateServiceFee(groupId: string, serviceFee: number | undefined): Promise<GroupDetail>;
+    setAutoCollect(groupId: string, enabled: boolean): Promise<GroupDetail>;
 }

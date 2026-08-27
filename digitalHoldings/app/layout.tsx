@@ -5,8 +5,9 @@ import './globals.css'
 const inter = Inter({ subsets: ['latin'] })
 
 export const metadata: Metadata = {
-  title: 'Ajo - Digital Savings & Investment Platform',
-  description: 'Save together, thrive together. Join or create savings groups, automate contributions, and achieve your financial goals with Ajo.',
+  title: 'Digital Smart Environment - Innovative Digital Solutions',
+  description:
+    'Digital Smart Environment is a forward-thinking technology company specializing in custom software development, mobile and web application creation, responsive website design, and digital transformation of IT services.',
 }
 
 export default function RootLayout({

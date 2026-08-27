@@ -39,6 +39,21 @@ export function pluralize(count: number, singular: string, plural?: string): str
 }
 
 /**
+ * Format a savings-plan duration (unit + value) for display, e.g.
+ * "20 days", "2 months", "1 year".
+ */
+export function formatDuration(unit: string, value: number): string {
+  if (!Number.isFinite(value) || value < 1) return "";
+  const singular: Record<string, string> = {
+    days: "day",
+    months: "month",
+    years: "year",
+  };
+  const word = singular[unit] ?? unit;
+  return `${value} ${value === 1 ? word : `${word}s`}`;
+}
+
+/**
  * Get a human-readable status label.
  */
 export function statusLabel(status: string): string {

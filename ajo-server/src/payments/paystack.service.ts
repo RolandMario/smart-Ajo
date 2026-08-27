@@ -283,9 +283,20 @@ export class PaystackService {
   }
 
   /**
+   * The OTP to use when finalizing transfers in test mode. Defaults to
+   * `123456` (the historical Paystack test-mode OTP), but many test accounts
+   * now deliver a real OTP to the email/phone registered on the Paystack
+   * dashboard — set `PAYSTACK_TRANSFER_OTP` to that code to make test
+   * withdrawals complete. See `.env.example`.
+   */
+  testTransferOtp(): string {
+    return this.configService.get<string>('PAYSTACK_TRANSFER_OTP') ?? '123456';
+  }
+
+  /**
    * Resolves an OTP for a pending transfer. In test mode the OTP is
-   * always `123456`. In live mode this would be the OTP sent to the
-   * recipient's phone.
+   * normally `123456` (see `testTransferOtp()`). In live mode this would be
+   * the OTP sent to the recipient's phone.
    *
    * Uses `/transfer/finalize_transfer` (the current Paystack endpoint;
    * the older `/transfer/resolve_otp` was deprecated and returns 404).

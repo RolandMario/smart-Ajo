@@ -19,13 +19,43 @@ export function BillConfirmationScreen({ navigation, route }: Props) {
     setLoading(true);
     setError(null);
     try {
+      let tx: { reference: string; provider?: string; externalReference?: string; createdAt?: string };
       switch (serviceType) {
-        case "airtime": await purchaseAirtime({ phone: recipient, amount, network: String(metadata?.network) }); break;
-        case "data": await purchaseData({ phone: recipient, dataPlanId: String(metadata?.variationCode), network: provider }); break;
-        case "cable": await purchaseCable({ serviceProvider: provider as any, smartCardNumber: recipient, amount, variationCode: String(metadata?.variationCode ?? "") }); break;
-        case "electricity": await purchaseElectricity({ disco: String(metadata?.disco), meterNumber: String(metadata?.meterNumber), meterType: String(metadata?.meterType) as any, amount, phone: String(metadata?.phone) }); break;
+        case "airtime":
+          tx = await purchaseAirtime({ phone: recipient, amount, network: String(metadata?.network) });
+          break;
+        case "data":
+          tx = await purchaseData({ phone: recipient, dataPlanId: String(metadata?.variationCode), network: provider });
+          break;
+        case "cable":
+          tx = await purchaseCable({
+            serviceProvider: provider as any,
+            smartCardNumber: recipient,
+            amount,
+            variationCode: String(metadata?.variationCode ?? ""),
+            customerName: customerName ?? undefined,
+          });
+          break;
+        case "electricity":
+          tx = await purchaseElectricity({
+            disco: String(metadata?.disco),
+            meterNumber: String(metadata?.meterNumber),
+            meterType: String(metadata?.meterType) as any,
+            amount,
+            phone: String(metadata?.phone),
+            customerName: customerName ?? undefined,
+          });
+          break;
       }
-      navigation.replace("BillSuccess", { serviceType, reference: "completed", amount, recipient });
+      navigation.replace("BillSuccess", {
+        serviceType,
+        reference: tx.reference,
+        amount,
+        recipient,
+        provider,
+        externalReference: tx.externalReference,
+        createdAt: tx.createdAt,
+      });
     } catch (err: any) {
       setError(err.message || "Payment failed. Try again.");
     } finally { setLoading(false); }

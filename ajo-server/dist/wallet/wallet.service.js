@@ -43,7 +43,10 @@ let WalletService = class WalletService {
         const userObjectId = new mongoose_2.Types.ObjectId(userId);
         let wallet = await this.walletModel.findOne({ user: userObjectId });
         if (!wallet) {
-            wallet = await this.walletModel.create({ user: userObjectId, balance: 0 });
+            wallet = await this.walletModel.create({
+                user: userObjectId,
+                balance: 0,
+            });
         }
         return wallet;
     }
@@ -241,6 +244,58 @@ let WalletService = class WalletService {
         }
         return true;
     }
+    async debitForSavings(userId, amountNaira, refs, reference, session) {
+        const successTx = await this.walletTxModel.findOne({
+            reference,
+            status: wallet_enum_1.WalletTransactionStatus.SUCCESS,
+        });
+        if (successTx) {
+            return true;
+        }
+        await this.walletTxModel.deleteOne({
+            reference,
+            status: { $ne: wallet_enum_1.WalletTransactionStatus.SUCCESS },
+        });
+        const wallet = await this.walletModel
+            .findOne({ user: userId })
+            .session(session);
+        if (!wallet) {
+            return false;
+        }
+        const balance = wallet.balance ?? 0;
+        if (balance < amountNaira) {
+            return false;
+        }
+        const balanceBefore = balance;
+        const balanceAfter = balanceBefore - amountNaira;
+        wallet.balance = balanceAfter;
+        await wallet.save({ session });
+        try {
+            await this.walletTxModel.create([
+                {
+                    wallet: wallet._id,
+                    user: userId,
+                    type: wallet_enum_1.WalletTransactionType.SAVINGS_DEBIT,
+                    status: wallet_enum_1.WalletTransactionStatus.SUCCESS,
+                    amount: amountNaira,
+                    balanceBefore,
+                    balanceAfter,
+                    reference,
+                    metadata: { savingPlan: refs.savingPlan.toString() },
+                },
+            ], { session, ordered: true });
+        }
+        catch (err) {
+            const code = err?.code ?? err?.err?.code;
+            const message = String(err?.message ?? err);
+            const isDuplicateKey = code === 11000 || code === '11000' || message.includes('E11000');
+            if (isDuplicateKey) {
+                return true;
+            }
+            throw err;
+        }
+        return true;
+    }
     async creditServiceFee(adminUserId, amount, refs, session) {
         const wallet = await this.walletModel
             .findOne({ user: new mongoose_2.Types.ObjectId(adminUserId) })
@@ -331,7 +386,11 @@ let WalletService = class WalletService {
         return walletTx[0];
     }
     async confirmBillPayment(reference, session) {
-        await this.walletTxModel.updateOne({ reference, status: wallet_enum_1.WalletTransactionStatus.PENDING, type: wallet_enum_1.WalletTransactionType.BILL_PAYMENT }, { $set: { status: wallet_enum_1.WalletTransactionStatus.SUCCESS } }, session ? { session } : undefined);
+        await this.walletTxModel.updateOne({
+            reference,
+            status: wallet_enum_1.WalletTransactionStatus.PENDING,
+            type: wallet_enum_1.WalletTransactionType.BILL_PAYMENT,
+        }, { $set: { status: wallet_enum_1.WalletTransactionStatus.SUCCESS } }, session ? { session } : undefined);
     }
     async failBillPayment(reference, amountNaira, session) {
         const tx = await this.walletTxModel
@@ -339,9 +398,7 @@ let WalletService = class WalletService {
             .session(session);
         if (!tx)
             return;
-        const wallet = await this.walletModel
-            .findById(tx.wallet)
-            .session(session);
+        const wallet = await this.walletModel.findById(tx.wallet).session(session);
         if (!wallet)
             return;
         const balanceBefore = wallet.balance ?? 0;

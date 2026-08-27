@@ -22,6 +22,11 @@ var NotificationType;
     NotificationType["PAYOUT_REVERSED"] = "payout_reversed";
     NotificationType["CYCLE_ADVANCED"] = "cycle_advanced";
     NotificationType["WALLET_FUNDED"] = "wallet_funded";
+    NotificationType["SAVING_CREATED"] = "saving_created";
+    NotificationType["SAVING_DEBITED"] = "saving_debited";
+    NotificationType["SAVING_INSUFFICIENT"] = "saving_insufficient";
+    NotificationType["SAVING_COMPLETED"] = "saving_completed";
+    NotificationType["SAVING_WITHDRAWN"] = "saving_withdrawn";
 })(NotificationType || (exports.NotificationType = NotificationType = {}));
 var NotificationChannel;
 (function (NotificationChannel) {

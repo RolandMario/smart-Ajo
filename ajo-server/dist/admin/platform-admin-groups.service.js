@@ -225,6 +225,18 @@ let PlatformAdminGroupsService = class PlatformAdminGroupsService {
         }
         return this.getGroupDetail(groupId);
     }
+    async setAutoCollect(groupId, enabled) {
+        if (!mongoose_2.Types.ObjectId.isValid(groupId)) {
+            throw new common_1.NotFoundException('Group not found');
+        }
+        const group = await this.groupModel.findById(groupId);
+        if (!group) {
+            throw new common_1.NotFoundException('Group not found');
+        }
+        group.autoCollectEnabled = enabled;
+        await group.save();
+        return this.getGroupDetail(groupId);
+    }
 };
 exports.PlatformAdminGroupsService = PlatformAdminGroupsService;
 exports.PlatformAdminGroupsService = PlatformAdminGroupsService = __decorate([

@@ -17,6 +17,7 @@ const common_1 = require("@nestjs/common");
 const platform_admin_groups_service_1 = require("./platform-admin-groups.service");
 const list_groups_query_dto_1 = require("./dto/list-groups-query.dto");
 const update_service_fee_dto_1 = require("./dto/update-service-fee.dto");
+const set_auto_collect_dto_1 = require("./dto/set-auto-collect.dto");
 const jwt_auth_guard_1 = require("../common/guards/jwt-auth.guard");
 const platform_admin_guard_1 = require("../common/guards/platform-admin.guard");
 let PlatformAdminGroupsController = class PlatformAdminGroupsController {
@@ -32,6 +33,9 @@ let PlatformAdminGroupsController = class PlatformAdminGroupsController {
     }
     updateServiceFee(id, dto) {
         return this.platformAdminGroupsService.updateServiceFee(id, dto.serviceFee);
+    }
+    setAutoCollect(id, dto) {
+        return this.platformAdminGroupsService.setAutoCollect(id, dto.enabled);
     }
 };
 exports.PlatformAdminGroupsController = PlatformAdminGroupsController;
@@ -57,6 +61,14 @@ __decorate([
     __metadata("design:paramtypes", [String, update_service_fee_dto_1.UpdateServiceFeeDto]),
     __metadata("design:returntype", void 0)
 ], PlatformAdminGroupsController.prototype, "updateServiceFee", null);
+__decorate([
+    (0, common_1.Patch)(':id/auto-collect'),
+    __param(0, (0, common_1.Param)('id')),
+    __param(1, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, set_auto_collect_dto_1.SetAutoCollectDto]),
+    __metadata("design:returntype", void 0)
+], PlatformAdminGroupsController.prototype, "setAutoCollect", null);
 exports.PlatformAdminGroupsController = PlatformAdminGroupsController = __decorate([
     (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard, platform_admin_guard_1.PlatformAdminGuard),
     (0, common_1.Controller)('admin/groups'),

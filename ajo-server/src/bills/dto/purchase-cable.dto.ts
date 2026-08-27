@@ -1,4 +1,11 @@
-import { IsDefined, IsIn, IsNumber, IsOptional, IsString, Min } from 'class-validator';
+import {
+  IsDefined,
+  IsIn,
+  IsNumber,
+  IsOptional,
+  IsString,
+  Min,
+} from 'class-validator';
 
 export class PurchaseCableDto {
   @IsDefined()
@@ -18,4 +25,9 @@ export class PurchaseCableDto {
   @IsOptional()
   @IsString()
   variationCode?: string;
+
+  /** Verified subscriber name, shown on the receipt. */
+  @IsOptional()
+  @IsString()
+  customerName?: string;
 }
