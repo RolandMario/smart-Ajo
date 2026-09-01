@@ -184,12 +184,12 @@ export default function Home() {
               Projects we've delivered.
             </h2>
             <p className="mt-4 section-copy">
-              Digital Smart Environment partners with clients to bring ambitious products to life. Here is one of our
+              Digital Smart Environment partners with clients to bring ambitious products to life. Here are two of our
               projects — more on the way.
             </p>
           </div>
 
-          <div className="mt-12 grid gap-8 lg:grid-cols-2">
+          <div className="mt-12 grid gap-8 md:grid-cols-2 lg:grid-cols-3">
             {/* Ajo featured project */}
             <Link
               href="/projects/ajo"
@@ -204,6 +204,27 @@ export default function Home() {
                 <p className="text-ajo-inkSoft mb-4">
                   A modern digital savings platform for creating and joining savings groups, automating contributions,
                   and receiving rotating payouts — save together, thrive together.
+                </p>
+                <span className="inline-flex items-center gap-2 text-sm font-semibold text-ajo-primary">
+                  View Project <ArrowRight className="h-4 w-4" />
+                </span>
+              </div>
+            </Link>
+
+            {/* SmartCafe project */}
+            <Link
+              href="/projects/smartcafe"
+              className="rounded-card overflow-hidden border border-ajo-line bg-white shadow-sm transition hover:shadow-lg"
+            >
+              <div className="flex h-48 items-center justify-center bg-ajo-accent">
+                <span className="text-6xl font-bold text-ajo-ink">S</span>
+              </div>
+              <div className="p-6">
+                <p className="text-sm font-semibold text-ajo-primary mb-1">VTU Platform · Virtual Top-Up & Bills</p>
+                <h3 className="text-2xl font-bold text-ajo-ink mb-2">SmartCafe</h3>
+                <p className="text-ajo-inkSoft mb-4">
+                  A full-stack Nigerian VTU platform for buying airtime, data, cable TV, electricity, WAEC,
+                  and bulk SMS — wallet-first, secure, and always available.
                 </p>
                 <span className="inline-flex items-center gap-2 text-sm font-semibold text-ajo-primary">
                   View Project <ArrowRight className="h-4 w-4" />
