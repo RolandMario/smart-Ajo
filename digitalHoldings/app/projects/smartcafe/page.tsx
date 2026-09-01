@@ -1,5 +1,6 @@
 import { Metadata } from 'next'
 import Link from 'next/link'
+import Image from 'next/image'
 import {
   ArrowRight,
   Globe,
@@ -51,9 +52,30 @@ export default function SmartCafeProjectPage() {
               </div>
             </div>
             <div className="relative flex justify-center">
-              <div className="rounded-card bg-ajo-primary p-4 shadow-soft">
-                <div className="flex h-[340px] w-full items-center justify-center rounded-card bg-ajo-surfaceSunken">
-                  <Smartphone className="h-32 w-32 text-ajo-primary" />
+              <div className="rounded-card p-4 shadow-soft">
+                <div className="flex min-h-[460px] w-full items-center justify-center rounded-card">
+                  <div className="relative h-[400px] w-[170px] -rotate-[40deg]">
+                    {/* side buttons */}
+                    <div className="absolute -left-[3px] top-24 h-8 w-[3px] rounded-l-md bg-ajo-ink/70" />
+                    <div className="absolute -left-[3px] top-36 h-12 w-[3px] rounded-l-md bg-ajo-ink/70" />
+                    <div className="absolute -right-[3px] top-28 h-16 w-[3px] rounded-r-md bg-ajo-ink/70" />
+                    {/* bezel */}
+                    <div className="relative h-full w-full rounded-[2.2rem] bg-ajo-ink p-[6px] shadow-2xl">
+                      {/* screen */}
+                      <div className="relative h-full w-full overflow-hidden rounded-[1.7rem] bg-ajo-surfaceSunken">
+                        <Image
+                          src="/images/Smartcafe.png"
+                          alt="SmartCafe mobile app home screen"
+                          fill
+                          priority
+                          sizes="170px"
+                          className="object-cover"
+                        />
+                        {/* notch */}
+                        <div className="absolute left-1/2 top-2 z-10 h-4 w-20 -translate-x-1/2 rounded-full bg-ajo-ink" />
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
