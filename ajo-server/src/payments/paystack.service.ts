@@ -42,6 +42,20 @@ export interface BankListEntry {
   code: string;
 }
 
+export interface CreateCustomerResult {
+  customerCode: string;
+}
+
+export interface DedicatedAccountResult {
+  /** Paystack's numeric id for the DVA, when the API returns one. */
+  accountId?: string;
+  accountNumber: string;
+  accountName: string;
+  bankName: string;
+  currency: string;
+  active: boolean;
+}
+
 export interface InitiateTransferResult {
   transferCode: string;
   status: string;
@@ -60,6 +74,20 @@ export class PaystackService {
   private readonly logger = new Logger(PaystackService.name);
   private readonly client: AxiosInstance;
   private readonly secretKey: string;
+
+  /**
+   * Paystack DVA issuing banks (Nigeria). Only Wema, Providus and Sterling
+   * are supported in live mode; in test mode Paystack accepts Providus and
+   * Sterling (Wema is live-only and returns an error such as
+   * `wema is not available in test mode`). `titan-paystack` is reserved for
+   * Titan Paystack live accounts.
+   */
+  private readonly DVA_BANK_POOL = [
+    'wema',
+    'providus',
+    'sterling',
+    'titan-paystack',
+  ] as const;
 
   constructor(private configService: ConfigService) {
     this.secretKey = this.configService.get<string>('PAYSTACK_SECRET_KEY')!;
@@ -237,6 +265,242 @@ export class PaystackService {
       return { recipientCode: response.data.data.recipient_code };
     } catch (error) {
       return this.handleError('transfer recipient creation', error);
+    }
+  }
+
+  /**
+   * Creates a Paystack customer for a member. The returned `customerCode`
+   * (CUS_xxx) must exist before a Dedicated Virtual Account can be
+   * requested. `POST /customer` always creates a NEW customer — callers
+   * must persist the code and reuse it rather than re-creating.
+   */
+  async createCustomer(params: {
+    firstName?: string;
+    lastName?: string;
+    phone: string;
+    email?: string;
+  }): Promise<CreateCustomerResult> {
+    try {
+      const body: Record<string, string> = { phone: params.phone };
+      if (params.email) body.email = params.email;
+      if (params.firstName) body.first_name = params.firstName;
+      if (params.lastName) body.last_name = params.lastName;
+
+      const response = await this.client.post<
+        PaystackResponse<{ customer_code: string }>
+      >('/customer', body);
+
+      return { customerCode: response.data.data.customer_code };
+    } catch (error) {
+      return this.handleError('customer creation', error);
+    }
+  }
+
+  /**
+   * The preferred bank to request Dedicated Virtual Accounts from
+   * (`PAYSTACK_DVA_PREFERRED_BANK` — Nigeria options: `wema`, `providus`,
+   * `sterling`; `titan-paystack` for Titan live accounts). This is the FIRST
+   * bank attempted; `createDedicatedAccount` transparently falls back through
+   * the remaining pool when Paystack rejects the preferred bank in the
+   * current mode (e.g. Wema in test mode).
+   */
+  dvaPreferredBank(): string {
+    return (
+      this.configService.get<string>('PAYSTACK_DVA_PREFERRED_BANK') ?? 'wema'
+    );
+  }
+
+  /**
+   * Ordered DVA bank candidates: the configured preferred bank first, then
+   * the rest of the supported pool. Deduplicated so a configured value that
+   * matches the pool isn't tried twice.
+   */
+  dvaBankCandidates(): string[] {
+    const preferred = this.dvaPreferredBank().trim().toLowerCase();
+    return [preferred, ...this.DVA_BANK_POOL.filter((bank) => bank !== preferred)];
+  }
+
+  /**
+   * Whether an error means "this bank can't issue DVAs in the current
+   * mode" rather than a general DVA failure. Paystack test mode returns
+   * e.g. `wema is not available in test mode` (Wema is live-only); such
+   * errors are safe to skip in favour of the next candidate bank.
+   */
+  private isDvaBankUnavailableError(error: unknown): boolean {
+    const message = error instanceof Error ? error.message : String(error);
+    return /is not available in test mode|bank is not (?:available|supported)/i.test(
+      message,
+    );
+  }
+
+  /**
+   * Requests a Dedicated Virtual Account (DVA) for an existing customer.
+   * Paystack assigns the account number (its prefix depends on the
+   * preferred bank, e.g. `5900...` for Wema) — the member's phone is
+   * attached to the assignment and used to reconcile inbound transfers.
+   *
+   * The bank is tried in order from `dvaBankCandidates()`; if Paystack
+   * reports the bank is unavailable in the current mode (e.g. Wema in test
+   * mode), the next candidate is attempted automatically.
+   */
+  async createDedicatedAccount(params: {
+    customerCode: string;
+    preferredBank: string;
+    phone: string;
+    firstName?: string;
+    lastName?: string;
+  }): Promise<DedicatedAccountResult> {
+    const banks = this.dvaBankCandidates();
+    let lastError: unknown;
+
+    for (const bank of banks) {
+      try {
+        return await this.requestDedicatedAccount({ ...params, preferredBank: bank });
+      } catch (err) {
+        lastError = err;
+
+        // Only a bank-availability problem (e.g. "wema is not available in
+        // test mode") should fall through to the next candidate. Genuine
+        // failures — DVA not enabled on the Paystack business, invalid
+        // customer code, etc. — must surface immediately instead of being
+        // masked as a bank-selection issue.
+        if (!this.isDvaBankUnavailableError(err)) {
+          throw err;
+        }
+      }
+    }
+
+    throw lastError;
+  }
+
+  /** Single DVA-creation attempt for one specific bank. */
+  private async requestDedicatedAccount(params: {
+    customerCode: string;
+    preferredBank: string;
+    phone: string;
+    firstName?: string;
+    lastName?: string;
+  }): Promise<DedicatedAccountResult> {
+    try {
+      interface DedicatedAccountShape {
+        id?: number | string;
+        bank?: { name?: string };
+        account_name?: string;
+        account_number?: string;
+        assigned?: boolean;
+        active?: boolean;
+        currency?: string;
+        assignment?: {
+          account_number?: string;
+          bank?: { name?: string };
+          currency?: string;
+        };
+      }
+
+      const response = await this.client.post<
+        PaystackResponse<{
+          dedicated_account?: DedicatedAccountShape;
+        }>
+      >('/dedicated_account', {
+        customer: params.customerCode,
+        preferred_bank: params.preferredBank,
+        phone: params.phone,
+        first_name: params.firstName,
+        last_name: params.lastName,
+        country: 'NG',
+      });
+
+      const da = response.data.data.dedicated_account ?? {};
+      const assignment = da.assignment ?? {};
+
+      return {
+        accountId: da.id ? String(da.id) : undefined,
+        accountNumber: da.account_number ?? assignment.account_number ?? '',
+        accountName: da.account_name ?? '',
+        bankName: da.bank?.name ?? assignment.bank?.name ?? '',
+        currency: da.currency ?? assignment.currency ?? 'NGN',
+        active: da.active ?? da.assigned ?? true,
+      };
+    } catch (error) {
+      return this.handleError('dedicated account creation', error);
+    }
+  }
+
+  /**
+   * Lists the dedicated virtual accounts assigned to a customer. Used to
+   * recover an existing assignment when `createDedicatedAccount` fails
+   * because the customer already has one (e.g. after a partial
+   * provisioning attempt crashed before persisting).
+   */
+  async fetchDedicatedAccounts(
+    customerCode: string,
+  ): Promise<DedicatedAccountResult[]> {
+    try {
+      interface DedicatedAccountShape {
+        id?: number | string;
+        bank?: { name?: string };
+        account_name?: string;
+        account_number?: string;
+        assigned?: boolean;
+        active?: boolean;
+        currency?: string;
+        assignment?: {
+          account_number?: string;
+          bank?: { name?: string };
+          currency?: string;
+        };
+      }
+
+      const response = await this.client.get<
+        PaystackResponse<
+          Array<{
+            id?: number | string;
+            dedicated_account?: DedicatedAccountShape;
+          }>
+        >
+      >('/dedicated_account', {
+        params: { customer_code: customerCode },
+      });
+
+      const list = Array.isArray(response.data.data) ? response.data.data : [];
+
+      return list
+        .map((entry) => {
+          const da = entry.dedicated_account ?? {};
+          const assignment = da.assignment ?? {};
+
+          return {
+            accountId: entry.id
+              ? String(entry.id)
+              : da.id
+                ? String(da.id)
+                : undefined,
+            accountNumber: da.account_number ?? assignment.account_number ?? '',
+            accountName: da.account_name ?? '',
+            bankName: da.bank?.name ?? assignment.bank?.name ?? '',
+            currency: da.currency ?? assignment.currency ?? 'NGN',
+            active: da.active ?? da.assigned ?? false,
+          };
+        })
+        .filter((entry) => entry.accountNumber.length > 0);
+    } catch (error) {
+      return this.handleError('dedicated account fetch', error);
+    }
+  }
+
+  /**
+   * Deactivates a dedicated virtual account so a fresh number can be
+   * assigned (used by the refresh flow). Best-effort — the caller decides
+   * how to proceed if Paystack rejects the deactivation.
+   */
+  async deactivateDedicatedAccount(accountId: string): Promise<void> {
+    try {
+      await this.client.post<PaystackResponse<null>>(
+        `/dedicated_account/${encodeURIComponent(accountId)}/deactivate`,
+        {},
+      );
+    } catch (error) {
+      this.handleError('dedicated account deactivation', error);
     }
   }
 

@@ -1,5 +1,12 @@
 import React from "react";
-import { View, Text, StyleSheet, Animated, Easing } from "react-native";
+import {
+  View,
+  Text,
+  StyleSheet,
+  Animated,
+  Easing,
+  Image,
+} from "react-native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { colors, spacing, typography } from "../theme";
 import type { AuthStackParamList } from "../navigation/types";
@@ -50,11 +57,15 @@ export function SplashScreen({ navigation }: SplashScreenProps) {
           },
         ]}
       >
-        {/* Logo Container */}
+        {/* Logo */}
         <View style={styles.logoContainer}>
-          <View style={styles.logoCircle}>
-            <Text style={styles.logoText}>A</Text>
-          </View>
+          <Image
+            source={require("../../assets/ajo.png")}
+            style={styles.logoImage}
+            resizeMode="contain"
+            accessible
+            accessibilityLabel="Ajo logo"
+          />
         </View>
 
         {/* App Name */}
@@ -89,13 +100,9 @@ const styles = StyleSheet.create({
   logoContainer: {
     marginBottom: spacing.xl,
   },
-  logoCircle: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
-    backgroundColor: colors.primary,
-    alignItems: "center",
-    justifyContent: "center",
+  logoImage: {
+    width: 220,
+    height: 154,
     shadowColor: colors.black,
     shadowOffset: {
       width: 0,
@@ -104,12 +111,6 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.15,
     shadowRadius: 8,
     elevation: 8,
-  },
-  logoText: {
-    fontSize: 64,
-    fontWeight: typography.weights.bold,
-    color: colors.white,
-    lineHeight: 72,
   },
   appName: {
     fontSize: typography.sizes.xxxl + 8,

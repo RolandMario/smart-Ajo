@@ -4,34 +4,61 @@
     "slug": "ajo-mobile",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
+    "icon": "./assets/ajo.png",
     "userInterfaceStyle": "light",
     "scheme": "ajo",
     "ios": {
-      "supportsTablet": true,
-      "bundleIdentifier": "com.ajo.mobile"
+      "supportsTablet": false,
+      "bundleIdentifier": "com.ajo.mobile",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false,
+        " NSContactsUsageDescription": "Allow Ajo to use your contacts for airtime and data top-ups."
+      }
     },
     "android": {
-      "package": "com.ajo.mobile",
+      "package": "com.smartajo.app",
       "adaptiveIcon": {
         "backgroundColor": "#FBF6EF",
-        "foregroundImage": "./assets/android-icon-foreground.png",
-        "backgroundImage": "./assets/android-icon-background.png",
-        "monochromeImage": "./assets/android-icon-monochrome.png"
+        "foregroundImage": "./assets/ajo.png",
+        "backgroundImage": "",
+        "monochromeImage": ""
       },
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "permissions": [
+        "android.permission.READ_CONTACTS",
+        "android.permission.WRITE_CONTACTS",
+        "android.permission.READ_CONTACTS",
+        "android.permission.WRITE_CONTACTS"
+      ]
     },
     "web": {
-      "favicon": "./assets/favicon.png"
+      "favicon": "./assets/ajo.png"
     },
     "plugins": [
       [
         "expo-secure-store",
         {
-          "faceIDPermission": "Allow Ajo to use Face ID to protect your session."
+          "keychainService": "ajo-mobile"
         }
       ],
-      "expo-sharing"
-    ]
+      "expo-sharing",
+      [
+        "expo-contacts",
+        {
+          "contactsPermission": "Allow Ajo to use your contacts for airtime and data top-ups."
+        }
+      ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "9aebe6dc-d09c-449a-94f7-8583cc121e38"
+      }
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/9aebe6dc-d09c-449a-94f7-8583cc121e38"
+    }
   }
 }

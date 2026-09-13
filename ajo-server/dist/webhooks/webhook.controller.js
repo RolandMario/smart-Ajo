@@ -75,15 +75,34 @@ let WebhookController = WebhookController_1 = class WebhookController {
     async handleChargeSuccess(data) {
         const reference = data.reference;
         const amount = data.amount;
-        if (!reference || !amount) {
+        if (!reference || !amount || amount <= 0) {
             this.logger.warn('charge.success missing reference or amount');
             return;
         }
-        await this.walletService.confirmFunding(reference, amount / 100, {
+        const amountNaira = amount / 100;
+        const processedCard = await this.walletService.confirmFunding(reference, amountNaira, {
             source: 'webhook',
             paystackData: data,
         });
-        this.logger.log(`Wallet funded via webhook: ref=${reference}, amount=${amount / 100} NGN`);
+        if (processedCard) {
+            this.logger.log(`Wallet funded via webhook: ref=${reference}, amount=${amountNaira} NGN`);
+            return;
+        }
+        const customer = data.customer ?? {};
+        const phone = customer.phone;
+        if (!phone) {
+            this.logger.warn(`charge.success ref=${reference}: no matching wallet top-up and no customer phone — skipping`);
+            return;
+        }
+        const credited = await this.walletService.creditDedicatedAccountFunding({
+            phone,
+            amountNaira,
+            reference,
+            paystackData: data,
+        });
+        this.logger.log(credited
+            ? `Wallet funded via dedicated account: ref=${reference}, amount=${amountNaira} NGN`
+            : `charge.success ref=${reference}: already credited or unknown customer — skipping`);
     }
     async handleTransferSuccess(data) {
         const reference = data.reference;

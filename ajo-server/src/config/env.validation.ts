@@ -33,6 +33,14 @@ export const envValidationSchema = Joi.object({
   // registered on the dashboard account; some test accounts accept only the
   // code that was actually delivered (not the historical 123456).
   PAYSTACK_TRANSFER_OTP: Joi.string().default('123456'),
+  // Dedicated Virtual Account (DVA) — lets members fund their wallet by bank
+  // transferring into a personal virtual account number. DVA must be enabled
+  // on the Paystack business (Settings > Payment channels). Bank options
+  // (NG): wema | providus | sterling (titan-paystack for Titan live). Wema is
+  // live-only: in test mode Paystack only accepts providus/sterling, so the
+  // service automatically retries with the next supported bank rather than
+  // failing on `... is not available in test mode`.
+  PAYSTACK_DVA_PREFERRED_BANK: Joi.string().default('wema'),
   WALLET_CURRENCY: Joi.string().default('NGN'),
 
   // Firebase Admin (push notifications). Optional — if omitted, push is

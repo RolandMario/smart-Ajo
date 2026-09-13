@@ -22,6 +22,17 @@ export interface BankListEntry {
     name: string;
     code: string;
 }
+export interface CreateCustomerResult {
+    customerCode: string;
+}
+export interface DedicatedAccountResult {
+    accountId?: string;
+    accountNumber: string;
+    accountName: string;
+    bankName: string;
+    currency: string;
+    active: boolean;
+}
 export interface InitiateTransferResult {
     transferCode: string;
     status: string;
@@ -31,6 +42,7 @@ export declare class PaystackService {
     private readonly logger;
     private readonly client;
     private readonly secretKey;
+    private readonly DVA_BANK_POOL;
     constructor(configService: ConfigService);
     private handleError;
     initializeTransaction(email: string, amountNaira: number, reference: string): Promise<InitializeTransactionResult>;
@@ -42,6 +54,25 @@ export declare class PaystackService {
         bankCode: string;
         accountName: string;
     }): Promise<TransferRecipientResult>;
+    createCustomer(params: {
+        firstName?: string;
+        lastName?: string;
+        phone: string;
+        email?: string;
+    }): Promise<CreateCustomerResult>;
+    dvaPreferredBank(): string;
+    dvaBankCandidates(): string[];
+    private isDvaBankUnavailableError;
+    createDedicatedAccount(params: {
+        customerCode: string;
+        preferredBank: string;
+        phone: string;
+        firstName?: string;
+        lastName?: string;
+    }): Promise<DedicatedAccountResult>;
+    private requestDedicatedAccount;
+    fetchDedicatedAccounts(customerCode: string): Promise<DedicatedAccountResult[]>;
+    deactivateDedicatedAccount(accountId: string): Promise<void>;
     initiateTransfer(params: {
         amountNaira: number;
         recipientCode: string;

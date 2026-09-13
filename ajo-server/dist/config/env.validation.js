@@ -49,6 +49,7 @@ exports.envValidationSchema = Joi.object({
     PAYSTACK_SECRET_KEY: Joi.string().default('sk_test_your-paystack-secret-key'),
     PAYSTACK_BASE_URL: Joi.string().default('https://api.paystack.co'),
     PAYSTACK_TRANSFER_OTP: Joi.string().default('123456'),
+    PAYSTACK_DVA_PREFERRED_BANK: Joi.string().default('wema'),
     WALLET_CURRENCY: Joi.string().default('NGN'),
     FIREBASE_PROJECT_ID: Joi.string().default('ma-project-497415'),
     FIREBASE_CLIENT_EMAIL: Joi.string().default('blog-reader@ma-project-497415.iam.gserviceaccount.com'),

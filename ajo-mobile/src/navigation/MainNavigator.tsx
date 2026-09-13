@@ -17,6 +17,7 @@ import { CycleDetailScreen } from "../screens/home/CycleDetailScreen";
 import { CurrentCycleScreen } from "../screens/home/CurrentCycleScreen";
 import { ContinueGroupScreen } from "../screens/home/ContinueGroupScreen";
 import { WalletHomeScreen } from "../screens/home/WalletHomeScreen";
+import { TransactionsScreen } from "../screens/wallet/TransactionsScreen";
 import { TransactionReceiptScreen } from "../screens/wallet/TransactionReceiptScreen";
 import { FundWalletScreen } from "../screens/home/FundWalletScreen";
 import { BankAccountScreen } from "../screens/home/BankAccountScreen";
@@ -162,6 +163,11 @@ function WalletStackNavigator() {
         options={{ title: "Savings Plan" }}
       />
       <WalletStack.Screen
+        name="Transactions"
+        component={TransactionsScreen}
+        options={{ title: "Transactions" }}
+      />
+      <WalletStack.Screen
         name="TransactionReceipt"
         component={TransactionReceiptScreen}
         options={{ title: "Receipt" }}
@@ -220,6 +226,16 @@ function ProfileStackNavigator() {
         name="SavingsPlanDetail"
         component={SavingsPlanDetailScreen}
         options={{ title: "Savings Plan" }}
+      />
+      <ProfileStack.Screen
+        name="Transactions"
+        component={TransactionsScreen}
+        options={{ title: "Transactions" }}
+      />
+      <ProfileStack.Screen
+        name="TransactionReceipt"
+        component={TransactionReceiptScreen}
+        options={{ title: "Receipt" }}
       />
       <ProfileStack.Screen
         name="Notifications"

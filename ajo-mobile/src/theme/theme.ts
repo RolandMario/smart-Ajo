@@ -21,7 +21,7 @@ export const colors = {
 
   line: "#E8DDCC", // hairline borders
 
-  primary: "#B4502C", // clay/terracotta — primary actions
+  primary: "#B4502C", // clay/terracotta — primary actions #B4502C
   primarySoft: "#F3DFD2", // primary-tinted backgrounds
 
   accent: "#C9961E", // gold — same family as admin-web, money/payout highlight

@@ -17,6 +17,7 @@ const common_1 = require("@nestjs/common");
 const wallet_service_1 = require("./wallet.service");
 const fund_wallet_dto_1 = require("./dto/fund-wallet.dto");
 const set_bank_account_dto_1 = require("./dto/set-bank-account.dto");
+const list_transactions_query_dto_1 = require("./dto/list-transactions-query.dto");
 const jwt_auth_guard_1 = require("../common/guards/jwt-auth.guard");
 const current_user_decorator_1 = require("../common/decorators/current-user.decorator");
 let WalletController = class WalletController {
@@ -27,11 +28,20 @@ let WalletController = class WalletController {
     getWallet(user) {
         return this.walletService.getWalletSummary(user.userId);
     }
+    listTransactions(user, query) {
+        return this.walletService.listTransactions(user.userId, query.page ?? 1, query.limit ?? 20);
+    }
     initializeFunding(user, dto) {
         return this.walletService.initializeFunding(user.userId, dto.amount);
     }
     verifyFunding(user, reference) {
         return this.walletService.verifyFunding(user.userId, reference);
+    }
+    getDedicatedAccount(user) {
+        return this.walletService.getOrCreateDedicatedAccount(user.userId);
+    }
+    refreshDedicatedAccount(user) {
+        return this.walletService.refreshDedicatedAccount(user.userId);
     }
     listBanks() {
         return this.walletService.listBanks();
@@ -52,6 +62,14 @@ __decorate([
     __metadata("design:returntype", void 0)
 ], WalletController.prototype, "getWallet", null);
 __decorate([
+    (0, common_1.Get)('transactions'),
+    __param(0, (0, current_user_decorator_1.CurrentUser)()),
+    __param(1, (0, common_1.Query)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, list_transactions_query_dto_1.ListTransactionsQueryDto]),
+    __metadata("design:returntype", void 0)
+], WalletController.prototype, "listTransactions", null);
+__decorate([
     (0, common_1.Post)('fund/initialize'),
     __param(0, (0, current_user_decorator_1.CurrentUser)()),
     __param(1, (0, common_1.Body)()),
@@ -67,6 +85,20 @@ __decorate([
     __metadata("design:paramtypes", [Object, String]),
     __metadata("design:returntype", void 0)
 ], WalletController.prototype, "verifyFunding", null);
+__decorate([
+    (0, common_1.Get)('dedicated-account'),
+    __param(0, (0, current_user_decorator_1.CurrentUser)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object]),
+    __metadata("design:returntype", void 0)
+], WalletController.prototype, "getDedicatedAccount", null);
+__decorate([
+    (0, common_1.Post)('dedicated-account/refresh'),
+    __param(0, (0, current_user_decorator_1.CurrentUser)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object]),
+    __metadata("design:returntype", void 0)
+], WalletController.prototype, "refreshDedicatedAccount", null);
 __decorate([
     (0, common_1.Get)('banks'),
     __metadata("design:type", Function),
