@@ -4,11 +4,19 @@ import type { ApiErrorBody } from "../types/api";
 // Must be a literal `process.env.EXPO_PUBLIC_*` access (not destructured,
 // not a dynamic key) for Expo's Metro config to statically inline it at
 // build time. See https://docs.expo.dev/guides/environment-variables/
-const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL;
+//
+// Fallback: EAS Build (cloud) never receives the gitignored .env file, so a
+// production bundle must not hard-fail at import time when the variable was
+// not inlined — a module-scope throw here blank-screens the app before the
+// first frame renders. Prefer configuring the value per environment in
+// eas.json `build.<profile>.env` (or an EAS environment variable); this
+// committed default just keeps release builds bootable.
+const API_BASE_URL =
+  process.env.EXPO_PUBLIC_API_BASE_URL || "https://ajo-server.vercel.app";
 
-if (!API_BASE_URL) {
-  throw new Error(
-    "EXPO_PUBLIC_API_BASE_URL is not set. Copy .env.example to .env and fill it in, then restart the dev server.",
+if (!process.env.EXPO_PUBLIC_API_BASE_URL && process.env.NODE_ENV !== "production") {
+  console.log(
+    "[ajo-mobile] EXPO_PUBLIC_API_BASE_URL is not set — falling back to the committed production API URL. Set it in .env or eas.json to target another environment.",
   );
 }
 
