@@ -1,64 +1,37 @@
 {
   "expo": {
     "name": "SmartAjo",
-    "slug": "ajo-mobile",
+    "slug": "AJo-Mobile",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/ajo.png",
     "userInterfaceStyle": "light",
-    "scheme": "ajo",
+    "splash": {
+      "image": "./assets/ajo.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "com.ajo.mobile",
-      "infoPlist": {
-        "ITSAppUsesNonExemptEncryption": false,
-        " NSContactsUsageDescription": "Allow Ajo to use your contacts for airtime and data top-ups."
-      }
+      "bundleIdentifier": "com.smartenv.ajo"
     },
     "android": {
-      "package": "com.smartajo.app",
       "adaptiveIcon": {
-        "backgroundColor": "#FBF6EF",
         "foregroundImage": "./assets/ajo.png",
-        "backgroundImage": "",
-        "monochromeImage": ""
+        "backgroundColor": "#ffffff"
       },
-      "predictiveBackGestureEnabled": false,
-      "permissions": [
-        "android.permission.READ_CONTACTS",
-        "android.permission.WRITE_CONTACTS",
-        "android.permission.READ_CONTACTS",
-        "android.permission.WRITE_CONTACTS"
-      ]
+      "package": "com.smartenv.ajo"
     },
     "web": {
       "favicon": "./assets/ajo.png"
     },
-    "plugins": [
-      [
-        "expo-secure-store",
-        {
-          "keychainService": "ajo-mobile"
-        }
-      ],
-      "expo-sharing",
-      [
-        "expo-contacts",
-        {
-          "contactsPermission": "Allow Ajo to use your contacts for airtime and data top-ups."
-        }
-      ]
-    ],
     "extra": {
       "eas": {
-        "projectId": "9aebe6dc-d09c-449a-94f7-8583cc121e38"
+        "projectId": "fc2f1dd9-9b89-4ab5-9169-6fee882de278"
       }
-    },
-    "runtimeVersion": {
-      "policy": "appVersion"
-    },
-    "updates": {
-      "url": "https://u.expo.dev/9aebe6dc-d09c-449a-94f7-8583cc121e38"
     }
   }
 }

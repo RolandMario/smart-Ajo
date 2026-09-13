@@ -8,7 +8,6 @@ import {
   TextInput,
   View,
 } from "react-native";
-import { Contact, ContactField, ContactsSortOrder } from "expo-contacts";
 import { colors, radii, spacing, typography } from "../theme";
 import { e164ToLocalNigeria, formatLocalForDisplay, toE164Nigeria } from "../utils/phone";
 
@@ -60,7 +59,15 @@ export function ContactPicker({ visible, onSelect, onClose }: ContactPickerProps
     setSearch("");
     setState("loading");
     try {
-      if (typeof Contact.getAllDetails !== "function") {
+      // Intentionally a *dynamic* import: expo-contacts performs a native
+      // `requireNativeModule('ExpoContactsNext')` at module-load time, so a
+      // top-level import here would put that native-module dependency on the
+      // app's startup path and crash every launch on builds that don't
+      // register it. Loading it only when the picker opens keeps startup
+      // safe — a missing native module falls through to the graceful
+      // "unavailable"/"error" states below instead of killing the app.
+      const { Contact, ContactField, ContactsSortOrder } = await import("expo-contacts");
+      if (typeof Contact?.getAllDetails !== "function") {
         // expo-contacts ships a stub on unsupported platforms (e.g. web).
         setState("unavailable");
         return;
