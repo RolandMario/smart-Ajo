@@ -2,7 +2,7 @@ import React, { useRef, useState } from "react";
 import { Alert, StyleSheet, Text, View } from "react-native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { captureRef } from "react-native-view-shot";
-import * as Sharing from "expo-sharing";
+import { loadSharingSafe } from "../../utils/expo-sharing-client";
 import type { BillsStackParamList } from "../../navigation/types";
 import { Screen } from "../../components/Screen";
 import { Button } from "../../components/Button";
@@ -60,6 +60,11 @@ export function BillSuccessScreen({ navigation, route }: Props) {
     if (!receiptRef.current) return;
     setSharing(true);
     try {
+      const Sharing = await loadSharingSafe();
+      if (!Sharing) {
+        Alert.alert("Sharing unavailable", "Sharing isn't available on this device.");
+        return;
+      }
       const available = await Sharing.isAvailableAsync();
       if (!available) {
         Alert.alert("Sharing unavailable", "Sharing isn't available on this device.");

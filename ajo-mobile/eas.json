@@ -13,20 +13,12 @@
     },
     "production": {
       "autoIncrement": true,
-      "android": {
-        "buildType": "app-bundle"
-      },
-      "ios": {
-        "resourceClass": "m-medium"
-      },
-      "channel": "production"
+    "android": {
+        "buildType": "apk"
+      }
     }
   },
   "submit": {
-    "production": {
-      "ios": {
-        "ascAppId": "6811486727"
-    }
+    "production": {}
   }
-}
 }
