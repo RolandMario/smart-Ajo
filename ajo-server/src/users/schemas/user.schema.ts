@@ -2,6 +2,10 @@ import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document, Types } from 'mongoose';
 import { Role } from '../../common/enums/role.enum';
 import { BankAccount, BankAccountSchema } from './bank-account.schema';
+import {
+  DedicatedAccount,
+  DedicatedAccountSchema,
+} from './dedicated-account.schema';
 
 export type UserDocument = User & Document;
 
@@ -57,6 +61,13 @@ export class User {
    */
   @Prop({ type: BankAccountSchema })
   bankAccount?: BankAccount;
+
+  /**
+   * Paystack Dedicated Virtual Account (DVA), used to fund the wallet by
+   * bank transfer. Created lazily by WalletService.getOrCreateDedicatedAccount.
+   */
+  @Prop({ type: DedicatedAccountSchema })
+  dedicatedAccount?: DedicatedAccount;
 }
 
 export const UserSchema = SchemaFactory.createForClass(User);

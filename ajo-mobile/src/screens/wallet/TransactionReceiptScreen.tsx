@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { Alert, StyleSheet, Text, View } from "react-native";
+import { Alert, Image, StyleSheet, Text, View } from "react-native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { captureRef } from "react-native-view-shot";
 import * as Sharing from "expo-sharing";
@@ -11,21 +11,9 @@ import type { BillTransaction } from "../../types/api";
 import { colors, radii, spacing, typography } from "../../theme";
 import { formatNaira } from "../../utils/format";
 import { billReceiptRows } from "../../utils/bill-details";
+import { transactionTypeLabel } from "../../utils/wallet-transactions";
 
 type Props = NativeStackScreenProps<WalletStackParamList, "TransactionReceipt">;
-
-const TYPE_LABELS: Record<string, string> = {
-  funding: "Wallet Funding",
-  contribution_debit: "Contribution",
-  contribution_refund: "Contribution Refund",
-  bill_payment: "Bill Payment",
-  service_fee_debit: "Service Fee",
-  service_fee_credit: "Service Fee Credit",
-  bill_commission_credit: "Bill Commission",
-  admin_credit: "Wallet Credit",
-  admin_withdrawal: "Withdrawal",
-  savings_debit: "Savings",
-};
 
 const SERVICE_LABELS: Record<string, string> = {
   airtime: "Airtime",
@@ -47,7 +35,7 @@ function billServiceLabel(billType?: string, provider?: string): string {
 
 function typeLabel(type: string, bill?: BillTransaction | null): string {
   if (type === "bill_payment" && bill) return billServiceLabel(bill.type, bill.provider);
-  return TYPE_LABELS[type] ?? type.replace(/_/g, " ");
+  return transactionTypeLabel(type);
 }
 
 function formatDate(value?: string): string {
@@ -163,9 +151,13 @@ export function TransactionReceiptScreen({ navigation, route }: Props) {
         <View ref={receiptRef} collapsable={false} style={styles.receipt}>
           {/* Sm@rtAjo header */}
           <View style={styles.brandRow}>
-            <View style={styles.logoCircle}>
-              <Text style={styles.logoText}>A</Text>
-            </View>
+            <Image
+              source={require("../../../assets/ajo.png")}
+              style={styles.logoImage}
+              resizeMode="contain"
+              accessible
+              accessibilityLabel="Ajo logo"
+            />
             <View style={styles.brandTextWrap}>
               <Text style={styles.brandName}>Sm@rtAjo</Text>
               <Text style={styles.brandTagline}>Save Together, Grow Together</Text>
@@ -259,20 +251,10 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: spacing.lg,
   },
-  logoCircle: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: colors.primary,
-    alignItems: "center",
-    justifyContent: "center",
+  logoImage: {
+    width: 52,
+    height: 36,
     marginRight: spacing.md,
-  },
-  logoText: {
-    fontSize: 30,
-    fontWeight: typography.weights.bold,
-    color: colors.white,
-    lineHeight: 34,
   },
   brandTextWrap: {
     flex: 1,

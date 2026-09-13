@@ -52,6 +52,7 @@ let WalletService = class WalletService {
     }
     async getWalletSummary(userId) {
         const wallet = await this.getOrCreateWallet(userId);
+        const user = await this.usersService.findById(userId);
         const recentTransactions = await this.walletTxModel
             .find({ user: wallet.user })
             .sort({ createdAt: -1 })
@@ -61,6 +62,37 @@ let WalletService = class WalletService {
             balance: wallet.balance ?? 0,
             currency: wallet.currency,
             recentTransactions,
+            dedicatedAccount: user?.dedicatedAccount?.active
+                ? {
+                    paystackCustomerCode: user.dedicatedAccount.paystackCustomerCode,
+                    accountNumber: user.dedicatedAccount.accountNumber,
+                    accountName: user.dedicatedAccount.accountName,
+                    bankName: user.dedicatedAccount.bankName,
+                    provider: user.dedicatedAccount.provider,
+                    currency: user.dedicatedAccount.currency,
+                    active: true,
+                }
+                : null,
+        };
+    }
+    async listTransactions(userId, page = 1, limit = 20) {
+        const wallet = await this.getOrCreateWallet(userId);
+        const filter = { user: wallet.user };
+        const [transactions, total] = await Promise.all([
+            this.walletTxModel
+                .find(filter)
+                .sort({ createdAt: -1 })
+                .skip((page - 1) * limit)
+                .limit(limit)
+                .lean(),
+            this.walletTxModel.countDocuments(filter),
+        ]);
+        return {
+            transactions,
+            page,
+            limit,
+            total,
+            totalPages: Math.max(1, Math.ceil(total / limit)),
         };
     }
     async initializeFunding(userId, amountNaira) {
@@ -100,6 +132,7 @@ let WalletService = class WalletService {
     }
     async confirmFunding(reference, amountNaira, metadata) {
         const session = await this.connection.startSession();
+        let processed = false;
         let notifyUserId;
         let notifyNewBalance;
         try {
@@ -128,6 +161,7 @@ let WalletService = class WalletService {
                     tx.metadata = metadata;
                 }
                 await tx.save({ session });
+                processed = true;
                 notifyUserId = tx.user.toString();
                 notifyNewBalance = balanceAfter;
             });
@@ -142,9 +176,141 @@ let WalletService = class WalletService {
                 newBalance: notifyNewBalance,
             }));
         }
+        return processed;
     }
     async failFunding(reference) {
         await this.walletTxModel.updateOne({ reference, status: wallet_enum_1.WalletTransactionStatus.PENDING }, { $set: { status: wallet_enum_1.WalletTransactionStatus.FAILED } });
+    }
+    async getOrCreateDedicatedAccount(userId) {
+        const user = await this.usersService.findById(userId);
+        if (!user) {
+            throw new common_1.NotFoundException('User not found');
+        }
+        if (!user.phone) {
+            throw new common_1.BadRequestException('A verified phone number is required before a dedicated account can be created');
+        }
+        const stored = user.dedicatedAccount;
+        if (stored?.active && stored.accountNumber) {
+            return stored;
+        }
+        const customerCode = stored?.paystackCustomerCode ?? (await this.createPaystackCustomer(user));
+        if (customerCode !== stored?.paystackCustomerCode) {
+            user.dedicatedAccount = {
+                paystackCustomerCode: customerCode,
+                provider: 'paystack',
+                currency: 'NGN',
+                active: false,
+            };
+            await user.save();
+        }
+        const { firstName, lastName } = this.splitName(user.name);
+        let result;
+        try {
+            result = await this.paystack.createDedicatedAccount({
+                customerCode,
+                preferredBank: this.paystack.dvaPreferredBank(),
+                phone: user.phone,
+                firstName,
+                lastName,
+            });
+        }
+        catch (err) {
+            const existing = await this.paystack.fetchDedicatedAccounts(customerCode);
+            result = existing.find((dva) => dva.active) ?? existing[0];
+            if (!result?.accountNumber) {
+                throw err;
+            }
+        }
+        const dedicatedAccount = {
+            paystackCustomerCode: customerCode,
+            paystackAccountId: result.accountId,
+            accountNumber: result.accountNumber,
+            accountName: result.accountName,
+            bankName: result.bankName,
+            provider: 'paystack',
+            currency: result.currency || 'NGN',
+            active: result.active,
+        };
+        user.dedicatedAccount = dedicatedAccount;
+        await user.save();
+        return dedicatedAccount;
+    }
+    async refreshDedicatedAccount(userId) {
+        const user = await this.usersService.findById(userId);
+        if (!user) {
+            throw new common_1.NotFoundException('User not found');
+        }
+        const stored = user.dedicatedAccount;
+        if (stored?.active && stored.accountNumber) {
+            stored.active = false;
+            if (stored.paystackAccountId) {
+                try {
+                    await this.paystack.deactivateDedicatedAccount(stored.paystackAccountId);
+                    stored.paystackAccountId = undefined;
+                }
+                catch {
+                }
+            }
+            user.dedicatedAccount = stored;
+            await user.save();
+        }
+        return this.getOrCreateDedicatedAccount(userId);
+    }
+    async creditDedicatedAccountFunding(params) {
+        const user = await this.usersService.findByPhone(params.phone);
+        if (!user) {
+            return false;
+        }
+        const existing = await this.walletTxModel.findOne({
+            reference: params.reference,
+        });
+        if (existing) {
+            return false;
+        }
+        const wallet = await this.getOrCreateWallet(user._id.toString());
+        const balanceBefore = wallet.balance ?? 0;
+        const balanceAfter = balanceBefore + params.amountNaira;
+        wallet.balance = balanceAfter;
+        await wallet.save();
+        await this.walletTxModel.create({
+            wallet: wallet._id,
+            user: wallet.user,
+            type: wallet_enum_1.WalletTransactionType.FUNDING,
+            status: wallet_enum_1.WalletTransactionStatus.SUCCESS,
+            amount: params.amountNaira,
+            balanceBefore,
+            balanceAfter,
+            reference: params.reference,
+            metadata: {
+                source: 'dedicated_account',
+                ...(params.paystackData ?? {}),
+            },
+        });
+        void this.notificationsService.send(notification_events_1.NotificationEvents.walletFunded({
+            userIds: [user._id.toString()],
+            amount: params.amountNaira,
+            newBalance: balanceAfter,
+        }));
+        return true;
+    }
+    splitName(name) {
+        const parts = (name ?? '').trim().split(/\s+/).filter(Boolean);
+        if (parts.length === 0)
+            return {};
+        return {
+            firstName: parts[0],
+            lastName: parts.length > 1 ? parts.slice(1).join(' ') : undefined,
+        };
+    }
+    async createPaystackCustomer(user) {
+        const { firstName, lastName } = this.splitName(user.name);
+        const { customerCode } = await this.paystack.createCustomer({
+            firstName,
+            lastName,
+            phone: user.phone,
+            email: user.email,
+        });
+        return customerCode;
     }
     async listBanks() {
         return this.paystack.listBanks();

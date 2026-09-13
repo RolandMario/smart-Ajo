@@ -18,11 +18,24 @@ import {
   WalletTransactionType,
 } from '../common/enums/wallet.enum';
 import { UsersService } from '../users/users.service';
-import { PaystackService, BankListEntry } from '../payments/paystack.service';
+import { DedicatedAccount } from '../users/schemas/dedicated-account.schema';
+import {
+  BankListEntry,
+  DedicatedAccountResult,
+  PaystackService,
+} from '../payments/paystack.service';
 import { BankAccount } from '../users/schemas/bank-account.schema';
 import { SetBankAccountDto } from './dto/set-bank-account.dto';
 import { NotificationsService } from '../notifications/notifications.service';
 import { NotificationEvents } from '../notifications/notification-events';
+
+export interface PaginatedWalletTransactions {
+  transactions: WalletTransaction[];
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
+}
 
 @Injectable()
 export class WalletService {
@@ -55,6 +68,7 @@ export class WalletService {
 
   async getWalletSummary(userId: string) {
     const wallet = await this.getOrCreateWallet(userId);
+    const user = await this.usersService.findById(userId);
 
     const recentTransactions = await this.walletTxModel
       .find({ user: wallet.user })
@@ -66,6 +80,51 @@ export class WalletService {
       balance: wallet.balance ?? 0,
       currency: wallet.currency,
       recentTransactions,
+      dedicatedAccount: user?.dedicatedAccount?.active
+        ? {
+            paystackCustomerCode: user.dedicatedAccount.paystackCustomerCode,
+            accountNumber: user.dedicatedAccount.accountNumber,
+            accountName: user.dedicatedAccount.accountName,
+            bankName: user.dedicatedAccount.bankName,
+            provider: user.dedicatedAccount.provider,
+            currency: user.dedicatedAccount.currency,
+            active: true,
+          }
+        : null,
+    };
+  }
+
+  // ---- Transactions (member transaction history) -----------------------------
+
+  /**
+   * Paginated, member-scoped wallet ledger — newest first. Powers the
+   * mobile wallet's Transactions screen.
+   */
+  async listTransactions(
+    userId: string,
+    page: number = 1,
+    limit: number = 20,
+  ): Promise<PaginatedWalletTransactions> {
+    const wallet = await this.getOrCreateWallet(userId);
+
+    const filter = { user: wallet.user };
+
+    const [transactions, total] = await Promise.all([
+      this.walletTxModel
+        .find(filter)
+        .sort({ createdAt: -1 })
+        .skip((page - 1) * limit)
+        .limit(limit)
+        .lean(),
+      this.walletTxModel.countDocuments(filter),
+    ]);
+
+    return {
+      transactions,
+      page,
+      limit,
+      total,
+      totalPages: Math.max(1, Math.ceil(total / limit)),
     };
   }
 
@@ -139,14 +198,20 @@ export class WalletService {
    * Called from both `verifyFunding` (manual) and the Paystack webhook
    * (`charge.success`) — safe to call multiple times for the same
    * reference.
+   *
+   * Returns `true` when a PENDING funding entry was found and credited
+   * (the card top-up path), or `false` when the reference is unknown or
+   * was already processed (e.g. a Dedicated Virtual Account transfer,
+   * which has no PENDING entry — see `creditDedicatedAccountFunding`).
    */
   async confirmFunding(
     reference: string,
     amountNaira: number,
     metadata?: Record<string, unknown>,
-  ): Promise<void> {
+  ): Promise<boolean> {
     const session = await this.connection.startSession();
 
+    let processed = false;
     let notifyUserId: string | undefined;
     let notifyNewBalance: number | undefined;
 
@@ -184,6 +249,7 @@ export class WalletService {
         }
         await tx.save({ session });
 
+        processed = true;
         notifyUserId = tx.user.toString();
         notifyNewBalance = balanceAfter;
       });
@@ -200,6 +266,8 @@ export class WalletService {
         }),
       );
     }
+
+    return processed;
   }
 
   async failFunding(reference: string): Promise<void> {
@@ -207,6 +275,219 @@ export class WalletService {
       { reference, status: WalletTransactionStatus.PENDING },
       { $set: { status: WalletTransactionStatus.FAILED } },
     );
+  }
+
+  // ---- Dedicated virtual account (DVA) ---------------------------------------
+
+  /**
+   * Returns the member's Paystack Dedicated Virtual Account, creating it
+   * lazily on first use (mirrors `getOrCreateWallet`) and storing it on
+   * the user. The account number is assigned by Paystack — the member's
+   * verified phone is passed to Paystack and used to reconcile inbound
+   * transfers via the `charge.success` webhook.
+   */
+  async getOrCreateDedicatedAccount(userId: string): Promise<DedicatedAccount> {
+    const user = await this.usersService.findById(userId);
+
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    if (!user.phone) {
+      throw new BadRequestException(
+        'A verified phone number is required before a dedicated account can be created',
+      );
+    }
+
+    const stored = user.dedicatedAccount;
+
+    if (stored?.active && stored.accountNumber) {
+      return stored;
+    }
+
+    // 1. Ensure the Paystack customer exists (reuse the stored code).
+    const customerCode =
+      stored?.paystackCustomerCode ?? (await this.createPaystackCustomer(user));
+
+    // Persist the customer code immediately so a later failure can be
+    // retried without creating a duplicate Paystack customer.
+    if (customerCode !== stored?.paystackCustomerCode) {
+      user.dedicatedAccount = {
+        paystackCustomerCode: customerCode,
+        provider: 'paystack',
+        currency: 'NGN',
+        active: false,
+      };
+      await user.save();
+    }
+
+    // 2. Request the virtual account.
+    const { firstName, lastName } = this.splitName(user.name);
+    let result: DedicatedAccountResult;
+
+    try {
+      result = await this.paystack.createDedicatedAccount({
+        customerCode,
+        preferredBank: this.paystack.dvaPreferredBank(),
+        phone: user.phone,
+        firstName,
+        lastName,
+      });
+    } catch (err) {
+      // The customer may already have a DVA (e.g. a previous attempt
+      // succeeded on Paystack's side but failed to persist). Recover the
+      // existing assignment instead of erroring out.
+      const existing = await this.paystack.fetchDedicatedAccounts(customerCode);
+      result = existing.find((dva) => dva.active) ?? existing[0];
+
+      if (!result?.accountNumber) {
+        throw err;
+      }
+    }
+
+    const dedicatedAccount: DedicatedAccount = {
+      paystackCustomerCode: customerCode,
+      paystackAccountId: result.accountId,
+      accountNumber: result.accountNumber,
+      accountName: result.accountName,
+      bankName: result.bankName,
+      provider: 'paystack',
+      currency: result.currency || 'NGN',
+      active: result.active,
+    };
+
+    user.dedicatedAccount = dedicatedAccount;
+    await user.save();
+
+    return dedicatedAccount;
+  }
+
+  /**
+   * Requests a new virtual account number (e.g. if the previous one was
+   * invalidated by Paystack). Best-effort: if we can't deactivate the old
+   * assignment, the existing number is returned unchanged.
+   */
+  async refreshDedicatedAccount(userId: string): Promise<DedicatedAccount> {
+    const user = await this.usersService.findById(userId);
+
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    const stored = user.dedicatedAccount;
+
+    if (stored?.active && stored.accountNumber) {
+      stored.active = false;
+
+      if (stored.paystackAccountId) {
+        try {
+          await this.paystack.deactivateDedicatedAccount(
+            stored.paystackAccountId,
+          );
+          stored.paystackAccountId = undefined;
+        } catch {
+          // Paystack refused the deactivation — getOrCreateDedicatedAccount
+          // will recover the existing assignment below.
+        }
+      }
+
+      user.dedicatedAccount = stored;
+      await user.save();
+    }
+
+    return this.getOrCreateDedicatedAccount(userId);
+  }
+
+  /**
+   * Credits a wallet for an inbound bank transfer into the member's
+   * Dedicated Virtual Account. Unlike card top-ups there is no PENDING
+   * ledger entry — the funds already settled — so the credit is created
+   * as SUCCESS in one step. Idempotent: `reference` is unique on
+   * `WalletTransaction`, and a second webhook for the same transfer is
+   * skipped.
+   *
+   * Returns `true` when a credit was applied, `false` if the user is
+   * unknown or the reference was already processed.
+   */
+  async creditDedicatedAccountFunding(params: {
+    phone: string;
+    amountNaira: number;
+    reference: string;
+    paystackData?: Record<string, unknown>;
+  }): Promise<boolean> {
+    const user = await this.usersService.findByPhone(params.phone);
+
+    if (!user) {
+      return false;
+    }
+
+    const existing = await this.walletTxModel.findOne({
+      reference: params.reference,
+    });
+
+    if (existing) {
+      // Already credited by a prior webhook delivery.
+      return false;
+    }
+
+    const wallet = await this.getOrCreateWallet(user._id.toString());
+    const balanceBefore = wallet.balance ?? 0;
+    const balanceAfter = balanceBefore + params.amountNaira;
+
+    wallet.balance = balanceAfter;
+    await wallet.save();
+
+    await this.walletTxModel.create({
+      wallet: wallet._id,
+      user: wallet.user,
+      type: WalletTransactionType.FUNDING,
+      status: WalletTransactionStatus.SUCCESS,
+      amount: params.amountNaira,
+      balanceBefore,
+      balanceAfter,
+      reference: params.reference,
+      metadata: {
+        source: 'dedicated_account',
+        ...(params.paystackData ?? {}),
+      },
+    });
+
+    void this.notificationsService.send(
+      NotificationEvents.walletFunded({
+        userIds: [user._id.toString()],
+        amount: params.amountNaira,
+        newBalance: balanceAfter,
+      }),
+    );
+
+    return true;
+  }
+
+  private splitName(name?: string): {
+    firstName?: string;
+    lastName?: string;
+  } {
+    const parts = (name ?? '').trim().split(/\s+/).filter(Boolean);
+    if (parts.length === 0) return {};
+    return {
+      firstName: parts[0],
+      lastName: parts.length > 1 ? parts.slice(1).join(' ') : undefined,
+    };
+  }
+
+  private async createPaystackCustomer(user: {
+    phone: string;
+    email?: string;
+    name?: string;
+  }): Promise<string> {
+    const { firstName, lastName } = this.splitName(user.name);
+    const { customerCode } = await this.paystack.createCustomer({
+      firstName,
+      lastName,
+      phone: user.phone,
+      email: user.email,
+    });
+    return customerCode;
   }
 
   // ---- Bank account (payout destination) -------------------------------------

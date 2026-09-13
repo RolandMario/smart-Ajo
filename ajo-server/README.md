@@ -33,13 +33,21 @@ live Termii account/credit.
 ### Paystack webhook (required for Phase 4 to fully work)
 
 Wallet funding confirmation and payout finalization both rely on
-`POST /webhooks/paystack`. In the Paystack dashboard, enable Transfers and
-set the webhook URL to `https://<your-domain>/webhooks/paystack`. For
-local development, expose your dev server with a tool like
-[ngrok](https://ngrok.com) and use the generated HTTPS URL. Without this,
-funding/payouts that don't resolve synchronously will stay `pending`
-indefinitely — use `GET /wallet/fund/verify/:reference` as a manual
-fallback for funding while testing.
+`POST /webhooks/paystack`. In the Paystack dashboard:
+- **Dedicated Virtual Accounts** must be enabled under Settings →
+  Payment channels for members to receive a personal account number
+  (bank-transfer funding). Set `PAYSTACK_DVA_PREFERRED_BANK` (wema /
+  providus / sterling) to pick the first-choice issuing bank. Wema is
+  live-only — in **test mode** Paystack only accepts providus/sterling, so
+  the server automatically retries with a supported bank when the preferred
+  one is rejected (`... is not available in test mode`).
+- Enable **Transfers** and set the webhook URL to
+  `https://<your-domain>/webhooks/paystack`. For local development, expose
+  your dev server with a tool like [ngrok](https://ngrok.com) and use the
+  generated HTTPS URL. Without this, funding/payouts that don't resolve
+  synchronously will stay `pending` indefinitely — use
+  `GET /wallet/fund/verify/:reference` as a manual fallback for funding
+  while testing.
 
 ### Creating the first platform_admin
 
@@ -133,6 +141,10 @@ current cycle's recipient.
   (`pending` → `success` / `failed` / `reversed`)
 - `User.bankAccount` — a member's verified payout destination (resolved
   via Paystack, with a saved transfer recipient code)
+- `User.dedicatedAccount` — a member's Paystack **Dedicated Virtual
+  Account** (DVA): a personal bank account number they can transfer money
+  into to fund their wallet. Created lazily, stored on the user, and
+  reconciled by the `charge.success` webhook via the customer's phone.
 - `PaystackService` — wraps Paystack's transaction (funding), bank
   resolution, transfer recipient, and transfer (payout) APIs, plus
   constant-time webhook signature verification
@@ -145,9 +157,11 @@ current cycle's recipient.
 
 | Method | Path                        | Auth       | Body | Notes |
 |--------|-----------------------------|------------|------|-------|
-| GET    | `/wallet/me`                | Bearer JWT | — | Current balance + last 20 ledger entries |
+| GET    | `/wallet/me`                | Bearer JWT | — | Current balance + last 20 ledger entries + the member's dedicated virtual account (when active) |
 | POST   | `/wallet/fund/initialize`   | Bearer JWT | `{ amount }` (naira) | Starts a Paystack funding transaction; returns `{ authorizationUrl, reference }`. Requires the user to have an email set (`PATCH /auth/me`) |
 | GET    | `/wallet/fund/verify/:reference` | Bearer JWT | — | Manually confirms a funding transaction (fallback to the webhook) |
+| GET    | `/wallet/dedicated-account` | Bearer JWT | — | Returns the member's Paystack Dedicated Virtual Account, creating it lazily on first use (`{ accountNumber, accountName, bankName, ... }`). Requires DVA to be enabled on the Paystack business |
+| POST   | `/wallet/dedicated-account/refresh` | Bearer JWT | — | Best-effort request for a new virtual account number (deactivates the old assignment when possible) |
 | GET    | `/wallet/banks`             | Bearer JWT | — | Lists Nigerian banks (name + Paystack bank code) |
 | GET    | `/wallet/bank-account`      | Bearer JWT | — | The member's saved payout bank account, or `null` |
 | POST   | `/wallet/bank-account`      | Bearer JWT | `{ accountNumber, bankCode, bankName }` | Resolves the account via Paystack, creates a transfer recipient, and saves it as the payout destination |

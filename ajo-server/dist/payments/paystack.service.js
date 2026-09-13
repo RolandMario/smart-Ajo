@@ -23,6 +23,12 @@ let PaystackService = PaystackService_1 = class PaystackService {
     logger = new common_1.Logger(PaystackService_1.name);
     client;
     secretKey;
+    DVA_BANK_POOL = [
+        'wema',
+        'providus',
+        'sterling',
+        'titan-paystack',
+    ];
     constructor(configService) {
         this.configService = configService;
         this.secretKey = this.configService.get('PAYSTACK_SECRET_KEY');
@@ -127,6 +133,111 @@ let PaystackService = PaystackService_1 = class PaystackService {
         }
         catch (error) {
             return this.handleError('transfer recipient creation', error);
+        }
+    }
+    async createCustomer(params) {
+        try {
+            const body = { phone: params.phone };
+            if (params.email)
+                body.email = params.email;
+            if (params.firstName)
+                body.first_name = params.firstName;
+            if (params.lastName)
+                body.last_name = params.lastName;
+            const response = await this.client.post('/customer', body);
+            return { customerCode: response.data.data.customer_code };
+        }
+        catch (error) {
+            return this.handleError('customer creation', error);
+        }
+    }
+    dvaPreferredBank() {
+        return (this.configService.get('PAYSTACK_DVA_PREFERRED_BANK') ?? 'wema');
+    }
+    dvaBankCandidates() {
+        const preferred = this.dvaPreferredBank().trim().toLowerCase();
+        return [preferred, ...this.DVA_BANK_POOL.filter((bank) => bank !== preferred)];
+    }
+    isDvaBankUnavailableError(error) {
+        const message = error instanceof Error ? error.message : String(error);
+        return /is not available in test mode|bank is not (?:available|supported)/i.test(message);
+    }
+    async createDedicatedAccount(params) {
+        const banks = this.dvaBankCandidates();
+        let lastError;
+        for (const bank of banks) {
+            try {
+                return await this.requestDedicatedAccount({ ...params, preferredBank: bank });
+            }
+            catch (err) {
+                lastError = err;
+                if (!this.isDvaBankUnavailableError(err)) {
+                    throw err;
+                }
+            }
+        }
+        throw lastError;
+    }
+    async requestDedicatedAccount(params) {
+        try {
+            const response = await this.client.post('/dedicated_account', {
+                customer: params.customerCode,
+                preferred_bank: params.preferredBank,
+                phone: params.phone,
+                first_name: params.firstName,
+                last_name: params.lastName,
+                country: 'NG',
+            });
+            const da = response.data.data.dedicated_account ?? {};
+            const assignment = da.assignment ?? {};
+            return {
+                accountId: da.id ? String(da.id) : undefined,
+                accountNumber: da.account_number ?? assignment.account_number ?? '',
+                accountName: da.account_name ?? '',
+                bankName: da.bank?.name ?? assignment.bank?.name ?? '',
+                currency: da.currency ?? assignment.currency ?? 'NGN',
+                active: da.active ?? da.assigned ?? true,
+            };
+        }
+        catch (error) {
+            return this.handleError('dedicated account creation', error);
+        }
+    }
+    async fetchDedicatedAccounts(customerCode) {
+        try {
+            const response = await this.client.get('/dedicated_account', {
+                params: { customer_code: customerCode },
+            });
+            const list = Array.isArray(response.data.data) ? response.data.data : [];
+            return list
+                .map((entry) => {
+                const da = entry.dedicated_account ?? {};
+                const assignment = da.assignment ?? {};
+                return {
+                    accountId: entry.id
+                        ? String(entry.id)
+                        : da.id
+                            ? String(da.id)
+                            : undefined,
+                    accountNumber: da.account_number ?? assignment.account_number ?? '',
+                    accountName: da.account_name ?? '',
+                    bankName: da.bank?.name ?? assignment.bank?.name ?? '',
+                    currency: da.currency ?? assignment.currency ?? 'NGN',
+                    active: da.active ?? da.assigned ?? false,
+                };
+            })
+                .filter((entry) => entry.accountNumber.length > 0);
+        }
+        catch (error) {
+            return this.handleError('dedicated account fetch', error);
+        }
+    }
+    async deactivateDedicatedAccount(accountId) {
+        try {
+            await this.client.post(`/dedicated_account/${encodeURIComponent(accountId)}/deactivate`, {});
+        }
+        catch (error) {
+            this.handleError('dedicated account deactivation', error);
         }
     }
     async initiateTransfer(params) {

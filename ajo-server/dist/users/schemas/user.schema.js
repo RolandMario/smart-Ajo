@@ -13,6 +13,7 @@ exports.UserSchema = exports.User = void 0;
 const mongoose_1 = require("@nestjs/mongoose");
 const role_enum_1 = require("../../common/enums/role.enum");
 const bank_account_schema_1 = require("./bank-account.schema");
+const dedicated_account_schema_1 = require("./dedicated-account.schema");
 let User = class User {
     _id;
     phone;
@@ -25,6 +26,7 @@ let User = class User {
     isEmailVerified;
     isActive;
     bankAccount;
+    dedicatedAccount;
 };
 exports.User = User;
 __decorate([
@@ -67,6 +69,10 @@ __decorate([
     (0, mongoose_1.Prop)({ type: bank_account_schema_1.BankAccountSchema }),
     __metadata("design:type", bank_account_schema_1.BankAccount)
 ], User.prototype, "bankAccount", void 0);
+__decorate([
+    (0, mongoose_1.Prop)({ type: dedicated_account_schema_1.DedicatedAccountSchema }),
+    __metadata("design:type", dedicated_account_schema_1.DedicatedAccount)
+], User.prototype, "dedicatedAccount", void 0);
 exports.User = User = __decorate([
     (0, mongoose_1.Schema)({ timestamps: true })
 ], User);

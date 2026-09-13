@@ -215,6 +215,17 @@ export interface WalletSummary {
   balance: number;
   currency: string;
   recentTransactions: WalletTransaction[];
+  /** The member's Paystack Dedicated Virtual Account, when active. */
+  dedicatedAccount?: DedicatedAccount | null;
+}
+
+/** Paginated member wallet ledger from GET /wallet/transactions. */
+export interface PaginatedWalletTransactions {
+  transactions: WalletTransaction[];
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
 }
 
 export interface FundWalletResponse {
@@ -241,6 +252,18 @@ export interface SetBankAccountPayload {
   accountNumber: string;
   bankCode: string;
   bankName: string;
+}
+
+/** A Paystack Dedicated Virtual Account used to fund the wallet by bank transfer. */
+export interface DedicatedAccount {
+  paystackCustomerCode?: string;
+  paystackAccountId?: string;
+  accountNumber: string;
+  accountName: string;
+  bankName: string;
+  provider: string;
+  currency: string;
+  active: boolean;
 }
 
 // ---- Notification types ----

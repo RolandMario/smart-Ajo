@@ -43,7 +43,7 @@ npm run seed:resolve-pending-payouts     # backfill helper
 npm run seed:fix-savings-plan-durations  # backfill legacy savings plans missing durationUnit/durationValue
 npm run seed:fix-savings-withdrawal-lock  # clear stale savings withdrawal locks left by a crash
 ```
-`PAYSTACK_SECRET_KEY` and `POST /webhooks/paystack` are required for funding/payouts to resolve outside the manual `GET /wallet/fund/verify/:reference` fallback. Use [ngrok](https://ngrok.com) during local dev to receive webhooks.
+`PAYSTACK_SECRET_KEY` and `POST /webhooks/paystack` are required for funding/payouts to resolve outside the manual `GET /wallet/fund/verify/:reference` fallback. Use [ngrok](https://ngrok.com) during local dev to receive webhooks. Dedicated Virtual Accounts (`GET /wallet/dedicated-account`, `PAYSTACK_DVA_PREFERRED_BANK`) must be enabled on the Paystack business — bank transfers into a member's virtual account arrive as `charge.success` webhooks and are matched to the user by the Paystack customer's phone.
 
 ### `ajo-mobile/`
 ```bash

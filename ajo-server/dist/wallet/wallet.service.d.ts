@@ -2,10 +2,18 @@ import { ClientSession, Connection, Model, Types } from 'mongoose';
 import { WalletDocument } from './schemas/wallet.schema';
 import { WalletTransaction, WalletTransactionDocument } from './schemas/wallet-transaction.schema';
 import { UsersService } from '../users/users.service';
-import { PaystackService, BankListEntry } from '../payments/paystack.service';
+import { DedicatedAccount } from '../users/schemas/dedicated-account.schema';
+import { BankListEntry, PaystackService } from '../payments/paystack.service';
 import { BankAccount } from '../users/schemas/bank-account.schema';
 import { SetBankAccountDto } from './dto/set-bank-account.dto';
 import { NotificationsService } from '../notifications/notifications.service';
+export interface PaginatedWalletTransactions {
+    transactions: WalletTransaction[];
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+}
 export declare class WalletService {
     private walletModel;
     private walletTxModel;
@@ -23,7 +31,17 @@ export declare class WalletService {
         }> & {
             __v: number;
         })[];
+        dedicatedAccount: {
+            paystackCustomerCode: string | undefined;
+            accountNumber: string | undefined;
+            accountName: string | undefined;
+            bankName: string | undefined;
+            provider: string;
+            currency: string;
+            active: boolean;
+        } | null;
     }>;
+    listTransactions(userId: string, page?: number, limit?: number): Promise<PaginatedWalletTransactions>;
     initializeFunding(userId: string, amountNaira: number): Promise<{
         authorizationUrl: string;
         reference: string;
@@ -36,9 +54,28 @@ export declare class WalletService {
         }> & {
             __v: number;
         })[];
+        dedicatedAccount: {
+            paystackCustomerCode: string | undefined;
+            accountNumber: string | undefined;
+            accountName: string | undefined;
+            bankName: string | undefined;
+            provider: string;
+            currency: string;
+            active: boolean;
+        } | null;
     }>;
-    confirmFunding(reference: string, amountNaira: number, metadata?: Record<string, unknown>): Promise<void>;
+    confirmFunding(reference: string, amountNaira: number, metadata?: Record<string, unknown>): Promise<boolean>;
     failFunding(reference: string): Promise<void>;
+    getOrCreateDedicatedAccount(userId: string): Promise<DedicatedAccount>;
+    refreshDedicatedAccount(userId: string): Promise<DedicatedAccount>;
+    creditDedicatedAccountFunding(params: {
+        phone: string;
+        amountNaira: number;
+        reference: string;
+        paystackData?: Record<string, unknown>;
+    }): Promise<boolean>;
+    private splitName;
+    private createPaystackCustomer;
     listBanks(): Promise<BankListEntry[]>;
     setBankAccount(userId: string, dto: SetBankAccountDto): Promise<BankAccount>;
     getBankAccount(userId: string): Promise<BankAccount | null>;

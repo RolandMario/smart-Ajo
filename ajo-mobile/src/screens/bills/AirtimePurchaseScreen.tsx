@@ -6,6 +6,9 @@ import { Screen } from "../../components/Screen";
 import { TextField } from "../../components/TextField";
 import { Button } from "../../components/Button";
 import { ErrorBanner } from "../../components/ErrorBanner";
+import { ContactPicker } from "../../components/ContactPicker";
+import { useAuth } from "../../auth/AuthContext";
+import { e164ToLocalNigeria } from "../../utils/phone";
 import { colors, radii, spacing, typography } from "../../theme";
 
 type Props = NativeStackScreenProps<BillsStackParamList, "AirtimePurchase">;
@@ -14,11 +17,13 @@ const NETWORKS = ["mtn", "glo", "airtel", "9mobile"] as const;
 const PRESETS = [50, 100, 200, 500, 1000];
 
 export function AirtimePurchaseScreen({ navigation }: Props) {
-  const [phone, setPhone] = useState("");
+  const { user } = useAuth();
+  const [phone, setPhone] = useState(() => user?.phone ? e164ToLocalNigeria(user.phone) : "");
   const [network, setNetwork] = useState("");
   const [amount, setAmount] = useState(0);
   const [custom, setCustom] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [contactsOpen, setContactsOpen] = useState(false);
 
   function handleCustom(text: string) {
     setCustom(text);
@@ -43,7 +48,20 @@ export function AirtimePurchaseScreen({ navigation }: Props) {
     <Screen>
       <Text style={styles.title}>Buy Airtime</Text>
       {error && <ErrorBanner message={error} />}
-      <TextField label="Phone Number" placeholder="08012345678" keyboardType="phone-pad" value={phone} onChangeText={setPhone} maxLength={11} />
+      <TextField
+        label="Phone Number"
+        placeholder="08012345678"
+        keyboardType="phone-pad"
+        value={phone}
+        onChangeText={setPhone}
+        maxLength={11}
+        action={{
+          icon: "person",
+          accessibilityLabel: "Pick from contacts",
+          onPress: () => setContactsOpen(true),
+        }}
+      />
+      <ContactPicker visible={contactsOpen} onSelect={setPhone} onClose={() => setContactsOpen(false)} />
       <Text style={styles.label}>Network</Text>
       <View style={styles.row}>
         {NETWORKS.map((n) => (

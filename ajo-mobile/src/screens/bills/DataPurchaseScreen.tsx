@@ -7,6 +7,9 @@ import { TextField } from "../../components/TextField";
 import { Button } from "../../components/Button";
 import { ErrorBanner } from "../../components/ErrorBanner";
 import { LoadingScreen } from "../../components/LoadingScreen";
+import { ContactPicker } from "../../components/ContactPicker";
+import { useAuth } from "../../auth/AuthContext";
+import { e164ToLocalNigeria } from "../../utils/phone";
 import { colors, radii, spacing, typography } from "../../theme";
 import { listDataPlans } from "../../api/bills";
 import { ApiError } from "../../api/api-error";
@@ -103,13 +106,15 @@ function chunk<T>(array: T[], size: number): T[][] {
 }
 
 export function DataPurchaseScreen({ navigation }: Props) {
-  const [phone, setPhone] = useState("");
+  const { user } = useAuth();
+  const [phone, setPhone] = useState(() => user?.phone ? e164ToLocalNigeria(user.phone) : "");
   const [network, setNetwork] = useState("");
   const [plans, setPlans] = useState<DataPlan[]>([]);
   const [selectedPlan, setSelectedPlan] = useState<DataPlan | null>(null);
   const [loadingPlans, setLoadingPlans] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [activeFilter, setActiveFilter] = useState<PlanCategory>("all");
+  const [contactsOpen, setContactsOpen] = useState(false);
 
   async function loadPlans(net: string) {
     setLoadingPlans(true);
@@ -139,9 +144,11 @@ export function DataPurchaseScreen({ navigation }: Props) {
   }
 
   useEffect(() => {
-    if (network) {
-      void loadPlans(network);
-    }
+    if (!network) return;
+    // Defer past the effect body so the loading plans state lands on the
+    // next frame instead of synchronously within the effect.
+    const timer = setTimeout(() => void loadPlans(network), 0);
+    return () => clearTimeout(timer);
   }, [network]);
 
   const availableCategories = useMemo(() => {
@@ -184,7 +191,20 @@ export function DataPurchaseScreen({ navigation }: Props) {
     <Screen>
       <Text style={styles.title}>Buy Data</Text>
       {error && <ErrorBanner message={error} />}
-      <TextField label="Phone Number" placeholder="08012345678" keyboardType="phone-pad" value={phone} onChangeText={setPhone} maxLength={11} />
+      <TextField
+        label="Phone Number"
+        placeholder="08012345678"
+        keyboardType="phone-pad"
+        value={phone}
+        onChangeText={setPhone}
+        maxLength={11}
+        action={{
+          icon: "person",
+          accessibilityLabel: "Pick from contacts",
+          onPress: () => setContactsOpen(true),
+        }}
+      />
+      <ContactPicker visible={contactsOpen} onSelect={setPhone} onClose={() => setContactsOpen(false)} />
       <Text style={styles.label}>Network</Text>
       <View style={styles.row}>
         {NETWORKS.map((n) => (

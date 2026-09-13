@@ -66,6 +66,7 @@ export type WalletStackParamList = {
   CreateSavingsPlan: undefined;
   SavingsPlans: undefined;
   SavingsPlanDetail: { planId: string };
+  Transactions: undefined;
   TransactionReceipt: { transaction: WalletTransaction };
 };
 
@@ -82,6 +83,8 @@ export type ProfileStackParamList = {
   CreateSavingsPlan: undefined;
   SavingsPlans: undefined;
   SavingsPlanDetail: { planId: string };
+  Transactions: undefined;
+  TransactionReceipt: { transaction: WalletTransaction };
   Notifications: undefined;
 };
 

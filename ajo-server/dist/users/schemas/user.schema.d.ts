@@ -1,6 +1,7 @@
 import { Document, Types } from 'mongoose';
 import { Role } from '../../common/enums/role.enum';
 import { BankAccount } from './bank-account.schema';
+import { DedicatedAccount } from './dedicated-account.schema';
 export type UserDocument = User & Document;
 export declare class User {
     _id: Types.ObjectId;
@@ -14,6 +15,7 @@ export declare class User {
     isEmailVerified: boolean;
     isActive: boolean;
     bankAccount?: BankAccount;
+    dedicatedAccount?: DedicatedAccount;
 }
 export declare const UserSchema: import("mongoose").Schema<User, import("mongoose").Model<User, any, any, any, any, any, User>, {}, {}, {}, {}, import("mongoose").DefaultSchemaOptions, User, Document<unknown, {}, User, {
     id: string;
@@ -115,6 +117,15 @@ export declare const UserSchema: import("mongoose").Schema<User, import("mongoos
         id: string;
     }> | undefined;
     bankAccount?: import("mongoose").SchemaDefinitionProperty<BankAccount | undefined, User, Document<unknown, {}, User, {
+        id: string;
+    }, import("mongoose").DefaultSchemaOptions> & Omit<User & Required<{
+        _id: Types.ObjectId;
+    }> & {
+        __v: number;
+    }, "id"> & {
+        id: string;
+    }> | undefined;
+    dedicatedAccount?: import("mongoose").SchemaDefinitionProperty<DedicatedAccount | undefined, User, Document<unknown, {}, User, {
         id: string;
     }, import("mongoose").DefaultSchemaOptions> & Omit<User & Required<{
         _id: Types.ObjectId;

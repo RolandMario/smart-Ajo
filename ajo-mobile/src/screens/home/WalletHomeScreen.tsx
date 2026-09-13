@@ -1,6 +1,5 @@
 import React, { useCallback, useState } from "react";
 import {
-  FlatList,
   Pressable,
   StyleSheet,
   Text,
@@ -15,41 +14,22 @@ import type {
   WalletStackParamList,
 } from "../../navigation/types";
 import { Screen } from "../../components/Screen";
-import { Button } from "../../components/Button";
 import { ErrorBanner } from "../../components/ErrorBanner";
 import { LoadingScreen } from "../../components/LoadingScreen";
 import { ApiError } from "../../api/api-error";
 import { getWalletSummary } from "../../api/wallet";
 import type { WalletSummary } from "../../types/api";
 import { colors, radii, spacing, typography } from "../../theme";
-import { formatNaira, formatDateTime } from "../../utils/format";
+import { formatNaira } from "../../utils/format";
 
 type Props = CompositeScreenProps<
   NativeStackScreenProps<WalletStackParamList, "WalletHome">,
   BottomTabScreenProps<MainTabParamList, "Wallet">
 >;
 
-const TRANSACTION_TYPE_LABELS: Record<string, string> = {
-  funding: "Wallet Funding",
-  contribution_debit: "Contribution",
-  contribution_refund: "Contribution Refund",
-  bill_payment: "Bill Payment",
-  service_fee_debit: "Service Fee",
-  service_fee_credit: "Service Fee Credit",
-  bill_commission_credit: "Bill Commission",
-  admin_credit: "Wallet Credit",
-  admin_withdrawal: "Withdrawal",
-  savings_debit: "Savings",
-};
-
-function transactionTypeLabel(type: string): string {
-  return TRANSACTION_TYPE_LABELS[type] ?? type.replace(/_/g, " ");
-}
-
 export function WalletHomeScreen({ navigation }: Props) {
   const [summary, setSummary] = useState<WalletSummary | null>(null);
   const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   async function fetchData() {
@@ -65,7 +45,6 @@ export function WalletHomeScreen({ navigation }: Props) {
       }
     } finally {
       setLoading(false);
-      setRefreshing(false);
     }
   }
 
@@ -77,6 +56,44 @@ export function WalletHomeScreen({ navigation }: Props) {
   );
 
   if (loading) return <LoadingScreen />;
+
+  const walletActions: WalletCard[] = [
+    {
+      title: "Fund Wallet",
+      subtitle: "Top up your balance",
+      onPress: () => navigation.navigate("FundWallet"),
+      primary: true,
+    },
+    {
+      title: "Transactions",
+      subtitle: "View wallet history",
+      onPress: () => navigation.navigate("Transactions"),
+    },
+    {
+      title: "Bank Account",
+      subtitle: "Manage withdrawals",
+      onPress: () => navigation.navigate("BankAccount"),
+    },
+    {
+      title: "Pay Bills",
+      subtitle: "Airtime, data, cable",
+      onPress: () => navigation.navigate("Bills", { screen: "BillServices" }),
+    },
+  ];
+
+  const savingsActions: WalletCard[] = [
+    {
+      title: "Create Savings",
+      subtitle: "Individual auto-savings",
+      onPress: () => navigation.navigate("CreateSavingsPlan"),
+      primary: true,
+    },
+    {
+      title: "Ajo",
+      subtitle: "Join & run thrift groups",
+      onPress: () => navigation.navigate("GroupsTab", { screen: "GroupsList" }),
+    },
+  ];
 
   return (
     <Screen scrollable={false}>
@@ -92,39 +109,18 @@ export function WalletHomeScreen({ navigation }: Props) {
         {summary && <Text style={styles.currency}>{summary.currency}</Text>}
       </View>
 
-      <View style={styles.actionRow}>
-        <Button
-          title="Fund Wallet"
-          onPress={() => navigation.navigate("FundWallet")}
-          style={styles.actionButton}
-        />
-        <Button
-          title="Bank Account"
-          variant="secondary"
-          onPress={() => navigation.navigate("BankAccount")}
-          style={styles.actionButton}
-        />
-        <Button
-          title="Pay Bills"
-          variant="secondary"
-          onPress={() => navigation.navigate("Bills", { screen: "BillServices" })}
-          style={styles.actionButton}
-        />
+      <View style={styles.grid}>
+        {walletActions.map((card) => (
+          <WalletCardView key={card.title} card={card} />
+        ))}
       </View>
 
-      <View style={styles.savingsRow}>
-        <Button
-          title="Create Savings"
-          onPress={() => navigation.navigate("CreateSavingsPlan")}
-          style={styles.savingsButton}
-        />
-        <Button
-          title="Ajo"
-          variant="secondary"
-          onPress={() => navigation.navigate("GroupsTab", { screen: "GroupsList" })}
-          style={styles.savingsButton}
-        />
+      <View style={styles.grid}>
+        {savingsActions.map((card) => (
+          <WalletCardView key={card.title} card={card} />
+        ))}
       </View>
+
       <Pressable
         style={styles.savingsLink}
         onPress={() => navigation.navigate("SavingsPlans")}
@@ -132,65 +128,49 @@ export function WalletHomeScreen({ navigation }: Props) {
       >
         <Text style={styles.savingsLinkText}>View my savings plans</Text>
       </Pressable>
-
-      <Text style={styles.sectionTitle}>Recent Transactions</Text>
-
-      <FlatList
-        data={summary?.recentTransactions ?? []}
-        keyExtractor={(item) => item._id}
-        refreshing={refreshing}
-        onRefresh={() => {
-          setRefreshing(true);
-          fetchData();
-        }}
-        contentContainerStyle={styles.list}
-        ListEmptyComponent={
-          <View style={styles.empty}>
-            <Text style={styles.emptyText}>No transactions yet</Text>
-          </View>
-        }
-        renderItem={({ item }) => (
-          <Pressable
-            style={({ pressed }) => [styles.transactionRow, pressed && { opacity: 0.7 }]}
-            onPress={() => navigation.navigate("TransactionReceipt", { transaction: item })}
-            accessibilityRole="button"
-            accessibilityLabel={`View receipt for ${transactionTypeLabel(item.type)}`}
-          >
-            <View style={styles.transactionInfo}>
-              <Text style={styles.transactionType}>
-                {transactionTypeLabel(item.type)}
-              </Text>
-              <Text style={styles.transactionDate}>
-                {formatDateTime(item.createdAt)}
-              </Text>
-            </View>
-            <View style={styles.transactionAmount}>
-              <Text
-                style={[
-                  styles.amountText,
-                  {
-                    color:
-                      item.type === "funding"
-                        ? colors.success
-                        : colors.danger,
-                  },
-                ]}
-              >
-                {item.type === "funding" ? "+" : "-"}
-                {formatNaira(item.amount)}
-              </Text>
-              {item.status === "pending" && (
-                <View style={[styles.statusBadge, { backgroundColor: colors.warningSoft }]}>
-                  <Text style={[styles.statusText, { color: colors.warning }]}>
-                    Pending
-                  </Text>
-                </View>
-              )}
-            </View>
-          </Pressable>
-        )}
-      />
     </Screen>
+  );
+}
+
+interface WalletCard {
+  title: string;
+  subtitle: string;
+  onPress: () => void;
+  /** Clay (primary) background card — otherwise the soft-clay secondary card. */
+  primary?: boolean;
+}
+
+function WalletCardView({ card }: { card: WalletCard }) {
+  return (
+    <Pressable
+      style={({ pressed }) => [
+        styles.card,
+        card.primary ? styles.cardPrimary : styles.cardSecondary,
+        pressed && styles.cardPressed,
+      ]}
+      onPress={card.onPress}
+      accessibilityRole="button"
+      accessibilityLabel={card.title}
+    >
+      <Text
+        style={[
+          styles.cardTitle,
+          card.primary ? styles.cardTitleOnPrimary : styles.cardTitleOnSecondary,
+        ]}
+      >
+        {card.title}
+      </Text>
+      <Text
+        style={[
+          styles.cardSubtitle,
+          card.primary
+            ? styles.cardSubtitleOnPrimary
+            : styles.cardSubtitleOnSecondary,
+        ]}
+      >
+        {card.subtitle}
+      </Text>
+    </Pressable>
   );
 }
 
@@ -225,25 +205,54 @@ const styles = StyleSheet.create({
     opacity: 0.7,
     marginTop: spacing.xs,
   },
-  actionRow: {
+  grid: {
     flexDirection: "row",
-    gap: spacing.sm,
+    flexWrap: "wrap",
+    gap: spacing.md,
     marginBottom: spacing.xl,
   },
-  actionButton: {
-    flex: 1,
+  card: {
+    width: "47%",
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    borderColor: colors.line,
+    padding: spacing.lg,
+    alignItems: "center",
   },
-  savingsRow: {
-    flexDirection: "row",
-    gap: spacing.sm,
-    marginBottom: spacing.xl,
+  cardPressed: {
+    opacity: 0.8,
   },
-  savingsButton: {
-    flex: 1,
+  cardPrimary: {
+    backgroundColor: colors.primary,
+  },
+  cardSecondary: {
+    backgroundColor: colors.primarySoft,
+  },
+  cardTitle: {
+    fontSize: typography.sizes.base,
+    fontWeight: typography.weights.semibold,
+    marginBottom: spacing.xs,
+  },
+  cardTitleOnPrimary: {
+    color: colors.white,
+  },
+  cardTitleOnSecondary: {
+    color: colors.primary,
+  },
+  cardSubtitle: {
+    fontSize: typography.sizes.xs,
+    textAlign: "center",
+  },
+  cardSubtitleOnPrimary: {
+    color: colors.white,
+    opacity: 0.85,
+  },
+  cardSubtitleOnSecondary: {
+    color: colors.inkSoft,
   },
   savingsLink: {
     alignSelf: "flex-start",
-    marginTop: -spacing.md,
+    marginTop: spacing.md,
     marginBottom: spacing.lg,
   },
   savingsLinkText: {
@@ -251,67 +260,5 @@ const styles = StyleSheet.create({
     fontWeight: typography.weights.medium,
     color: colors.primary,
     textDecorationLine: "underline",
-  },
-  sectionTitle: {
-    fontSize: typography.sizes.lg,
-    fontWeight: typography.weights.semibold,
-    color: colors.ink,
-    marginBottom: spacing.md,
-  },
-  list: {
-    flexGrow: 1,
-  },
-  empty: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingTop: spacing.xxxl,
-  },
-  emptyText: {
-    fontSize: typography.sizes.base,
-    color: colors.inkSoft,
-  },
-  transactionRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    backgroundColor: colors.surface,
-    borderRadius: radii.md,
-    borderWidth: 1,
-    borderColor: colors.line,
-    padding: spacing.md,
-    marginBottom: spacing.sm,
-  },
-  transactionInfo: {
-    flex: 1,
-    marginRight: spacing.sm,
-  },
-  transactionType: {
-    fontSize: typography.sizes.base,
-    fontWeight: typography.weights.medium,
-    color: colors.ink,
-    textTransform: "capitalize",
-  },
-  transactionDate: {
-    fontSize: typography.sizes.xs,
-    color: colors.inkSoft,
-    marginTop: spacing.xs,
-  },
-  transactionAmount: {
-    alignItems: "flex-end",
-  },
-  amountText: {
-    fontSize: typography.sizes.base,
-    fontWeight: typography.weights.semibold,
-  },
-  statusBadge: {
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 2,
-    borderRadius: radii.sm,
-    marginTop: spacing.xs,
-  },
-  statusText: {
-    fontSize: typography.sizes.xs,
-    fontWeight: typography.weights.medium,
   },
 });

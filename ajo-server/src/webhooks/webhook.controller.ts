@@ -27,7 +27,8 @@ interface PaystackWebhookEvent {
  * configuration that enables this.
  *
  * Events handled:
- *  - charge.success   -> credit the member's wallet (wallet top-up)
+ *  - charge.success   -> credit the member's wallet (card top-up, or a bank
+ *                        transfer into their Dedicated Virtual Account)
  *  - transfer.success -> finalize the cycle payout (mark recipient
  *                        COLLECTED, advance rotation)
  *  - transfer.failed  -> refund the group wallet; payout can be retried
@@ -114,18 +115,57 @@ export class WebhookController {
     const reference = data.reference as string | undefined;
     const amount = data.amount as number | undefined; // kobo
 
-    if (!reference || !amount) {
+    if (!reference || !amount || amount <= 0) {
       this.logger.warn('charge.success missing reference or amount');
       return;
     }
 
-    await this.walletService.confirmFunding(reference, amount / 100, {
-      source: 'webhook',
+    const amountNaira = amount / 100;
+
+    // 1. Card top-up path: reconciles against a PENDING FUNDING ledger
+    // entry created by POST /wallet/fund/initialize.
+    const processedCard = await this.walletService.confirmFunding(
+      reference,
+      amountNaira,
+      {
+        source: 'webhook',
+        paystackData: data,
+      },
+    );
+
+    if (processedCard) {
+      this.logger.log(
+        `Wallet funded via webhook: ref=${reference}, amount=${amountNaira} NGN`,
+      );
+      return;
+    }
+
+    // 2. Dedicated Virtual Account path: an inbound bank transfer into a
+    // member's personal account number. There is no PENDING ledger entry —
+    // the funds already settled — so we credit the wallet directly,
+    // matching the member by the phone attached to the Paystack customer.
+    const customer =
+      (data.customer as Record<string, unknown> | undefined) ?? {};
+    const phone = customer.phone as string | undefined;
+
+    if (!phone) {
+      this.logger.warn(
+        `charge.success ref=${reference}: no matching wallet top-up and no customer phone — skipping`,
+      );
+      return;
+    }
+
+    const credited = await this.walletService.creditDedicatedAccountFunding({
+      phone,
+      amountNaira,
+      reference,
       paystackData: data,
     });
 
     this.logger.log(
-      `Wallet funded via webhook: ref=${reference}, amount=${amount / 100} NGN`,
+      credited
+        ? `Wallet funded via dedicated account: ref=${reference}, amount=${amountNaira} NGN`
+        : `charge.success ref=${reference}: already credited or unknown customer — skipping`,
     );
   }
 
