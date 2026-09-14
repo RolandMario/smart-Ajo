@@ -16,18 +16,34 @@
     ],
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "com.smartenv.ajo"
+      "bundleIdentifier": "com.smartenv.ajo",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSContactsUsageDescription": "Allow Ajo to use your contacts for airtime and data top-ups."
+      }
     },
     "android": {
       "adaptiveIcon": {
+        "backgroundColor": "#FBF6EF",
         "foregroundImage": "./assets/ajo.png",
-        "backgroundColor": "#ffffff"
+        "backgroundImage": "",
+        "monochromeImage": ""
       },
       "package": "com.smartenv.ajo"
     },
     "web": {
       "favicon": "./assets/ajo.png"
     },
+    "plugins": [
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "enableMinifyInReleaseBuilds": true
+          }
+        }
+      ]
+    ],
     "extra": {
       "eas": {
         "projectId": "fc2f1dd9-9b89-4ab5-9169-6fee882de278"
