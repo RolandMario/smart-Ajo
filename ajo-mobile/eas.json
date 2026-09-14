@@ -20,11 +20,19 @@
         "EXPO_PUBLIC_API_BASE_URL": "https://ajo-server.vercel.app"
       },
       "android": {
-        "buildType": "apk"
-      }
+        "buildType": "app-bundle"
+      },
+      "ios": {
+        "resourceClass": "m-medium"
+      },
+       "channel": "production"
     }
   },
   "submit": {
-    "production": {}
+    "production": {
+      "ios": {
+        "ascAppId": "6811710096"
+      }
+    }
   }
 }
