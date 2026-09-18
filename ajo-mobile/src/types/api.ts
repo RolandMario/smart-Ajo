@@ -51,6 +51,7 @@ export interface Group {
   orderLockedAt?: string;
   startDate?: string;
   currentCycleNumber?: number | null;
+  currentRound: number;
   autoCollectEnabled: boolean;
   createdAt: string;
   updatedAt: string;
@@ -144,6 +145,8 @@ export interface Cycle {
   _id: string;
   group: string;
   cycleNumber: number;
+  /** Round of the group this cycle belongs to; cycles restart at 1 each round. */
+  round: number;
   recipientMember: CycleRecipientMember;
   contributionAmount: number;
   totalSlots: number;

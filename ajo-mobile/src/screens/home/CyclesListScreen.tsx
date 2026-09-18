@@ -80,7 +80,7 @@ export function CyclesListScreen({ navigation, route }: Props) {
             >
               <View style={styles.cycleHeader}>
                 <Text style={styles.cycleNumber}>
-                  Cycle {item.cycleNumber}
+                  {item.round > 1 ? `Round ${item.round} ` : ""}Cycle {item.cycleNumber}
                 </Text>
                 <View
                   style={[

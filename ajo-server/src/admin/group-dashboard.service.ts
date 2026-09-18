@@ -134,6 +134,7 @@ export class GroupDashboardService {
     if (group.currentCycleNumber) {
       const currentCycle = await this.cycleModel.findOne({
         group: group._id,
+        round: group.currentRound ?? 1,
         cycleNumber: group.currentCycleNumber,
       });
 
@@ -187,7 +188,7 @@ export class GroupDashboardService {
 
     const cycles = await this.cycleModel
       .find({ group: group._id })
-      .sort({ cycleNumber: 1 })
+      .sort({ round: 1, cycleNumber: 1 })
       .lean();
 
     if (cycles.length === 0) return [];

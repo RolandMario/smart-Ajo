@@ -17,6 +17,7 @@ let Cycle = class Cycle {
     _id;
     group;
     cycleNumber;
+    round;
     recipientMember;
     contributionAmount;
     totalSlots;
@@ -33,6 +34,10 @@ __decorate([
     (0, mongoose_1.Prop)({ required: true, min: 1 }),
     __metadata("design:type", Number)
 ], Cycle.prototype, "cycleNumber", void 0);
+__decorate([
+    (0, mongoose_1.Prop)({ required: true, min: 1, default: 1, index: true }),
+    __metadata("design:type", Number)
+], Cycle.prototype, "round", void 0);
 __decorate([
     (0, mongoose_1.Prop)({ type: mongoose_2.Types.ObjectId, ref: 'GroupMember', required: true }),
     __metadata("design:type", mongoose_2.Types.ObjectId)
@@ -61,5 +66,5 @@ exports.Cycle = Cycle = __decorate([
     (0, mongoose_1.Schema)({ timestamps: true })
 ], Cycle);
 exports.CycleSchema = mongoose_1.SchemaFactory.createForClass(Cycle);
-exports.CycleSchema.index({ group: 1, cycleNumber: 1 }, { unique: true });
+exports.CycleSchema.index({ group: 1, round: 1, cycleNumber: 1 }, { unique: true });
 //# sourceMappingURL=cycle.schema.js.map

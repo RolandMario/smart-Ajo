@@ -116,6 +116,7 @@ export class GroupsService {
 
   private async createCycleWithContributions(
     group: GroupDocument,
+    round: number,
     cycleNumber: number,
     recipientMember: GroupMemberDocument,
     dueDate: Date,
@@ -126,6 +127,7 @@ export class GroupsService {
       [
         {
           group: group._id,
+          round,
           cycleNumber,
           recipientMember: recipientMember._id,
           contributionAmount: group.contributionAmount,
@@ -628,6 +630,11 @@ export class GroupsService {
     const now = new Date();
     const dueDate = this.computeNextDueDate(now, group.frequency);
 
+    // Cycle numbers restart at 1 for each round. Scoping by round keeps
+    // the completed round (cycles 1..N) as history instead of the new
+    // round (cycle 1) colliding on the (group, round, cycleNumber) index.
+    const nextRound = (group.currentRound ?? 1) + 1;
+
     const session = await this.connection.startSession();
 
     try {
@@ -645,6 +652,7 @@ export class GroupsService {
 
         await this.createCycleWithContributions(
           group,
+          nextRound,
           1,
           recipient,
           dueDate,
@@ -654,6 +662,7 @@ export class GroupsService {
 
         group.status = GroupStatus.ACTIVE;
         group.startDate = now;
+        group.currentRound = nextRound;
         group.currentCycleNumber = 1;
         await group.save({ session });
       });

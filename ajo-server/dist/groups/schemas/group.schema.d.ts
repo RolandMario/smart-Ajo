@@ -13,6 +13,7 @@ export declare class Group {
     orderLockedAt?: Date;
     startDate?: Date;
     currentCycleNumber?: number | null;
+    currentRound: number;
     autoCollectEnabled: boolean;
     serviceFee: number;
 }
@@ -116,6 +117,15 @@ export declare const GroupSchema: import("mongoose").Schema<Group, import("mongo
         id: string;
     }> | undefined;
     currentCycleNumber?: import("mongoose").SchemaDefinitionProperty<number | null | undefined, Group, Document<unknown, {}, Group, {
+        id: string;
+    }, import("mongoose").DefaultSchemaOptions> & Omit<Group & Required<{
+        _id: Types.ObjectId;
+    }> & {
+        __v: number;
+    }, "id"> & {
+        id: string;
+    }> | undefined;
+    currentRound?: import("mongoose").SchemaDefinitionProperty<number, Group, Document<unknown, {}, Group, {
         id: string;
     }, import("mongoose").DefaultSchemaOptions> & Omit<Group & Required<{
         _id: Types.ObjectId;

@@ -24,6 +24,16 @@ export class Cycle {
   @Prop({ required: true, min: 1 })
   cycleNumber!: number;
 
+  /**
+   * Which round of the group this cycle belongs to. A completed group
+   * can be continued (POST /groups/:id/continue), which starts the
+   * next round and resets cycle numbers to 1. The round field keeps
+   * each round unique while preserving the full history of earlier
+   * rounds.
+   */
+  @Prop({ required: true, min: 1, default: 1, index: true })
+  round!: number;
+
   @Prop({ type: Types.ObjectId, ref: 'GroupMember', required: true })
   recipientMember!: Types.ObjectId;
 
@@ -51,5 +61,5 @@ export class Cycle {
 
 export const CycleSchema = SchemaFactory.createForClass(Cycle);
 
-// Exactly one cycle per (group, cycleNumber).
-CycleSchema.index({ group: 1, cycleNumber: 1 }, { unique: true });
+// Exactly one cycle per (group, round, cycleNumber).
+CycleSchema.index({ group: 1, round: 1, cycleNumber: 1 }, { unique: true });

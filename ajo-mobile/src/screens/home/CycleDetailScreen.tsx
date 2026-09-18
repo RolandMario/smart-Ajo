@@ -70,7 +70,9 @@ export function CycleDetailScreen({ navigation, route }: Props) {
   return (
     <Screen>
       <ScrollView>
-        <Text style={styles.title}>Cycle #{cycleData.cycleNumber}</Text>
+        <Text style={styles.title}>
+          {cycleData.round > 1 ? `Round ${cycleData.round} ` : ""}Cycle #{cycleData.cycleNumber}
+        </Text>
 
         {error && <ErrorBanner message={error} />}
 

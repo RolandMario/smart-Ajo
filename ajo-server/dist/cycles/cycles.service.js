@@ -78,10 +78,11 @@ let CyclesService = CyclesService_1 = class CyclesService {
         }
         return next;
     }
-    async createCycleWithContributions(group, cycleNumber, recipientMember, dueDate, members, session) {
+    async createCycleWithContributions(group, round, cycleNumber, recipientMember, dueDate, members, session) {
         const [cycle] = await this.cycleModel.create([
             {
                 group: group._id,
+                round,
                 cycleNumber,
                 recipientMember: recipientMember._id,
                 contributionAmount: group.contributionAmount,
@@ -216,9 +217,10 @@ let CyclesService = CyclesService_1 = class CyclesService {
                 await this.groupWalletModel.create([{ group: group._id, balance: 0 }], {
                     session,
                 });
-                await this.createCycleWithContributions(group, 1, recipient, dueDate, members, session);
+                await this.createCycleWithContributions(group, 1, 1, recipient, dueDate, members, session);
                 group.status = group_enum_1.GroupStatus.ACTIVE;
                 group.startDate = now;
+                group.currentRound = 1;
                 group.currentCycleNumber = 1;
                 await group.save({ session });
             });
@@ -245,7 +247,7 @@ let CyclesService = CyclesService_1 = class CyclesService {
             path: 'recipientMember',
             populate: { path: 'user', select: MEMBER_USER_FIELDS },
         })
-            .sort({ cycleNumber: 1 })
+            .sort({ round: 1, cycleNumber: 1 })
             .lean();
         if (cycles.length === 0)
             return [];
@@ -274,6 +276,7 @@ let CyclesService = CyclesService_1 = class CyclesService {
         }
         const cycle = await this.cycleModel.findOne({
             group: group._id,
+            round: group.currentRound ?? 1,
             cycleNumber: group.currentCycleNumber,
         });
         if (!cycle)
@@ -518,7 +521,7 @@ let CyclesService = CyclesService_1 = class CyclesService {
                         .find({ group: group._id, inviteStatus: group_enum_1.InviteStatus.ACCEPTED })
                         .session(session);
                     const nextDue = this.computeNextDueDate(cycle.dueDate, group.frequency);
-                    await this.createCycleWithContributions(group, nextPosition, nextRecipient, nextDue, members, session);
+                    await this.createCycleWithContributions(group, cycle.round, nextPosition, nextRecipient, nextDue, members, session);
                     group.currentCycleNumber = nextPosition;
                     nextCycleCreated = true;
                     nextCycleNumber = nextPosition;
