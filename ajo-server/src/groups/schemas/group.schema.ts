@@ -84,6 +84,15 @@ export class Group {
   currentCycleNumber?: number | null;
 
   /**
+   * Which round of cycles the group is currently on. Starts at 1 when
+   * the group is first activated and increments by 1 each time the
+   * admin continues a COMPLETED group (POST /groups/:id/continue);
+   * cycle numbers reset to 1 at the start of every round.
+   */
+  @Prop({ type: Number, default: 1 })
+  currentRound!: number;
+
+  /**
    * When true, a daily scheduled job (AutoCollectScheduler) attempts to
    * debit every member's wallet for the current cycle's contribution
    * once its dueDate has arrived, without the admin needing to trigger

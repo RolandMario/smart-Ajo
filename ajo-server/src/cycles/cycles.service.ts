@@ -100,6 +100,7 @@ export class CyclesService {
 
   private async createCycleWithContributions(
     group: GroupDocument,
+    round: number,
     cycleNumber: number,
     recipientMember: GroupMemberDocument,
     dueDate: Date,
@@ -110,6 +111,7 @@ export class CyclesService {
       [
         {
           group: group._id,
+          round,
           cycleNumber,
           recipientMember: recipientMember._id,
           contributionAmount: group.contributionAmount,
@@ -343,7 +345,8 @@ export class CyclesService {
 
         await this.createCycleWithContributions(
           group,
-          1,
+          1, // round
+          1, // cycleNumber
           recipient,
           dueDate,
           members,
@@ -352,6 +355,7 @@ export class CyclesService {
 
         group.status = GroupStatus.ACTIVE;
         group.startDate = now;
+        group.currentRound = 1;
         group.currentCycleNumber = 1;
         await group.save({ session });
       });
@@ -385,7 +389,7 @@ export class CyclesService {
         path: 'recipientMember',
         populate: { path: 'user', select: MEMBER_USER_FIELDS },
       })
-      .sort({ cycleNumber: 1 })
+      .sort({ round: 1, cycleNumber: 1 })
       .lean<PopulatedCycle[]>();
 
     if (cycles.length === 0) return [];
@@ -423,6 +427,7 @@ export class CyclesService {
 
     const cycle = await this.cycleModel.findOne({
       group: group._id,
+      round: group.currentRound ?? 1,
       cycleNumber: group.currentCycleNumber,
     });
     if (!cycle) throw new NotFoundException('Current cycle not found');
@@ -842,6 +847,7 @@ export class CyclesService {
 
           await this.createCycleWithContributions(
             group,
+            cycle.round,
             nextPosition,
             nextRecipient,
             nextDue,

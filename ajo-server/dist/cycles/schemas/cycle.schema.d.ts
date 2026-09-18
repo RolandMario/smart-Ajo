@@ -5,6 +5,7 @@ export declare class Cycle {
     _id: Types.ObjectId;
     group: Types.ObjectId;
     cycleNumber: number;
+    round: number;
     recipientMember: Types.ObjectId;
     contributionAmount: number;
     totalSlots: number;
@@ -40,6 +41,15 @@ export declare const CycleSchema: import("mongoose").Schema<Cycle, import("mongo
         id: string;
     }> | undefined;
     cycleNumber?: import("mongoose").SchemaDefinitionProperty<number, Cycle, Document<unknown, {}, Cycle, {
+        id: string;
+    }, import("mongoose").DefaultSchemaOptions> & Omit<Cycle & Required<{
+        _id: Types.ObjectId;
+    }> & {
+        __v: number;
+    }, "id"> & {
+        id: string;
+    }> | undefined;
+    round?: import("mongoose").SchemaDefinitionProperty<number, Cycle, Document<unknown, {}, Cycle, {
         id: string;
     }, import("mongoose").DefaultSchemaOptions> & Omit<Cycle & Required<{
         _id: Types.ObjectId;

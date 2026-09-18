@@ -25,6 +25,7 @@ let Group = class Group {
     orderLockedAt;
     startDate;
     currentCycleNumber;
+    currentRound;
     autoCollectEnabled;
     serviceFee;
 };
@@ -77,6 +78,10 @@ __decorate([
     (0, mongoose_1.Prop)({ type: Number, default: null }),
     __metadata("design:type", Object)
 ], Group.prototype, "currentCycleNumber", void 0);
+__decorate([
+    (0, mongoose_1.Prop)({ type: Number, default: 1 }),
+    __metadata("design:type", Number)
+], Group.prototype, "currentRound", void 0);
 __decorate([
     (0, mongoose_1.Prop)({ default: false }),
     __metadata("design:type", Boolean)

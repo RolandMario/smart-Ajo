@@ -85,10 +85,11 @@ let GroupsService = class GroupsService {
         }
         return next;
     }
-    async createCycleWithContributions(group, cycleNumber, recipientMember, dueDate, members, session) {
+    async createCycleWithContributions(group, round, cycleNumber, recipientMember, dueDate, members, session) {
         const [cycle] = await this.cycleModel.create([
             {
                 group: group._id,
+                round,
                 cycleNumber,
                 recipientMember: recipientMember._id,
                 contributionAmount: group.contributionAmount,
@@ -398,6 +399,7 @@ let GroupsService = class GroupsService {
         await Promise.all(members.map((m) => m.save()));
         const now = new Date();
         const dueDate = this.computeNextDueDate(now, group.frequency);
+        const nextRound = (group.currentRound ?? 1) + 1;
         const session = await this.connection.startSession();
         try {
             await session.withTransaction(async () => {
@@ -407,9 +409,10 @@ let GroupsService = class GroupsService {
                 if (!groupWallet) {
                     [groupWallet] = await this.groupWalletModel.create([{ group: group._id, balance: 0 }], { session });
                 }
-                await this.createCycleWithContributions(group, 1, recipient, dueDate, members, session);
+                await this.createCycleWithContributions(group, nextRound, 1, recipient, dueDate, members, session);
                 group.status = group_enum_1.GroupStatus.ACTIVE;
                 group.startDate = now;
+                group.currentRound = nextRound;
                 group.currentCycleNumber = 1;
                 await group.save({ session });
             });

@@ -97,7 +97,7 @@ let PlatformAdminGroupsService = class PlatformAdminGroupsService {
             this.groupWalletModel.findOne({ group: group._id }).lean(),
             this.cycleModel
                 .find({ group: group._id })
-                .sort({ cycleNumber: 1 })
+                .sort({ round: 1, cycleNumber: 1 })
                 .lean(),
             this.payoutModel
                 .find({ group: group._id })
