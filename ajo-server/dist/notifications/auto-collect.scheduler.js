@@ -18,6 +18,7 @@ const common_1 = require("@nestjs/common");
 const schedule_1 = require("@nestjs/schedule");
 const mongoose_1 = require("@nestjs/mongoose");
 const mongoose_2 = require("mongoose");
+const environment_1 = require("../common/utils/environment");
 const cycle_schema_1 = require("../cycles/schemas/cycle.schema");
 const group_schema_1 = require("../groups/schemas/group.schema");
 const cycles_service_1 = require("../cycles/cycles.service");
@@ -34,6 +35,10 @@ let AutoCollectScheduler = AutoCollectScheduler_1 = class AutoCollectScheduler {
         this.cyclesService = cyclesService;
     }
     async autoCollectDueCycles() {
+        if (!(0, environment_1.inProcessCronsEnabled)()) {
+            this.logger.log('In-process cron disabled (DISABLE_IN_PROCESS_CRONS=true) — Vercel Cron drives this job');
+            return;
+        }
         this.logger.log('Running auto-collect job...');
         const now = new Date();
         const dueCycles = await this.cycleModel.find({

@@ -30,6 +30,36 @@ In development, generated OTP codes are also written to the server logs
 (`[DEV ONLY] OTP for +234...: 123456`) so you can test the flow without a
 live Termii account/credit.
 
+### Scheduled jobs & Vercel Cron
+
+Four jobs run on a schedule (savings auto-debit, group auto-collect,
+contribution reminders, defaulter flagging). On an always-on host they run
+in-process via `@nestjs/schedule`. If you deploy the API to Vercel and drive
+the jobs with [Vercel Cron Jobs](https://vercel.com/docs/cron-jobs) instead,
+the crons in `vercel.json` hit the guarded `GET /cron/*` endpoints.
+
+1. Generate the shared secret: `openssl rand -hex 32`
+2. Set that value as `CRON_SECRET` in **both** places:
+   - the Vercel project's env vars (Vercel attaches it as
+     `Authorization: Bearer <CRON_SECRET>` to every cron request), and
+   - this server's environment (so the `/cron/*` endpoints can verify it).
+3. Where the server runs on Vercel, set `DISABLE_IN_PROCESS_CRONS=true` so the
+   in-process `@nestjs/schedule` jobs don't also fire (duplicate debits!).
+   Keep it `false` on an always-on host where the in-process scheduler is the
+   only trigger.
+4. Deploy and confirm the jobs under Vercel → project → Settings → Cron Jobs.
+
+Mapped endpoints — `GET /cron/savings` (`*/10 * * * *`),
+`GET /cron/auto-collect` (`0 8 * * *`), `GET /cron/reminders` (`0 9 * * *`),
+`GET /cron/defaulters` (`0 10 * * *`). Requests without a matching
+`Authorization: Bearer <CRON_SECRET>` header get `401`.
+
+Local smoke test:
+
+```bash
+curl -i -H "Authorization: Bearer $CRON_SECRET" http://localhost:5010/cron/savings
+```
+
 ### Paystack webhook (required for Phase 4 to fully work)
 
 Wallet funding confirmation and payout finalization both rely on

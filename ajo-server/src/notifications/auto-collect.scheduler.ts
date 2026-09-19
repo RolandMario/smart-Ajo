@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
+import { inProcessCronsEnabled } from '../common/utils/environment';
 import { Cycle, CycleDocument } from '../cycles/schemas/cycle.schema';
 import { Group, GroupDocument } from '../groups/schemas/group.schema';
 import { CyclesService } from '../cycles/cycles.service';
@@ -31,6 +32,12 @@ export class AutoCollectScheduler {
    */
   @Cron(CronExpression.EVERY_DAY_AT_8AM)
   async autoCollectDueCycles(): Promise<void> {
+    if (!inProcessCronsEnabled()) {
+      this.logger.log(
+        'In-process cron disabled (DISABLE_IN_PROCESS_CRONS=true) — Vercel Cron drives this job',
+      );
+      return;
+    }
     this.logger.log('Running auto-collect job...');
 
     const now = new Date();

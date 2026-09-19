@@ -7,6 +7,7 @@ import {
 import { DeviceToken, DeviceTokenSchema } from './schemas/device-token.schema';
 import { NotificationsService } from './notifications.service';
 import { NotificationsController } from './notifications.controller';
+import { NotificationsCronController } from './notifications.cron.controller';
 import { FirebaseService } from './firebase.service';
 import { DeviceTokenService } from './device-token.service';
 import { ReminderScheduler } from './reminder.scheduler';
@@ -16,6 +17,7 @@ import { OtpModule } from '../otp/otp.module';
 import { UsersModule } from '../users/users.module';
 import { GroupsModule } from '../groups/groups.module';
 import { CyclesModule } from '../cycles/cycles.module';
+import { CronAuthGuard } from '../common/guards/cron-auth.guard';
 
 @Module({
   imports: [
@@ -28,7 +30,7 @@ import { CyclesModule } from '../cycles/cycles.module';
     forwardRef(() => GroupsModule), // re-exports Group + GroupMember models
     forwardRef(() => CyclesModule), // re-exports Cycle + Contribution models, CyclesService
   ],
-  controllers: [NotificationsController],
+  controllers: [NotificationsController, NotificationsCronController],
   providers: [
     NotificationsService,
     FirebaseService,
@@ -36,6 +38,7 @@ import { CyclesModule } from '../cycles/cycles.module';
     ReminderScheduler,
     DefaulterScheduler,
     AutoCollectScheduler,
+    CronAuthGuard,
   ],
   exports: [NotificationsService],
 })

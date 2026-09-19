@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
+import { inProcessCronsEnabled } from '../common/utils/environment';
 import { SavingsService } from './savings.service';
 
 /**
@@ -17,6 +18,12 @@ export class SavingsScheduler {
 
   @Cron('*/10 * * * *')
   async processDueSavingPlans(): Promise<void> {
+    if (!inProcessCronsEnabled()) {
+      this.logger.log(
+        'In-process cron disabled (DISABLE_IN_PROCESS_CRONS=true) — Vercel Cron drives this job',
+      );
+      return;
+    }
     try {
       await this.savingsService.processDuePlans();
     } catch (err) {
