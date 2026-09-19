@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
+import { inProcessCronsEnabled } from '../common/utils/environment';
 import { Cycle, CycleDocument } from '../cycles/schemas/cycle.schema';
 import {
   Contribution,
@@ -46,6 +47,12 @@ export class DefaulterScheduler {
    */
   @Cron(CronExpression.EVERY_DAY_AT_10AM)
   async flagDefaulters(): Promise<void> {
+    if (!inProcessCronsEnabled()) {
+      this.logger.log(
+        'In-process cron disabled (DISABLE_IN_PROCESS_CRONS=true) — Vercel Cron drives this job',
+      );
+      return;
+    }
     this.logger.log('Running defaulter flagging job...');
 
     const now = new Date();

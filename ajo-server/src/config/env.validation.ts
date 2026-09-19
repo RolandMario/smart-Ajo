@@ -76,6 +76,20 @@ export const envValidationSchema = Joi.object({
     'https://www.gladtidingsdata.com/api/',
   ),
 
+  // Cron jobs (Vercel Cron, see vercel.json)
+  // Shared secret Vercel sends as `Authorization: Bearer <CRON_SECRET>` on
+  // every cron invocation; the guarded /cron/* endpoints verify it. The SAME
+  // value must exist here and in the Vercel project env vars. Generate with:
+  //   openssl rand -hex 32
+  CRON_SECRET: Joi.string().default(''),
+  // When cron jobs are driven by Vercel Cron, set to 'true' to stop the
+  // in-process @nestjs/schedule jobs from also firing (prevents duplicate
+  // debits/notifications on serverless deployments). Keep 'false' on an
+  // always-on host where the in-process scheduler is the only trigger.
+  DISABLE_IN_PROCESS_CRONS: Joi.string()
+    .valid('true', 'false')
+    .default('false'),
+
   // Seed script
   SEED_PLATFORM_ADMIN_EMAIL: Joi.string().email().default('admin@ajo.app'),
   SEED_PLATFORM_ADMIN_PASSWORD: Joi.string().min(8).default('r@landMari@123'),

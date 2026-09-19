@@ -18,6 +18,7 @@ const common_1 = require("@nestjs/common");
 const schedule_1 = require("@nestjs/schedule");
 const mongoose_1 = require("@nestjs/mongoose");
 const mongoose_2 = require("mongoose");
+const environment_1 = require("../common/utils/environment");
 const cycle_schema_1 = require("../cycles/schemas/cycle.schema");
 const contribution_schema_1 = require("../cycles/schemas/contribution.schema");
 const group_schema_1 = require("../groups/schemas/group.schema");
@@ -44,6 +45,10 @@ let DefaulterScheduler = DefaulterScheduler_1 = class DefaulterScheduler {
         this.usersService = usersService;
     }
     async flagDefaulters() {
+        if (!(0, environment_1.inProcessCronsEnabled)()) {
+            this.logger.log('In-process cron disabled (DISABLE_IN_PROCESS_CRONS=true) — Vercel Cron drives this job');
+            return;
+        }
         this.logger.log('Running defaulter flagging job...');
         const now = new Date();
         const overdueCycles = await this.cycleModel.find({

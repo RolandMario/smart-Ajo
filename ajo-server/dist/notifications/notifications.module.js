@@ -13,6 +13,7 @@ const notification_schema_1 = require("./schemas/notification.schema");
 const device_token_schema_1 = require("./schemas/device-token.schema");
 const notifications_service_1 = require("./notifications.service");
 const notifications_controller_1 = require("./notifications.controller");
+const notifications_cron_controller_1 = require("./notifications.cron.controller");
 const firebase_service_1 = require("./firebase.service");
 const device_token_service_1 = require("./device-token.service");
 const reminder_scheduler_1 = require("./reminder.scheduler");
@@ -22,6 +23,7 @@ const otp_module_1 = require("../otp/otp.module");
 const users_module_1 = require("../users/users.module");
 const groups_module_1 = require("../groups/groups.module");
 const cycles_module_1 = require("../cycles/cycles.module");
+const cron_auth_guard_1 = require("../common/guards/cron-auth.guard");
 let NotificationsModule = class NotificationsModule {
 };
 exports.NotificationsModule = NotificationsModule;
@@ -37,7 +39,7 @@ exports.NotificationsModule = NotificationsModule = __decorate([
             (0, common_1.forwardRef)(() => groups_module_1.GroupsModule),
             (0, common_1.forwardRef)(() => cycles_module_1.CyclesModule),
         ],
-        controllers: [notifications_controller_1.NotificationsController],
+        controllers: [notifications_controller_1.NotificationsController, notifications_cron_controller_1.NotificationsCronController],
         providers: [
             notifications_service_1.NotificationsService,
             firebase_service_1.FirebaseService,
@@ -45,6 +47,7 @@ exports.NotificationsModule = NotificationsModule = __decorate([
             reminder_scheduler_1.ReminderScheduler,
             defaulter_scheduler_1.DefaulterScheduler,
             auto_collect_scheduler_1.AutoCollectScheduler,
+            cron_auth_guard_1.CronAuthGuard,
         ],
         exports: [notifications_service_1.NotificationsService],
     })

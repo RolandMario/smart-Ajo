@@ -1,0 +1,8 @@
+{
+  "crons": [
+    { "path": "/cron/savings", "schedule": "*/10 * * * *" },
+    { "path": "/cron/auto-collect", "schedule": "0 8 * * *" },
+    { "path": "/cron/reminders", "schedule": "0 9 * * *" },
+    { "path": "/cron/defaulters", "schedule": "0 10 * * *" }
+  ]
+}

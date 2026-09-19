@@ -63,6 +63,10 @@ exports.envValidationSchema = Joi.object({
     VTPASS_BASE_URL: Joi.string().default('https://vtpass.com/api/'),
     GLADTIDINGS_API_KEY: Joi.string().default('019471cb4ca75dee7de39307aed863dcc2282fef'),
     GLADTIDINGS_BASE_URL: Joi.string().default('https://www.gladtidingsdata.com/api/'),
+    CRON_SECRET: Joi.string().default(''),
+    DISABLE_IN_PROCESS_CRONS: Joi.string()
+        .valid('true', 'false')
+        .default('false'),
     SEED_PLATFORM_ADMIN_EMAIL: Joi.string().email().default('admin@ajo.app'),
     SEED_PLATFORM_ADMIN_PASSWORD: Joi.string().min(8).default('r@landMari@123'),
     SEED_PLATFORM_ADMIN_PHONE: Joi.string().default('+2347068497569'),
