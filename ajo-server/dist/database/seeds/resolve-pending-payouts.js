@@ -4,9 +4,11 @@ const core_1 = require("@nestjs/core");
 const app_module_1 = require("../../app.module");
 const paystack_service_1 = require("../../payments/paystack.service");
 const cycles_service_1 = require("../../cycles/cycles.service");
+const donations_service_1 = require("../../donations/donations.service");
 const mongoose_1 = require("@nestjs/mongoose");
 const payout_schema_1 = require("../../cycles/schemas/payout.schema");
 const cycle_schema_1 = require("../../cycles/schemas/cycle.schema");
+const donation_payout_schema_1 = require("../../donations/schemas/donation-payout.schema");
 const wallet_enum_1 = require("../../common/enums/wallet.enum");
 async function run() {
     const app = await core_1.NestFactory.createApplicationContext(app_module_1.AppModule);
@@ -21,6 +23,8 @@ async function run() {
         const cycleModel = app.get((0, mongoose_1.getModelToken)(cycle_schema_1.Cycle.name));
         const groupModel = app.get((0, mongoose_1.getModelToken)('Group'));
         const cyclesService = app.get(cycles_service_1.CyclesService);
+        const donationPayoutModel = app.get((0, mongoose_1.getModelToken)(donation_payout_schema_1.DonationPayout.name));
+        const donationsService = app.get(donations_service_1.DonationsService);
         const pendingPayouts = await payoutModel.find({
             status: wallet_enum_1.TransferStatus.PENDING,
         });
@@ -56,6 +60,28 @@ async function run() {
             catch (err) {
                 console.error(`  Failed to finalize payout ${payoutDoc._id.toString()}: ${String(err)}`);
             }
+        }
+        const pendingDonationPayouts = await donationPayoutModel.find({
+            status: wallet_enum_1.TransferStatus.PENDING,
+        });
+        console.log(`Found ${pendingDonationPayouts.length} pending pool donation payout(s).`);
+        for (const payoutDoc of pendingDonationPayouts) {
+            if (!payoutDoc.paystackTransferCode) {
+                console.log(`  Skipping pool payout ${payoutDoc._id.toString()} — no paystackTransferCode`);
+                continue;
+            }
+            console.log(`  Resolving OTP for pool payout ${payoutDoc._id.toString()} (transfer: ${payoutDoc.paystackTransferCode})...`);
+            try {
+                await paystack.resolveOtp(payoutDoc.paystackTransferCode, paystack.testTransferOtp());
+                console.log('  OTP resolved successfully.');
+            }
+            catch (err) {
+                console.warn(`  OTP resolution failed (${String(err)}). Finalizing directly since we're in test mode.`);
+            }
+            const handled = await donationsService.completePayout(payoutDoc.paystackReference);
+            console.log(handled
+                ? `  ✅ Pool payout ${payoutDoc._id.toString()} finalized.`
+                : `  Skipping pool payout ${payoutDoc._id.toString()} — already finalized.`);
         }
         console.log('Done.');
     }

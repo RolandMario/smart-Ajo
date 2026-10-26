@@ -42,7 +42,6 @@ export interface Group {
   orderLockedAt?: string;
   startDate?: string;
   currentCycleNumber?: number | null;
-  autoCollectEnabled: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -141,11 +140,11 @@ export interface PlatformGroupListItem {
   id: string;
   name: string;
   status: GroupStatus;
+  joinCode: string;
   contributionAmount: number;
   frequency: ContributionFrequency;
   totalSlots: number;
   rotationMethod: RotationMethod;
-  autoCollectEnabled: boolean;
   currentCycleNumber: number | null;
   createdAt: string;
 }
@@ -178,6 +177,8 @@ export interface GroupCycleSummary {
   paidCount: number;
   defaultedCount: number;
   pendingCount: number;
+  /** Members who reported a bank transfer the group admin hasn't verified. */
+  awaitingConfirmationCount: number;
   completedAt?: string;
 }
 
@@ -196,16 +197,25 @@ export interface PlatformGroupDetail {
   id: string;
   name: string;
   status: GroupStatus;
+  joinCode: string;
   contributionAmount: number;
   frequency: ContributionFrequency;
   totalSlots: number;
   rotationMethod: RotationMethod;
-  autoCollectEnabled: boolean;
   currentCycleNumber: number | null;
   orderLockedAt?: string;
   startDate?: string;
   centralWalletBalance: number;
   serviceFee: number;
+  /** The group's escrow DVA (bank-transfer destination), once provisioned. */
+  escrowAccount?: {
+    bankName: string;
+    accountName: string;
+    accountNumber: string;
+    provider: string;
+    currency: string;
+    active: boolean;
+  };
   admin?: { id: string; name?: string; phone: string };
   members: GroupMemberStanding[];
   cycles: GroupCycleSummary[];
@@ -358,6 +368,32 @@ export interface PaginatedBillServicePlans {
   limit: number;
   total: number;
   totalPages: number;
+}
+
+// ---- Platform admin: Service charges (configurable platform fees) -----------
+
+/** Platform-wide service-charge rates, as percentages (e.g. 2.5 = 2.5%). */
+export interface ServiceCharges {
+  /** Charged on wallet -> escrow transfers (contributions & donations). */
+  escrowTransferFeePercent: number;
+  /** Charged on bank payouts (cycle payouts & donation pool payouts). */
+  payoutFeePercent: number;
+}
+
+/**
+ * Service-charge totals collected by the platform — the "balance" the
+ * Financial Oversight → Service Charges tab leads with. Mirrors
+ * `GET /admin/finance/service-charge-totals`.
+ */
+export interface ServiceChargeTotals {
+  /** Gross service fees collected (transfer fees + payout fees). */
+  totalCollected: number;
+  /** Fees refunded when a contribution or payout was reversed. */
+  totalReversed: number;
+  /** `totalCollected - totalReversed` — the service-charge balance. */
+  netCollected: number;
+  /** How many charges make up `totalCollected`. */
+  chargeCount: number;
 }
 
 // ---- Platform admin: Bill transactions & receipts --------------------------

@@ -18,7 +18,6 @@ const firebase_service_1 = require("./firebase.service");
 const device_token_service_1 = require("./device-token.service");
 const reminder_scheduler_1 = require("./reminder.scheduler");
 const defaulter_scheduler_1 = require("./defaulter.scheduler");
-const auto_collect_scheduler_1 = require("./auto-collect.scheduler");
 const otp_module_1 = require("../otp/otp.module");
 const users_module_1 = require("../users/users.module");
 const groups_module_1 = require("../groups/groups.module");
@@ -46,7 +45,6 @@ exports.NotificationsModule = NotificationsModule = __decorate([
             device_token_service_1.DeviceTokenService,
             reminder_scheduler_1.ReminderScheduler,
             defaulter_scheduler_1.DefaulterScheduler,
-            auto_collect_scheduler_1.AutoCollectScheduler,
             cron_auth_guard_1.CronAuthGuard,
         ],
         exports: [notifications_service_1.NotificationsService],

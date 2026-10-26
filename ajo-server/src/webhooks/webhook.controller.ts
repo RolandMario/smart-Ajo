@@ -11,7 +11,9 @@ import { Request } from 'express';
 import { PaystackService } from '../payments/paystack.service';
 import { WalletService } from '../wallet/wallet.service';
 import { CyclesService } from '../cycles/cycles.service';
+import { EscrowService } from '../cycles/escrow.service';
 import { SavingsService } from '../savings/savings.service';
+import { DonationsService } from '../donations/donations.service';
 import { TransferStatus } from '../common/enums/wallet.enum';
 
 interface PaystackWebhookEvent {
@@ -27,12 +29,16 @@ interface PaystackWebhookEvent {
  * configuration that enables this.
  *
  * Events handled:
- *  - charge.success   -> credit the member's wallet (card top-up, or a bank
- *                        transfer into their Dedicated Virtual Account)
+ *  - charge.success   -> escrow deposit (a transfer into a group's escrow
+ *                        DVA), else a member's wallet top-up (card top-up or
+ *                        a transfer into their personal Dedicated Virtual
+ *                        Account)
  *  - transfer.success -> finalize the cycle payout (mark recipient
- *                        COLLECTED, advance rotation)
- *  - transfer.failed  -> refund the group wallet; payout can be retried
- *  - transfer.reversed-> refund the group wallet
+ *                        COLLECTED, advance rotation), an individual savings
+ *                        withdrawal, or a pool donation payout
+ *  - transfer.failed  -> refund the group wallet / savings plan / pool escrow;
+ *                        payout can be retried
+ *  - transfer.reversed-> refund the group wallet / savings plan / pool escrow
  */
 @Controller('webhooks/paystack')
 export class WebhookController {
@@ -42,7 +48,9 @@ export class WebhookController {
     private paystack: PaystackService,
     private walletService: WalletService,
     private cyclesService: CyclesService,
+    private escrowService: EscrowService,
     private savingsService: SavingsService,
+    private donationsService: DonationsService,
   ) {}
 
   @Post()
@@ -140,7 +148,29 @@ export class WebhookController {
       return;
     }
 
-    // 2. Dedicated Virtual Account path: an inbound bank transfer into a
+    // 2. Group escrow path: an inbound transfer into a group's Dedicated
+    // Virtual Account. Recorded as an EscrowDeposit and credited to the
+    // group's central wallet immediately, then reconciled by the group
+    // admin. Checked before the member-wallet path because both arrive as
+    // DVAs — the group's Paystack customer code disambiguates them.
+    const { customerCode, accountNumber } = this.extractEscrowIdentifiers(data);
+
+    const escrowHandled = await this.escrowService.creditEscrowDeposit({
+      customerCode,
+      accountNumber,
+      amountNaira,
+      reference,
+      paystackData: data,
+    });
+
+    if (escrowHandled) {
+      this.logger.log(
+        `Escrow deposit credited: ref=${reference}, amount=${amountNaira} NGN`,
+      );
+      return;
+    }
+
+    // 3. Dedicated Virtual Account path: an inbound bank transfer into a
     // member's personal account number. There is no PENDING ledger entry —
     // the funds already settled — so we credit the wallet directly,
     // matching the member by the phone attached to the Paystack customer.
@@ -169,6 +199,37 @@ export class WebhookController {
     );
   }
 
+  /**
+   * Pulls the Paystack customer code and receiving account number out of a
+   * `charge.success` payload so an inbound escrow transfer can be routed to
+   * the right group. Paystack exposes these in slightly different places
+   * depending on the account type, so the most specific source wins.
+   */
+  private extractEscrowIdentifiers(data: Record<string, unknown>): {
+    customerCode?: string;
+    accountNumber?: string;
+  } {
+    const customer =
+      (data.customer as Record<string, unknown> | undefined) ?? {};
+    const authorization =
+      (data.authorization as Record<string, unknown> | undefined) ?? {};
+    const dedicated =
+      (data.dedicated_account as Record<string, unknown> | undefined) ?? {};
+
+    const asString = (value: unknown): string | undefined =>
+      typeof value === 'string' && value.trim().length > 0 ? value : undefined;
+
+    return {
+      customerCode:
+        asString(customer.customer_code) ?? asString(data.customer_code),
+      accountNumber:
+        asString(dedicated.account_number) ??
+        asString(data.receiver_bank_account_number) ??
+        asString(authorization.receiver_bank_account_number) ??
+        asString(data.account_number),
+    };
+  }
+
   // ---- transfer.success ------------------------------------------------------
 
   private async handleTransferSuccess(
@@ -194,6 +255,14 @@ export class WebhookController {
           `Savings withdrawal finalized via webhook: ref=${reference}`,
         );
         await this.savingsService.completeWithdrawal(reference);
+        return;
+      }
+
+      // Pool donation payout?
+      if (await this.donationsService.completePayout(reference)) {
+        this.logger.log(
+          `Pool donation payout finalized via webhook: ref=${reference}`,
+        );
         return;
       }
 
@@ -250,17 +319,21 @@ export class WebhookController {
     const payout = await this.cyclesService.findPayoutByReference(reference);
 
     if (!payout) {
+      const reason = (data.reason as string | undefined) ?? 'Transfer failed';
       // Not a cycle payout — check for an individual savings withdrawal.
       const savingPlan =
         await this.savingsService.findSavingPlanByWithdrawalReference(
           reference,
         );
       if (savingPlan) {
-        const reason = (data.reason as string | undefined) ?? 'Transfer failed';
         this.logger.warn(
           `Savings withdrawal failed via webhook: ref=${reference}, reason=${reason}`,
         );
         await this.savingsService.failWithdrawal(reference, reason);
+      } else if (await this.donationsService.failPayout(reference, reason)) {
+        this.logger.warn(
+          `Pool donation payout failed via webhook: ref=${reference}, reason=${reason}`,
+        );
       } else {
         this.logger.warn(
           `transfer.failed: no payout found for reference ${reference}`,
@@ -309,6 +382,10 @@ export class WebhookController {
           `Savings withdrawal reversed via webhook: ref=${reference}`,
         );
         await this.savingsService.failWithdrawal(reference, 'Reversed');
+      } else if (await this.donationsService.reversePayout(reference)) {
+        this.logger.warn(
+          `Pool donation payout reversed via webhook: ref=${reference}`,
+        );
       }
       return;
     }

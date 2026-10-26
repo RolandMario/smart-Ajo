@@ -137,12 +137,12 @@ const styles = StyleSheet.create({
   title: {
     fontSize: typography.sizes.xxxl,
     fontWeight: typography.weights.bold,
-    color: colors.ink,
+    color: colors.forestLightInk,
     marginBottom: spacing.sm,
   },
   subtitle: {
     fontSize: typography.sizes.base,
-    color: colors.inkSoft,
+    color: colors.forestLightInkSoft,
     lineHeight: 22,
   },
   backLink: {
@@ -151,7 +151,7 @@ const styles = StyleSheet.create({
   },
   backLinkText: {
     fontSize: typography.sizes.sm,
-    color: colors.primary,
+    color: colors.forestAction,
     fontWeight: typography.weights.semibold,
   },
 });

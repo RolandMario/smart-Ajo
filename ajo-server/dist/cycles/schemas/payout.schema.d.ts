@@ -9,6 +9,8 @@ export declare class Payout {
     recipientUser: Types.ObjectId;
     initiatedBy: Types.ObjectId;
     amount: number;
+    fee: number;
+    netAmount: number;
     status: TransferStatus;
     paystackTransferCode?: string;
     paystackReference: string;
@@ -79,6 +81,24 @@ export declare const PayoutSchema: import("mongoose").Schema<Payout, import("mon
         id: string;
     }> | undefined;
     amount?: import("mongoose").SchemaDefinitionProperty<number, Payout, Document<unknown, {}, Payout, {
+        id: string;
+    }, import("mongoose").DefaultSchemaOptions> & Omit<Payout & Required<{
+        _id: Types.ObjectId;
+    }> & {
+        __v: number;
+    }, "id"> & {
+        id: string;
+    }> | undefined;
+    fee?: import("mongoose").SchemaDefinitionProperty<number, Payout, Document<unknown, {}, Payout, {
+        id: string;
+    }, import("mongoose").DefaultSchemaOptions> & Omit<Payout & Required<{
+        _id: Types.ObjectId;
+    }> & {
+        __v: number;
+    }, "id"> & {
+        id: string;
+    }> | undefined;
+    netAmount?: import("mongoose").SchemaDefinitionProperty<number, Payout, Document<unknown, {}, Payout, {
         id: string;
     }, import("mongoose").DefaultSchemaOptions> & Omit<Payout & Required<{
         _id: Types.ObjectId;

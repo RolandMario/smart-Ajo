@@ -46,7 +46,7 @@ exports.envValidationSchema = Joi.object({
     TERMII_API_KEY: Joi.string().default('TLeWnCGAOlasJpRQHvJHBuvEJMdOpmgYMmcaNHNBmNXGWBXhzleuBEhNeVdSOt'),
     TERMII_SENDER_ID: Joi.string().default('OE Alert'),
     TERMII_BASE_URL: Joi.string().default('https://v4.api.termii.com/'),
-    PAYSTACK_SECRET_KEY: Joi.string().default('sk_test_f6436553a3e96c17fd447658dbde28b42ed70af7'),
+    PAYSTACK_SECRET_KEY: Joi.string().allow('').optional(),
     PAYSTACK_BASE_URL: Joi.string().default('https://api.paystack.co'),
     PAYSTACK_TRANSFER_OTP: Joi.string().default('123456'),
     PAYSTACK_DVA_PREFERRED_BANK: Joi.string().default('wema'),

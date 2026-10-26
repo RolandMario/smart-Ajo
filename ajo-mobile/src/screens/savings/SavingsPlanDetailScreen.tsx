@@ -2,16 +2,19 @@ import React, { useCallback, useState } from "react";
 import { Alert, ScrollView, StyleSheet, Text, View } from "react-native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useFocusEffect } from "@react-navigation/native";
-import type { WalletStackParamList } from "../../navigation/types";
+import type { SavingsStackParamList } from "../../navigation/types";
 import { Screen } from "../../components/Screen";
 import { Button } from "../../components/Button";
 import { ErrorBanner } from "../../components/ErrorBanner";
 import { LoadingScreen } from "../../components/LoadingScreen";
+import { Pagination } from "../../components/Pagination";
 import { ApiError } from "../../api/api-error";
 import {
+  SAVING_ACTIVITY_PAGE_SIZE,
   continueSavingPlan,
   deleteSavingPlan,
   getSavingPlan,
+  paySavingPlan,
   withdrawSavingPlan,
 } from "../../api/savings";
 import type { SavingPlanDetail as SavingPlanDetailType } from "../../types/api";
@@ -23,7 +26,7 @@ import {
   formatDateTime,
 } from "../../utils/format";
 
-type Props = NativeStackScreenProps<WalletStackParamList, "SavingsPlanDetail">;
+type Props = NativeStackScreenProps<SavingsStackParamList, "SavingsPlanDetail">;
 
 function statusLabel(status: string): { text: string; ready: boolean } {
   switch (status) {
@@ -46,36 +49,96 @@ export function SavingsPlanDetailScreen({ navigation, route }: Props) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  // "Recent activity" is paginated 10 rows at a time ("Page 1 of N").
+  const [txPage, setTxPage] = useState(1);
+  const [txTotal, setTxTotal] = useState(0);
+  const [txPaging, setTxPaging] = useState(false);
 
-  async function fetchData(showLoading = false) {
-    if (showLoading) setLoading(true);
-    try {
-      const data = await getSavingPlan(planId);
-      setDetail(data);
-      setError(null);
-    } catch (err) {
-      if (err instanceof ApiError) {
-        setError(err.message);
-      } else {
-        setError("Failed to load savings plan");
-      }
-    } finally {
-      if (showLoading) setLoading(false);
-    }
+  /** Applies a detail payload (from a fetch or an action) + pager metadata. */
+  function applyDetail(data: SavingPlanDetailType) {
+    setDetail(data);
+    setTxPage(data.page ?? 1);
+    setTxTotal(data.total ?? data.transactions.length);
   }
+
+  const fetchData = useCallback(
+    async (page = 1, showLoading = false) => {
+      if (showLoading) setLoading(true);
+      try {
+        const data = await getSavingPlan(planId, page);
+        setDetail(data);
+        setTxPage(data.page ?? page);
+        setTxTotal(data.total ?? data.transactions.length);
+        setError(null);
+      } catch (err) {
+        if (err instanceof ApiError) {
+          setError(err.message);
+        } else {
+          setError("Failed to load savings plan");
+        }
+      } finally {
+        if (showLoading) setLoading(false);
+      }
+    },
+    [planId],
+  );
 
   useFocusEffect(
     useCallback(() => {
-      fetchData(true);
-    }, [planId]),
+      void fetchData(1, true);
+    }, [fetchData]),
   );
+
+  async function handleActivityPage(next: number) {
+    setTxPaging(true);
+    try {
+      await fetchData(next);
+    } finally {
+      setTxPaging(false);
+    }
+  }
+
+  async function handlePay() {
+    if (!detail) return;
+    const current = detail.plan;
+
+    Alert.alert(
+      "Pay from wallet?",
+      `${formatNaira(current.amount)} will be moved from your Ajo wallet into "${current.name}".`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Pay",
+          onPress: async () => {
+            setError(null);
+            setBusy(true);
+            try {
+              const data = await paySavingPlan(planId);
+              applyDetail(data);
+              if (data.plan.status === "completed") {
+                Alert.alert(
+                  "Cycle complete",
+                  `Your ${formatNaira(data.plan.savingsBalance)} savings are ready to withdraw.`,
+                );
+              }
+            } catch (err) {
+              if (err instanceof ApiError) setError(err.message);
+              else setError("Payment failed. Please try again.");
+            } finally {
+              setBusy(false);
+            }
+          },
+        },
+      ],
+    );
+  }
 
   async function handleWithdraw() {
     setError(null);
     setBusy(true);
     try {
       const data = await withdrawSavingPlan(planId);
-      setDetail(data);
+      applyDetail(data);
       if (data.plan.status === "withdrawn") {
         Alert.alert(
           "Withdrawal Successful",
@@ -101,7 +164,7 @@ export function SavingsPlanDetailScreen({ navigation, route }: Props) {
   function handleContinue() {
     Alert.alert(
       "Continue Savings Plan?",
-      "A new cycle will start and Ajo will begin auto-saving again. Continue?",
+      "A new cycle will start. You'll keep funding each interval from your wallet. Continue?",
       [
         { text: "Cancel", style: "cancel" },
         {
@@ -111,7 +174,7 @@ export function SavingsPlanDetailScreen({ navigation, route }: Props) {
             setBusy(true);
             try {
               const data = await continueSavingPlan(planId);
-              setDetail(data);
+              applyDetail(data);
             } catch (err) {
               if (err instanceof ApiError) setError(err.message);
               else setError("Could not continue the plan.");
@@ -133,7 +196,7 @@ export function SavingsPlanDetailScreen({ navigation, route }: Props) {
     Alert.alert(
       "Delete Savings Plan?",
       noSavingsYet
-        ? "No savings have been collected yet. Deleting will cancel this plan and its future auto-savings. Continue?"
+        ? "No payments have been made yet. Deleting will cancel this plan. Continue?"
         : "This will permanently delete the savings plan account. Your saved money has already been withdrawn. Continue?",
       [
         { text: "Cancel", style: "cancel" },
@@ -173,7 +236,19 @@ export function SavingsPlanDetailScreen({ navigation, route }: Props) {
 
   const plan = detail.plan;
   const status = statusLabel(plan.status);
-  const progress = plan.collectedCount / plan.intervalCount;
+  // Mid-cycle plans created before the schedule was snapshotted can have no
+  // intervalCount. Treat those as "schedule unknown" instead of dividing by
+  // zero (progress NaN) and hiding the Pay button forever.
+  const intervalCount = plan.intervalCount ?? 0;
+  const hasSchedule = intervalCount > 0;
+  const progress = hasSchedule
+    ? Math.min(plan.collectedCount / intervalCount, 1)
+    : 0;
+  const paymentsLeft = hasSchedule
+    ? Math.max(intervalCount - plan.collectedCount, 0)
+    : 1;
+  const canPay =
+    plan.status === "active" && (hasSchedule ? paymentsLeft > 0 : true);
   const durationLabel =
     plan.durationUnit && plan.durationValue
       ? formatDuration(plan.durationUnit, plan.durationValue)
@@ -210,18 +285,39 @@ export function SavingsPlanDetailScreen({ navigation, route }: Props) {
           <View style={[styles.progressFill, { width: `${progress * 100}%` }]} />
         </View>
         <Text style={styles.progressText}>
-          {plan.collectedCount} of {plan.intervalCount} intervals collected
+          {hasSchedule
+            ? `${plan.collectedCount} of ${intervalCount} intervals collected`
+            : `${plan.collectedCount} interval${plan.collectedCount === 1 ? "" : "s"} collected`}
         </Text>
         <Text style={styles.metaText}>
           Cycle #{plan.cycleNumber} · Status: {status.text}
         </Text>
         <Text style={styles.metaText}>
           {plan.status === "active"
-            ? `Next auto-save: ${formatDateTime(plan.nextDueAt)}`
+            ? `Next payment due: ${formatDateTime(plan.nextDueAt)}`
             : `Started ${formatDate(plan.startAt)}${
                 plan.endAt ? ` · Finished ${formatDate(plan.endAt)}` : ""
               }`}
         </Text>
+
+        {canPay && (
+          <View style={styles.payCard}>
+            <Text style={styles.payTitle}>Fund this plan</Text>
+            <Text style={styles.payText}>
+              {hasSchedule
+                ? `${paymentsLeft} payment${paymentsLeft === 1 ? "" : "s"} left · `
+                : ""}
+              {formatNaira(plan.amount)} per {plan.frequency} interval, paid
+              from your Ajo wallet. Nothing is debited automatically.
+            </Text>
+            <Button
+              title={`Pay ${formatNaira(plan.amount)} from wallet`}
+              onPress={handlePay}
+              loading={busy}
+              style={styles.actionButton}
+            />
+          </View>
+        )}
 
         {plan.status === "active" &&
           plan.collectedCount === 0 &&
@@ -291,6 +387,21 @@ export function SavingsPlanDetailScreen({ navigation, route }: Props) {
             </View>
           ))
         )}
+
+        <Pagination
+          page={txPage}
+          pageCount={Math.max(
+            1,
+            Math.ceil(txTotal / SAVING_ACTIVITY_PAGE_SIZE),
+          )}
+          total={txTotal}
+          pageSize={SAVING_ACTIVITY_PAGE_SIZE}
+          loading={txPaging}
+          onChange={(next) => {
+            void handleActivityPage(next);
+          }}
+          style={styles.pagination}
+        />
       </ScrollView>
     </Screen>
   );
@@ -299,7 +410,7 @@ export function SavingsPlanDetailScreen({ navigation, route }: Props) {
 function txTypeLabel(type: string): string {
   switch (type) {
     case "saving_debit":
-      return "Auto-savings collected";
+      return "Paid from wallet";
     case "saving_withdrawal":
       return "Withdrawal to bank";
     case "saving_refund":
@@ -316,7 +427,7 @@ const styles = StyleSheet.create({
   title: {
     fontSize: typography.sizes.xxl,
     fontWeight: typography.weights.bold,
-    color: colors.ink,
+    color: colors.forestLightInk,
     marginBottom: spacing.sm,
   },
   readyBadge: {
@@ -331,7 +442,7 @@ const styles = StyleSheet.create({
     fontWeight: typography.weights.medium,
   },
   balanceCard: {
-    backgroundColor: colors.primary,
+    backgroundColor: colors.forestAction,
     borderRadius: radii.xl,
     padding: spacing.xl,
     marginVertical: spacing.md,
@@ -357,39 +468,57 @@ const styles = StyleSheet.create({
   progressBar: {
     height: 10,
     borderRadius: radii.full,
-    backgroundColor: colors.surfaceSunken,
+    backgroundColor: colors.forestLightField,
     overflow: "hidden",
     marginVertical: spacing.sm,
   },
   progressFill: {
     height: "100%",
     borderRadius: radii.full,
-    backgroundColor: colors.primary,
+    backgroundColor: colors.forestAction,
   },
   progressText: {
     fontSize: typography.sizes.sm,
-    color: colors.inkSoft,
+    color: colors.forestLightInkSoft,
     marginBottom: spacing.xs,
   },
   metaText: {
     fontSize: typography.sizes.xs,
-    color: colors.inkFaint,
+    color: colors.forestLightInkFaint,
     marginBottom: spacing.xs,
   },
   actionButton: {
     marginTop: spacing.lg,
   },
-  continueCard: {
-    backgroundColor: colors.surface,
+  payCard: {
+    backgroundColor: colors.white,
     borderRadius: radii.lg,
     borderWidth: 1,
-    borderColor: colors.line,
+    borderColor: colors.forestLightLine,
+    padding: spacing.lg,
+    marginTop: spacing.lg,
+  },
+  payTitle: {
+    fontSize: typography.sizes.lg,
+    fontWeight: typography.weights.semibold,
+    color: colors.forestLightInk,
+    marginBottom: spacing.xs,
+  },
+  payText: {
+    fontSize: typography.sizes.sm,
+    color: colors.forestLightInkSoft,
+  },
+  continueCard: {
+    backgroundColor: colors.white,
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    borderColor: colors.forestLightLine,
     padding: spacing.lg,
     marginTop: spacing.lg,
   },
   continueText: {
     fontSize: typography.sizes.base,
-    color: colors.inkSoft,
+    color: colors.forestLightInkSoft,
     marginBottom: spacing.md,
   },
   continueButton: {
@@ -398,22 +527,25 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: typography.sizes.lg,
     fontWeight: typography.weights.semibold,
-    color: colors.ink,
+    color: colors.forestLightInk,
     marginTop: spacing.xl,
     marginBottom: spacing.md,
   },
+  pagination: {
+    paddingBottom: spacing.md,
+  },
   emptyText: {
     fontSize: typography.sizes.base,
-    color: colors.inkSoft,
+    color: colors.forestLightInkSoft,
   },
   txRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    backgroundColor: colors.surface,
+    backgroundColor: colors.white,
     borderRadius: radii.md,
     borderWidth: 1,
-    borderColor: colors.line,
+    borderColor: colors.forestLightLine,
     padding: spacing.md,
     marginBottom: spacing.sm,
   },
@@ -424,11 +556,11 @@ const styles = StyleSheet.create({
   txType: {
     fontSize: typography.sizes.base,
     fontWeight: typography.weights.medium,
-    color: colors.ink,
+    color: colors.forestLightInk,
   },
   txDate: {
     fontSize: typography.sizes.xs,
-    color: colors.inkSoft,
+    color: colors.forestLightInkSoft,
     marginTop: spacing.xs,
   },
   txAmount: {

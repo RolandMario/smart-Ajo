@@ -50,6 +50,20 @@ export class WalletService {
     private notificationsService: NotificationsService,
   ) {}
 
+  // ---- Shared error helpers -------------------------------------------------
+
+  /** Mongo duplicate-key error (E11000), possibly wrapped by the driver. */
+  private isDuplicateKeyError(err: unknown): boolean {
+    const error = err as {
+      code?: number | string;
+      message?: string;
+      err?: { code?: number | string };
+    } | null;
+    const code = error?.code ?? error?.err?.code;
+    const message = String(error?.message ?? err);
+    return code === 11000 || code === '11000' || message.includes('E11000');
+  }
+
   // ---- Wallet basics ---------------------------------------------------------
 
   async getOrCreateWallet(userId: string): Promise<WalletDocument> {
@@ -639,14 +653,10 @@ export class WalletService {
 
     try {
       await this.walletTxModel.create(transactions, { session, ordered: true });
-    } catch (err: any) {
+    } catch (err) {
       // Race condition: another session created the same reference
       // between our idempotency check and this insert. Treat as success.
-      const code = err?.code ?? err?.err?.code;
-      const message = String(err?.message ?? err);
-      const isDuplicateKey =
-        code === 11000 || code === '11000' || message.includes('E11000');
-      if (isDuplicateKey) {
+      if (this.isDuplicateKeyError(err)) {
         return true;
       }
       throw err;
@@ -720,12 +730,9 @@ export class WalletService {
         ],
         { session, ordered: true },
       );
-    } catch (err: any) {
-      const code = err?.code ?? err?.err?.code;
-      const message = String(err?.message ?? err);
-      const isDuplicateKey =
-        code === 11000 || code === '11000' || message.includes('E11000');
-      if (isDuplicateKey) {
+    } catch (err) {
+      // Another session already recorded this reference.
+      if (this.isDuplicateKeyError(err)) {
         return true;
       }
       throw err;
@@ -735,21 +742,160 @@ export class WalletService {
   }
 
   /**
-   * Credits the platform admin's wallet with a service fee collected from
-   * a member's contribution. Creates a proper WalletTransaction ledger
-   * entry with type SERVICE_FEE_CREDIT. Must be called inside a session/
-   * transaction.
+   * Attempts to debit `amountNaira` (plus the platform's escrow-transfer
+   * service charge) from the member's wallet to fund a pool donation (a
+   * DonationGroup's escrow). Same contract as `debitForSavings`: idempotent
+   * by `reference`, session-transactional, and returns `false` without
+   * touching anything when the balance can't cover amount + fee.
+   *
+   * The Donation row is written first in the caller's transaction; its
+   * unique reference — and this ledger's unique reference — mean a double
+   * tap can only ever charge the wallet once.
+   *
+   * Two ledger entries are written: DONATION_DEBIT for the amount that
+   * funds the pool's escrow, and (when `serviceFee` > 0) SERVICE_FEE_DEBIT
+   * for the platform charge.
+   */
+  async debitForDonation(
+    userId: Types.ObjectId,
+    amountNaira: number,
+    refs: { donationGroup: Types.ObjectId },
+    reference: string,
+    session: ClientSession,
+    serviceFee = 0,
+  ): Promise<boolean> {
+    const successTx = await this.walletTxModel.findOne({
+      reference,
+      status: WalletTransactionStatus.SUCCESS,
+    });
+
+    if (successTx) {
+      return true;
+    }
+
+    const fee = Math.max(serviceFee, 0);
+    const feeReference = `${reference}_fee`;
+
+    await this.walletTxModel.deleteOne({
+      reference: { $in: fee > 0 ? [reference, feeReference] : [reference] },
+      status: { $ne: WalletTransactionStatus.SUCCESS },
+    });
+
+    const wallet = await this.walletModel
+      .findOne({ user: userId })
+      .session(session);
+
+    if (!wallet) {
+      return false;
+    }
+
+    const balance = wallet.balance ?? 0;
+    const total = amountNaira + fee;
+
+    if (balance < total) {
+      return false;
+    }
+
+    const balanceBefore = balance;
+    // The donation itself leaves first, then the fee — so the
+    // DONATION_DEBIT entry's balanceAfter is the balance the member saw
+    // after funding the pool, with the fee line following it.
+    const afterDonation = balanceBefore - amountNaira;
+    const balanceAfter = afterDonation - fee;
+
+    wallet.balance = balanceAfter;
+    await wallet.save({ session });
+
+    const entries: Array<Record<string, unknown>> = [
+      {
+        wallet: wallet._id,
+        user: userId,
+        type: WalletTransactionType.DONATION_DEBIT,
+        status: WalletTransactionStatus.SUCCESS,
+        amount: amountNaira,
+        balanceBefore,
+        balanceAfter: afterDonation,
+        reference,
+        metadata: {
+          donationGroup: refs.donationGroup.toString(),
+          serviceFee: fee,
+        },
+      },
+    ];
+
+    if (fee > 0) {
+      entries.push({
+        wallet: wallet._id,
+        user: userId,
+        type: WalletTransactionType.SERVICE_FEE_DEBIT,
+        status: WalletTransactionStatus.SUCCESS,
+        amount: fee,
+        balanceBefore: afterDonation,
+        balanceAfter,
+        reference: feeReference,
+        metadata: {
+          donationGroup: refs.donationGroup.toString(),
+          source: 'donation_transfer_fee',
+        },
+      });
+    }
+
+    try {
+      await this.walletTxModel.create(entries, { session, ordered: true });
+    } catch (err) {
+      // Another session already recorded this reference.
+      if (this.isDuplicateKeyError(err)) {
+        return true;
+      }
+      throw err;
+    }
+
+    return true;
+  }
+
+  /**
+   * Credits the platform admin's wallet with a service fee collected from a
+   * member — a contribution, a pool donation, or a payout. Creates a proper
+   * WalletTransaction ledger entry with type SERVICE_FEE_CREDIT. Must be
+   * called inside a session/transaction.
+   *
+   * Idempotent by `reference` (defaults to `sf_<contribution>`): the payout
+   * webhook and the synchronous payout path can both land here, and the fee
+   * must only ever be credited once.
    */
   async creditServiceFee(
     adminUserId: string,
     amount: number,
     refs: {
-      group: Types.ObjectId;
-      cycle: Types.ObjectId;
-      contribution: Types.ObjectId;
+      group?: Types.ObjectId;
+      cycle?: Types.ObjectId;
+      contribution?: Types.ObjectId;
     },
     session: ClientSession,
+    options: { reference?: string; metadata?: Record<string, unknown> } = {},
   ): Promise<void> {
+    if (amount <= 0) return;
+
+    const reference =
+      options.reference ??
+      (refs.contribution
+        ? `sf_${refs.contribution.toString()}`
+        : `sf_${new Types.ObjectId().toString()}`);
+
+    const successTx = await this.walletTxModel.findOne({
+      reference,
+      status: WalletTransactionStatus.SUCCESS,
+    });
+
+    if (successTx) {
+      return;
+    }
+
+    await this.walletTxModel.deleteOne({
+      reference,
+      status: { $ne: WalletTransactionStatus.SUCCESS },
+    });
+
     const wallet = await this.walletModel
       .findOne({ user: new Types.ObjectId(adminUserId) })
       .session(session);
@@ -763,8 +909,6 @@ export class WalletService {
 
     wallet.balance = balanceAfter;
     await wallet.save({ session });
-
-    const reference = `sf_${refs.contribution.toString()}`;
 
     await this.walletTxModel.create(
       [
@@ -780,6 +924,231 @@ export class WalletService {
           group: refs.group,
           cycle: refs.cycle,
           contribution: refs.contribution,
+          metadata: options.metadata,
+        },
+      ],
+      { session },
+    );
+  }
+
+  // ---- Service fee debit/refund (used by CyclesService bank-transfer flow) ---
+
+  /**
+   * Debits ONLY the platform service fee from a member's wallet — used
+   * when the member notifies the group admin of an inbound bank transfer
+   * (the contribution itself settles in the group's escrow DVA, not in
+   * the wallet). Idempotent by reference; must be called inside the
+   * caller's transaction.
+   *
+   * Throws `BadRequestException` when the wallet can't cover the fee —
+   * this aborts the caller's transaction so the contribution stays
+   * PENDING and the member is told to fund their wallet first.
+   */
+  async debitServiceFee(
+    userId: Types.ObjectId,
+    amount: number,
+    refs: {
+      group: Types.ObjectId;
+      cycle: Types.ObjectId;
+      contribution: Types.ObjectId;
+    },
+    session: ClientSession,
+  ): Promise<void> {
+    if (amount <= 0) return;
+
+    const reference = `fee_${refs.contribution.toString()}`;
+
+    const successTx = await this.walletTxModel.findOne({
+      reference,
+      status: WalletTransactionStatus.SUCCESS,
+    });
+
+    if (successTx) {
+      // Already charged (e.g. the member notified twice) — no-op.
+      return;
+    }
+
+    await this.walletTxModel.deleteOne({
+      reference,
+      status: { $ne: WalletTransactionStatus.SUCCESS },
+    });
+
+    const wallet = await this.walletModel
+      .findOne({ user: userId })
+      .session(session);
+
+    const balance = wallet?.balance ?? 0;
+
+    if (!wallet || balance < amount) {
+      throw new BadRequestException(
+        `Your wallet balance (₦${balance.toLocaleString()}) can't cover the ₦${amount.toLocaleString()} service fee. Please fund your wallet and try again.`,
+      );
+    }
+
+    const balanceBefore = balance;
+    const balanceAfter = balanceBefore - amount;
+
+    wallet.balance = balanceAfter;
+    await wallet.save({ session });
+
+    await this.walletTxModel.create(
+      [
+        {
+          wallet: wallet._id,
+          user: userId,
+          type: WalletTransactionType.SERVICE_FEE_DEBIT,
+          status: WalletTransactionStatus.SUCCESS,
+          amount,
+          balanceBefore,
+          balanceAfter,
+          reference,
+          group: refs.group,
+          cycle: refs.cycle,
+          contribution: refs.contribution,
+        },
+      ],
+      { session },
+    );
+  }
+
+  /**
+   * Returns a previously-debited service fee to the member's wallet when
+   * the group admin rejects a claimed bank-transfer contribution
+   * (SERVICE_FEE_REFUND). Idempotent by reference; must be called inside
+   * the caller's transaction.
+   */
+  async refundServiceFee(
+    userId: Types.ObjectId,
+    amount: number,
+    refs: {
+      group: Types.ObjectId;
+      cycle: Types.ObjectId;
+      contribution: Types.ObjectId;
+    },
+    session: ClientSession,
+  ): Promise<void> {
+    if (amount <= 0) return;
+
+    const reference = `fee_refund_${refs.contribution.toString()}`;
+
+    const successTx = await this.walletTxModel.findOne({
+      reference,
+      status: WalletTransactionStatus.SUCCESS,
+    });
+
+    if (successTx) {
+      return;
+    }
+
+    await this.walletTxModel.deleteOne({
+      reference,
+      status: { $ne: WalletTransactionStatus.SUCCESS },
+    });
+
+    const wallet = await this.walletModel
+      .findOne({ user: userId })
+      .session(session);
+
+    if (!wallet) return;
+
+    const balanceBefore = wallet.balance ?? 0;
+    const balanceAfter = balanceBefore + amount;
+
+    wallet.balance = balanceAfter;
+    await wallet.save({ session });
+
+    await this.walletTxModel.create(
+      [
+        {
+          wallet: wallet._id,
+          user: userId,
+          type: WalletTransactionType.SERVICE_FEE_REFUND,
+          status: WalletTransactionStatus.SUCCESS,
+          amount,
+          balanceBefore,
+          balanceAfter,
+          reference,
+          group: refs.group,
+          cycle: refs.cycle,
+          contribution: refs.contribution,
+        },
+      ],
+      { session },
+    );
+  }
+
+  /**
+   * Reverses a SERVICE_FEE_CREDIT (writes a SERVICE_FEE_DEBIT on the admin
+   * wallet). Used when a rejected bank-transfer contribution refunds the
+   * fee to the member, and when a payout that already paid its fee is
+   * reversed by the bank.
+   *
+   * Best-effort: if the admin wallet no longer holds the fee (already
+   * withdrawn), the reversal is skipped and logged rather than blocking
+   * the member's refund — the member's money always comes back.
+   */
+  async reverseServiceFeeCredit(
+    adminUserId: string,
+    amount: number,
+    refs: {
+      group?: Types.ObjectId;
+      cycle?: Types.ObjectId;
+      contribution?: Types.ObjectId;
+    },
+    session: ClientSession,
+    options: { reference?: string; metadata?: Record<string, unknown> } = {},
+  ): Promise<void> {
+    if (amount <= 0) return;
+
+    const reference =
+      options.reference ??
+      (refs.contribution
+        ? `sf_reversal_${refs.contribution.toString()}`
+        : `sf_reversal_${new Types.ObjectId().toString()}`);
+
+    const successTx = await this.walletTxModel.findOne({
+      reference,
+      status: WalletTransactionStatus.SUCCESS,
+    });
+
+    if (successTx) return;
+
+    await this.walletTxModel.deleteOne({
+      reference,
+      status: { $ne: WalletTransactionStatus.SUCCESS },
+    });
+
+    const wallet = await this.walletModel
+      .findOne({ user: new Types.ObjectId(adminUserId) })
+      .session(session);
+
+    const balance = wallet?.balance ?? 0;
+
+    if (!wallet || balance < amount) {
+      return;
+    }
+
+    const balanceBefore = balance;
+    const balanceAfter = balanceBefore - amount;
+
+    wallet.balance = balanceAfter;
+    await wallet.save({ session });
+
+    await this.walletTxModel.create(
+      [
+        {
+          wallet: wallet._id,
+          user: new Types.ObjectId(adminUserId),
+          type: WalletTransactionType.SERVICE_FEE_DEBIT,
+          status: WalletTransactionStatus.SUCCESS,
+          amount,
+          balanceBefore,
+          balanceAfter,
+          reference,
+          group: refs.group,
+          cycle: refs.cycle,
+          contribution: refs.contribution,
+          metadata: options.metadata,
         },
       ],
       { session },

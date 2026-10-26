@@ -89,32 +89,32 @@ const styles = StyleSheet.create({
   title: {
     fontSize: typography.sizes.xxl,
     fontWeight: typography.weights.bold,
-    color: colors.ink,
+    color: colors.forestLightInk,
     marginBottom: spacing.xs,
   },
   subtitle: {
     fontSize: typography.sizes.base,
-    color: colors.inkSoft,
+    color: colors.forestLightInkSoft,
     marginBottom: spacing.xl,
     lineHeight: 22,
   },
   infoCard: {
-    backgroundColor: colors.surface,
+    backgroundColor: colors.white,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: colors.line,
+    borderColor: colors.forestLightLine,
     padding: spacing.lg,
     marginBottom: spacing.xl,
   },
   infoTitle: {
     fontSize: typography.sizes.base,
     fontWeight: typography.weights.semibold,
-    color: colors.ink,
+    color: colors.forestLightInk,
     marginBottom: spacing.sm,
   },
   bullet: {
     fontSize: typography.sizes.sm,
-    color: colors.inkSoft,
+    color: colors.forestLightInkSoft,
     lineHeight: 24,
   },
   activateButton: {
@@ -134,7 +134,7 @@ const styles = StyleSheet.create({
   },
   successText: {
     fontSize: typography.sizes.base,
-    color: colors.inkSoft,
+    color: colors.forestLightInkSoft,
     textAlign: "center",
     marginBottom: spacing.xl,
     lineHeight: 22,

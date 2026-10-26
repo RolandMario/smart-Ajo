@@ -3,6 +3,7 @@ import { StyleSheet, Text, View, Pressable } from "react-native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import type { BillsStackParamList } from "../../navigation/types";
 import { Screen } from "../../components/Screen";
+import { AccountMenu } from "../../components/AccountMenu";
 import { colors, radii, spacing, typography } from "../../theme";
 import { getBillServices } from "../../api/bills";
 
@@ -41,7 +42,10 @@ export function BillServicesScreen({ navigation }: Props) {
 
   return (
     <Screen>
-      <Text style={styles.title}>Pay Bills</Text>
+      <View style={styles.header}>
+        <Text style={styles.title}>Pay Bills</Text>
+        <AccountMenu />
+      </View>
       <View style={styles.grid}>
         {services.map((s) => (
           <Pressable
@@ -66,14 +70,15 @@ export function BillServicesScreen({ navigation }: Props) {
 }
 
 const styles = StyleSheet.create({
-  title: { fontSize: typography.sizes.xxl, fontWeight: typography.weights.bold, color: colors.ink, marginBottom: spacing.lg },
+  header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: spacing.md, marginBottom: spacing.lg },
+  title: { fontSize: typography.sizes.xxl, fontWeight: typography.weights.bold, color: colors.forestLightInk },
   grid: { flexDirection: "row", flexWrap: "wrap", gap: spacing.md, marginBottom: spacing.xl },
-  card: { width: "47%", backgroundColor: colors.surface, borderRadius: radii.lg, borderWidth: 1, borderColor: colors.line, padding: spacing.lg, alignItems: "center" },
+  card: { width: "47%", backgroundColor: colors.white, borderRadius: radii.lg, borderWidth: 1, borderColor: colors.forestLightLine, padding: spacing.lg, alignItems: "center" },
   cardPressed: { opacity: 0.8 },
-  cardTitle: { fontSize: typography.sizes.base, fontWeight: typography.weights.semibold, color: colors.ink, marginBottom: spacing.xs },
-  cardSubtitle: { fontSize: typography.sizes.xs, color: colors.inkSoft, textAlign: "center" },
-  emptyNote: { fontSize: typography.sizes.sm, color: colors.inkSoft, marginBottom: spacing.xl },
-  sectionTitle: { fontSize: typography.sizes.lg, fontWeight: typography.weights.semibold, color: colors.ink, marginBottom: spacing.md },
+  cardTitle: { fontSize: typography.sizes.base, fontWeight: typography.weights.semibold, color: colors.forestLightInk, marginBottom: spacing.xs },
+  cardSubtitle: { fontSize: typography.sizes.xs, color: colors.forestLightInkSoft, textAlign: "center" },
+  emptyNote: { fontSize: typography.sizes.sm, color: colors.forestLightInkSoft, marginBottom: spacing.xl },
+  sectionTitle: { fontSize: typography.sizes.lg, fontWeight: typography.weights.semibold, color: colors.forestLightInk, marginBottom: spacing.md },
   empty: { alignItems: "center", paddingVertical: spacing.xxl },
-  emptyText: { fontSize: typography.sizes.base, color: colors.inkFaint },
+  emptyText: { fontSize: typography.sizes.base, color: colors.forestLightInkFaint },
 });

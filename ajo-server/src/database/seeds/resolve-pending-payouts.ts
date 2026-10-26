@@ -14,16 +14,24 @@
  *  3. If OTP resolution fails (e.g. 404 — transfer already expired), it
  *     finalizes the payout directly since we're in test mode and no real
  *     money is at stake
+ *
+ * The same reconciliation is applied to pool donation payouts
+ * (DonationPayout), which are finalised through `DonationsService`.
  */
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from '../../app.module';
 import { PaystackService } from '../../payments/paystack.service';
 import { CyclesService } from '../../cycles/cycles.service';
+import { DonationsService } from '../../donations/donations.service';
 import { getModelToken } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { Payout, PayoutDocument } from '../../cycles/schemas/payout.schema';
 import { Cycle, CycleDocument } from '../../cycles/schemas/cycle.schema';
 import { GroupDocument } from '../../groups/schemas/group.schema';
+import {
+  DonationPayout,
+  DonationPayoutDocument,
+} from '../../donations/schemas/donation-payout.schema';
 import { TransferStatus } from '../../common/enums/wallet.enum';
 
 async function run() {
@@ -46,6 +54,10 @@ async function run() {
     const cycleModel = app.get<Model<CycleDocument>>(getModelToken(Cycle.name));
     const groupModel = app.get<Model<GroupDocument>>(getModelToken('Group'));
     const cyclesService = app.get(CyclesService);
+    const donationPayoutModel = app.get<Model<DonationPayoutDocument>>(
+      getModelToken(DonationPayout.name),
+    );
+    const donationsService = app.get(DonationsService);
 
     const pendingPayouts = await payoutModel.find({
       status: TransferStatus.PENDING,
@@ -106,6 +118,49 @@ async function run() {
           `  Failed to finalize payout ${payoutDoc._id.toString()}: ${String(err)}`,
         );
       }
+    }
+
+    // ---- Pool donation payouts ---------------------------------------------
+    const pendingDonationPayouts = await donationPayoutModel.find({
+      status: TransferStatus.PENDING,
+    });
+
+    console.log(
+      `Found ${pendingDonationPayouts.length} pending pool donation payout(s).`,
+    );
+
+    for (const payoutDoc of pendingDonationPayouts) {
+      if (!payoutDoc.paystackTransferCode) {
+        console.log(
+          `  Skipping pool payout ${payoutDoc._id.toString()} — no paystackTransferCode`,
+        );
+        continue;
+      }
+
+      console.log(
+        `  Resolving OTP for pool payout ${payoutDoc._id.toString()} (transfer: ${payoutDoc.paystackTransferCode})...`,
+      );
+
+      try {
+        await paystack.resolveOtp(
+          payoutDoc.paystackTransferCode,
+          paystack.testTransferOtp(),
+        );
+        console.log('  OTP resolved successfully.');
+      } catch (err) {
+        console.warn(
+          `  OTP resolution failed (${String(err)}). Finalizing directly since we're in test mode.`,
+        );
+      }
+
+      const handled = await donationsService.completePayout(
+        payoutDoc.paystackReference,
+      );
+      console.log(
+        handled
+          ? `  ✅ Pool payout ${payoutDoc._id.toString()} finalized.`
+          : `  Skipping pool payout ${payoutDoc._id.toString()} — already finalized.`,
+      );
     }
 
     console.log('Done.');

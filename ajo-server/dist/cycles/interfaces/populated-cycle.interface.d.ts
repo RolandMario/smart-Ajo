@@ -1,5 +1,5 @@
 import { Types } from 'mongoose';
-import { ContributionStatus, CycleStatus } from '../../common/enums/cycle.enum';
+import { ContributionPaymentMethod, ContributionStatus, CycleStatus } from '../../common/enums/cycle.enum';
 export interface PopulatedContribution {
     _id: Types.ObjectId;
     group: Types.ObjectId;
@@ -12,7 +12,15 @@ export interface PopulatedContribution {
         email?: string;
     };
     amount: number;
+    serviceFee?: number;
     status: ContributionStatus;
+    paymentMethod?: ContributionPaymentMethod;
+    paymentReference?: string;
+    paymentNotifiedAt?: Date;
+    claimedTransferReference?: string;
+    confirmedAt?: Date;
+    lastRejectedAt?: Date;
+    lastRejectionReason?: string;
     paidAt?: Date;
     createdAt: Date;
     updatedAt: Date;

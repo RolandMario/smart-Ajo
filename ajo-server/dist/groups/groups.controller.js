@@ -18,8 +18,9 @@ const groups_service_1 = require("./groups.service");
 const create_group_dto_1 = require("./dto/create-group.dto");
 const continue_group_dto_1 = require("./dto/continue-group.dto");
 const invite_member_dto_1 = require("./dto/invite-member.dto");
+const join_group_dto_1 = require("./dto/join-group.dto");
 const lock_rotation_dto_1 = require("./dto/lock-rotation.dto");
-const set_auto_collect_dto_1 = require("./dto/set-auto-collect.dto");
+const search_group_dto_1 = require("./dto/search-group.dto");
 const update_group_dto_1 = require("./dto/update-group.dto");
 const jwt_auth_guard_1 = require("../common/guards/jwt-auth.guard");
 const current_user_decorator_1 = require("../common/decorators/current-user.decorator");
@@ -34,6 +35,12 @@ let GroupsController = class GroupsController {
     listMine(user) {
         return this.groupsService.listMyGroups(user.userId);
     }
+    searchByCode(user, dto) {
+        return this.groupsService.searchGroupByCode(user.userId, dto.code);
+    }
+    join(user, dto) {
+        return this.groupsService.joinGroupByCode(user.userId, dto.code);
+    }
     getDetail(user, id) {
         return this.groupsService.getGroupDetail(user.userId, id);
     }
@@ -45,9 +52,6 @@ let GroupsController = class GroupsController {
     }
     lockRotation(user, id, dto) {
         return this.groupsService.lockRotation(user.userId, id, dto);
-    }
-    setAutoCollect(user, id, dto) {
-        return this.groupsService.setAutoCollect(user.userId, id, dto.enabled);
     }
     update(user, id, dto) {
         return this.groupsService.updateGroup(user.userId, id, dto);
@@ -75,6 +79,22 @@ __decorate([
     __metadata("design:paramtypes", [Object]),
     __metadata("design:returntype", void 0)
 ], GroupsController.prototype, "listMine", null);
+__decorate([
+    (0, common_1.Get)('search'),
+    __param(0, (0, current_user_decorator_1.CurrentUser)()),
+    __param(1, (0, common_1.Query)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, search_group_dto_1.SearchGroupDto]),
+    __metadata("design:returntype", void 0)
+], GroupsController.prototype, "searchByCode", null);
+__decorate([
+    (0, common_1.Post)('join'),
+    __param(0, (0, current_user_decorator_1.CurrentUser)()),
+    __param(1, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, join_group_dto_1.JoinGroupDto]),
+    __metadata("design:returntype", void 0)
+], GroupsController.prototype, "join", null);
 __decorate([
     (0, common_1.Get)(':id'),
     __param(0, (0, current_user_decorator_1.CurrentUser)()),
@@ -109,15 +129,6 @@ __decorate([
     __metadata("design:paramtypes", [Object, String, lock_rotation_dto_1.LockRotationDto]),
     __metadata("design:returntype", void 0)
 ], GroupsController.prototype, "lockRotation", null);
-__decorate([
-    (0, common_1.Patch)(':id/auto-collect'),
-    __param(0, (0, current_user_decorator_1.CurrentUser)()),
-    __param(1, (0, common_1.Param)('id')),
-    __param(2, (0, common_1.Body)()),
-    __metadata("design:type", Function),
-    __metadata("design:paramtypes", [Object, String, set_auto_collect_dto_1.SetAutoCollectDto]),
-    __metadata("design:returntype", void 0)
-], GroupsController.prototype, "setAutoCollect", null);
 __decorate([
     (0, common_1.Patch)(':id'),
     __param(0, (0, current_user_decorator_1.CurrentUser)()),

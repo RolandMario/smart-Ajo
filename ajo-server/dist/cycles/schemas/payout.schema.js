@@ -21,6 +21,8 @@ let Payout = class Payout {
     recipientUser;
     initiatedBy;
     amount;
+    fee;
+    netAmount;
     status;
     paystackTransferCode;
     paystackReference;
@@ -52,6 +54,14 @@ __decorate([
     (0, mongoose_1.Prop)({ required: true, min: 1 }),
     __metadata("design:type", Number)
 ], Payout.prototype, "amount", void 0);
+__decorate([
+    (0, mongoose_1.Prop)({ default: 0, min: 0 }),
+    __metadata("design:type", Number)
+], Payout.prototype, "fee", void 0);
+__decorate([
+    (0, mongoose_1.Prop)({ default: 0, min: 0 }),
+    __metadata("design:type", Number)
+], Payout.prototype, "netAmount", void 0);
 __decorate([
     (0, mongoose_1.Prop)({ type: String, enum: wallet_enum_1.TransferStatus, default: wallet_enum_1.TransferStatus.PENDING }),
     __metadata("design:type", String)

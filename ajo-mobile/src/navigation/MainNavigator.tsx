@@ -1,14 +1,14 @@
 import React from "react";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
-import type { MainTabParamList, GroupsStackParamList, WalletStackParamList, ProfileStackParamList, BillsStackParamList } from "./types";
+import type { MainTabParamList, GroupsStackParamList, WalletStackParamList, BillsStackParamList, SavingsStackParamList, DonationsStackParamList } from "./types";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { GroupsListScreen } from "../screens/home/GroupsListScreen";
 import { CreateGroupScreen } from "../screens/home/CreateGroupScreen";
 import { GroupDetailScreen } from "../screens/home/GroupDetailScreen";
 import { GroupMembersScreen } from "../screens/home/GroupMembersScreen";
-import { InviteMemberScreen } from "../screens/home/InviteMemberScreen";
+import { JoinGroupScreen } from "../screens/home/JoinGroupScreen";
 import { LockRotationScreen } from "../screens/home/LockRotationScreen";
 import { ActivateGroupScreen } from "../screens/home/ActivateGroupScreen";
 import { EditGroupScreen } from "../screens/home/EditGroupScreen";
@@ -24,9 +24,12 @@ import { BankAccountScreen } from "../screens/home/BankAccountScreen";
 import { CreateSavingsPlanScreen } from "../screens/savings/CreateSavingsPlanScreen";
 import { SavingsPlansListScreen } from "../screens/savings/SavingsPlansListScreen";
 import { SavingsPlanDetailScreen } from "../screens/savings/SavingsPlanDetailScreen";
-import { NotificationsScreen } from "../screens/home/NotificationsScreen";
-import { EditProfileScreen } from "../screens/home/EditProfileScreen";
-import { ProfileScreen } from "../screens/home/ProfileScreen";
+import { DonationsListScreen } from "../screens/donations/DonationsListScreen";
+import { CreateDonationGroupScreen } from "../screens/donations/CreateDonationGroupScreen";
+import { JoinDonationGroupScreen } from "../screens/donations/JoinDonationGroupScreen";
+import { DonationGroupDetailScreen } from "../screens/donations/DonationGroupDetailScreen";
+import { DonationGroupDonationsScreen } from "../screens/donations/DonationGroupDonationsScreen";
+import { DonationPayoutScreen } from "../screens/donations/DonationPayoutScreen";
 import { BillServicesScreen } from "../screens/bills/BillServicesScreen";
 import { AirtimePurchaseScreen } from "../screens/bills/AirtimePurchaseScreen";
 import { DataPurchaseScreen } from "../screens/bills/DataPurchaseScreen";
@@ -39,8 +42,9 @@ import { colors } from "../theme";
 const Tab = createBottomTabNavigator<MainTabParamList>();
 const GroupsStack = createNativeStackNavigator<GroupsStackParamList>();
 const WalletStack = createNativeStackNavigator<WalletStackParamList>();
-const ProfileStack = createNativeStackNavigator<ProfileStackParamList>();
 const BillsStack = createNativeStackNavigator<BillsStackParamList>();
+const SavingsStack = createNativeStackNavigator<SavingsStackParamList>();
+const DonationsStack = createNativeStackNavigator<DonationsStackParamList>();
 
 /** Height of the tab bar content (labels/icons), excluding the device's bottom
  * safe-area (home indicator / gesture bar / Android system nav bar). */
@@ -50,8 +54,8 @@ function GroupsStackNavigator() {
   return (
     <GroupsStack.Navigator
       screenOptions={{
-        headerStyle: { backgroundColor: colors.surface },
-        headerTintColor: colors.ink,
+        headerStyle: { backgroundColor: colors.white },
+        headerTintColor: colors.forestLightInk,
       }}
     >
       <GroupsStack.Screen
@@ -75,9 +79,9 @@ function GroupsStackNavigator() {
         options={{ title: "Members" }}
       />
       <GroupsStack.Screen
-        name="InviteMember"
-        component={InviteMemberScreen}
-        options={{ title: "Invite" }}
+        name="JoinGroup"
+        component={JoinGroupScreen}
+        options={{ title: "Join a Group" }}
       />
       <GroupsStack.Screen
         name="LockRotation"
@@ -107,7 +111,7 @@ function GroupsStackNavigator() {
       <GroupsStack.Screen
         name="CurrentCycle"
         component={CurrentCycleScreen}
-        options={{ title: "Current Cycle" }}
+        options={{ headerShown: false, title: "Current Cycle" }}
       />
       <GroupsStack.Screen
         name="ContinueGroup"
@@ -119,17 +123,16 @@ function GroupsStackNavigator() {
 }
 
 /**
- * Wallet stack so FundWallet and BankAccount are navigable from the
- * Wallet tab (they were previously only registered in ProfileStack,
- * causing "The action 'NAVIGATE' with payload ... was not handled"
- * errors).
+ * Wallet stack — home, fund wallet, bank account, transactions. Reachable
+ * from the Wallet tab and from the profile's "Wallet" / "Bank account"
+ * shortcuts (which hop back to this tab).
  */
 function WalletStackNavigator() {
   return (
     <WalletStack.Navigator
       screenOptions={{
-        headerStyle: { backgroundColor: colors.surface },
-        headerTintColor: colors.ink,
+        headerStyle: { backgroundColor: colors.white },
+        headerTintColor: colors.forestLightInk,
       }}
     >
       <WalletStack.Screen
@@ -146,21 +149,6 @@ function WalletStackNavigator() {
         name="BankAccount"
         component={BankAccountScreen}
         options={{ title: "Bank Account" }}
-      />
-      <WalletStack.Screen
-        name="CreateSavingsPlan"
-        component={CreateSavingsPlanScreen}
-        options={{ title: "Create Savings" }}
-      />
-      <WalletStack.Screen
-        name="SavingsPlans"
-        component={SavingsPlansListScreen}
-        options={{ title: "My Savings" }}
-      />
-      <WalletStack.Screen
-        name="SavingsPlanDetail"
-        component={SavingsPlanDetailScreen}
-        options={{ title: "Savings Plan" }}
       />
       <WalletStack.Screen
         name="Transactions"
@@ -176,73 +164,81 @@ function WalletStackNavigator() {
   );
 }
 
-function ProfileStackNavigator() {
+/**
+ * Personal savings tab. Plans are funded by the member from their wallet —
+ * one interval at a time from the detail screen — so the whole flow
+ * (list -> create -> pay/withdraw) lives inside this stack.
+ */
+function SavingsStackNavigator() {
   return (
-    <ProfileStack.Navigator
+    <SavingsStack.Navigator
       screenOptions={{
-        headerStyle: { backgroundColor: colors.surface },
-        headerTintColor: colors.ink,
+        headerStyle: { backgroundColor: colors.white },
+        headerTintColor: colors.forestLightInk,
       }}
     >
-      <ProfileStack.Screen
-        name="ProfileMain"
-        component={ProfileScreen}
+      <SavingsStack.Screen
+        name="SavingsList"
+        component={SavingsPlansListScreen}
         options={{ headerShown: false }}
       />
-      <ProfileStack.Screen
-        name="EditProfile"
-        component={EditProfileScreen}
-        options={{ title: "Edit Profile" }}
-      />
-      <ProfileStack.Screen
-        name="WalletHome"
-        component={WalletHomeScreen}
-        options={{
-          title: "Wallet",
-          headerShown: false,
-        }}
-      />
-      <ProfileStack.Screen
-        name="FundWallet"
-        component={FundWalletScreen}
-        options={{ title: "Fund Wallet" }}
-      />
-      <ProfileStack.Screen
-        name="BankAccount"
-        component={BankAccountScreen}
-        options={{ title: "Bank Account" }}
-      />
-      <ProfileStack.Screen
+      <SavingsStack.Screen
         name="CreateSavingsPlan"
         component={CreateSavingsPlanScreen}
         options={{ title: "Create Savings" }}
       />
-      <ProfileStack.Screen
-        name="SavingsPlans"
-        component={SavingsPlansListScreen}
-        options={{ title: "My Savings" }}
-      />
-      <ProfileStack.Screen
+      <SavingsStack.Screen
         name="SavingsPlanDetail"
         component={SavingsPlanDetailScreen}
         options={{ title: "Savings Plan" }}
       />
-      <ProfileStack.Screen
-        name="Transactions"
-        component={TransactionsScreen}
-        options={{ title: "Transactions" }}
+    </SavingsStack.Navigator>
+  );
+}
+
+/**
+ * Pool collections tab. Create a pool, join one by Group ID, donate from the
+ * wallet, browse the donor history, and (as pool admin) pay the escrow out.
+ */
+function DonationsStackNavigator() {
+  return (
+    <DonationsStack.Navigator
+      screenOptions={{
+        headerStyle: { backgroundColor: colors.white },
+        headerTintColor: colors.forestLightInk,
+      }}
+    >
+      <DonationsStack.Screen
+        name="DonationsList"
+        component={DonationsListScreen}
+        options={{ headerShown: false }}
       />
-      <ProfileStack.Screen
-        name="TransactionReceipt"
-        component={TransactionReceiptScreen}
-        options={{ title: "Receipt" }}
+      <DonationsStack.Screen
+        name="CreateDonationGroup"
+        component={CreateDonationGroupScreen}
+        options={{ title: "Create Pool" }}
       />
-      <ProfileStack.Screen
-        name="Notifications"
-        component={NotificationsScreen}
-        options={{ title: "Notifications" }}
+      <DonationsStack.Screen
+        name="JoinDonationGroup"
+        component={JoinDonationGroupScreen}
+        options={{ title: "Join Pool" }}
       />
-    </ProfileStack.Navigator>
+      <DonationsStack.Screen
+        name="DonationGroupDetail"
+        component={DonationGroupDetailScreen}
+        options={{ title: "Pool" }}
+      />
+      <DonationsStack.Screen
+        name="DonationGroupDonations"
+        component={DonationGroupDonationsScreen}
+        options={{ title: "Donations" }}
+      />
+      <DonationsStack.Screen
+        name="DonationPayout"
+        component={DonationPayoutScreen}
+        options={{ title: "Payouts" }}
+      />
+    </DonationsStack.Navigator>
   );
 }
 
@@ -250,11 +246,13 @@ function BillsStackNavigator() {
   return (
     <BillsStack.Navigator
       screenOptions={{
-        headerStyle: { backgroundColor: colors.surface },
-        headerTintColor: colors.ink,
+        headerStyle: { backgroundColor: colors.white },
+        headerTintColor: colors.forestLightInk,
       }}
     >
-      <BillsStack.Screen name="BillServices" component={BillServicesScreen} options={{ title: "Pay Bills" }} />
+      {/* BillServices draws its own title row (with the account avatar), so it
+          hides the native header — otherwise "Pay Bills" would appear twice. */}
+      <BillsStack.Screen name="BillServices" component={BillServicesScreen} options={{ headerShown: false }} />
       <BillsStack.Screen name="AirtimePurchase" component={AirtimePurchaseScreen} options={{ title: "Buy Airtime" }} />
       <BillsStack.Screen name="DataPurchase" component={DataPurchaseScreen} options={{ title: "Buy Data" }} />
       <BillsStack.Screen name="CableSubscription" component={CableSubscriptionScreen} options={{ title: "Cable TV" }} />
@@ -271,19 +269,21 @@ export function MainNavigator() {
   return (
     <Tab.Navigator
       screenOptions={{
-        headerStyle: { backgroundColor: colors.surface },
-        headerTitleStyle: { color: colors.ink },
+        headerStyle: { backgroundColor: colors.white },
+        headerTitleStyle: { color: colors.forestLightInk },
         tabBarStyle: {
-          backgroundColor: colors.surface,
-          borderTopColor: colors.line,
+          backgroundColor: colors.white,
+          borderTopColor: colors.forestLightLine,
           // Explicitly pad the tab bar above the device's bottom safe-area
           // (home indicator / gesture bar / Android system nav bar) and grow
           // its height to match, so it never hides underneath on a built app.
           height: TAB_BAR_HEIGHT + insets.bottom,
           paddingBottom: insets.bottom,
         },
-        tabBarActiveTintColor: colors.primary,
-        tabBarInactiveTintColor: colors.inkFaint,
+        // The reference home-screen design highlights its active tab in the
+        // forest action green.
+        tabBarActiveTintColor: colors.forestAction,
+        tabBarInactiveTintColor: colors.forestLightInkFaint,
       }}
     >
       <Tab.Screen
@@ -294,6 +294,17 @@ export function MainNavigator() {
           headerShown: false,
           tabBarIcon: ({ focused, color, size }: { focused: boolean; color: string; size: number }) => (
             <Ionicons name={focused ? "wallet" : "wallet-outline"} size={size} color={color} />
+          ),
+        })}
+      />
+      <Tab.Screen
+        name="SavingsTab"
+        component={SavingsStackNavigator}
+        options={({ route }) => ({
+          title: "Savings",
+          headerShown: false,
+          tabBarIcon: ({ focused, color, size }: { focused: boolean; color: string; size: number }) => (
+            <Ionicons name={focused ? "cash" : "cash-outline"} size={size} color={color} />
           ),
         })}
       />
@@ -309,6 +320,17 @@ export function MainNavigator() {
         })}
       />
       <Tab.Screen
+        name="DonationsTab"
+        component={DonationsStackNavigator}
+        options={() => ({
+          title: "Pools",
+          headerShown: false,
+          tabBarIcon: ({ focused, color, size }: { focused: boolean; color: string; size: number }) => (
+            <Ionicons name={focused ? "gift" : "gift-outline"} size={size} color={color} />
+          ),
+        })}
+      />
+      <Tab.Screen
         name="Bills"
         component={BillsStackNavigator}
         options={({ route }) => ({
@@ -316,27 +338,6 @@ export function MainNavigator() {
           headerShown: false,
           tabBarIcon: ({ focused, color, size }: { focused: boolean; color: string; size: number }) => (
             <Ionicons name={focused ? "receipt" : "receipt-outline"} size={size} color={color} />
-          ),
-        })}
-      />
-      <Tab.Screen
-        name="Notifications"
-        component={NotificationsScreen}
-        options={({ route }) => ({
-          title: "Alerts",
-          tabBarIcon: ({ focused, color, size }: { focused: boolean; color: string; size: number }) => (
-            <Ionicons name={focused ? "notifications" : "notifications-outline"} size={size} color={color} />
-          ),
-        })}
-      />
-      <Tab.Screen
-        name="Profile"
-        component={ProfileStackNavigator}
-        options={({ route }) => ({
-          title: "Profile",
-          headerShown: false,
-          tabBarIcon: ({ focused, color, size }: { focused: boolean; color: string; size: number }) => (
-            <Ionicons name={focused ? "person" : "person-outline"} size={size} color={color} />
           ),
         })}
       />

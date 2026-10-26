@@ -50,7 +50,12 @@ async function run() {
       (i) => i.name === NEW_INDEX_NAME || i.key.round !== undefined,
     );
 
-    if (hasOldIndex && !hasNewIndex) {
+    // Always drop the legacy index when present. In particular, do NOT gate
+    // the drop on the new index being absent: mongoose autoIndex creates the
+    // new index automatically on server startup, so a DB in that state has
+    // BOTH indexes and the old `(group, cycleNumber)` uniqueness would keep
+    // blocking new rounds (E11000 on cycleNumber restart at 1).
+    if (hasOldIndex) {
       await cycleModel.collection.dropIndex(OLD_INDEX_NAME);
       console.log(`Dropped legacy unique index ${OLD_INDEX_NAME}.`);
     }

@@ -14,7 +14,11 @@ import { Cycle, CycleDocument } from '../cycles/schemas/cycle.schema';
 import { ListWalletTransactionsQueryDto } from './dto/list-wallet-transactions-query.dto';
 import { ListPayoutsQueryDto } from './dto/list-payouts-query.dto';
 import { ListGroupWalletTransactionsQueryDto } from './dto/list-group-wallet-transactions-query.dto';
-import { WalletTransactionType } from '../common/enums/wallet.enum';
+import {
+  WalletTransactionStatus,
+  WalletTransactionType,
+} from '../common/enums/wallet.enum';
+import { UsersService } from '../users/users.service';
 
 export interface PaginatedWalletTransactions {
   transactions: Array<{
@@ -72,6 +76,26 @@ export interface PaginatedGroupWalletTransactions {
 }
 
 /**
+ * Platform-wide service-charge totals for the admin console's
+ * "Service Charges" tab. Every service charge — the escrow transfer fee
+ * charged on wallet -> escrow transfers, and the payout fee deducted from
+ * bank payouts — is credited to the platform admin's wallet as a
+ * SERVICE_FEE_CREDIT WalletTransaction. When a contribution or payout is
+ * later reversed, the fee is written back as a SERVICE_FEE_DEBIT on that
+ * same wallet, so the difference is what the platform actually kept.
+ */
+export interface ServiceChargeTotals {
+  /** Gross service fees credited to the platform admin's wallet. */
+  totalCollected: number;
+  /** Service fees given back when a contribution or payout was reversed. */
+  totalReversed: number;
+  /** `totalCollected - totalReversed` — the service-charge balance. */
+  netCollected: number;
+  /** How many SERVICE_FEE_CREDIT entries make up `totalCollected`. */
+  chargeCount: number;
+}
+
+/**
  * Platform-admin-scoped read access to every financial ledger on the
  * platform — for the admin web console's Financial Oversight screen
  * (Sub-phase D). Covers three distinct ledgers, each with its own
@@ -97,6 +121,7 @@ export class PlatformAdminFinanceService {
     @InjectModel(GroupWalletTransaction.name)
     private groupWalletTxModel: Model<GroupWalletTransactionDocument>,
     @InjectModel(Cycle.name) private cycleModel: Model<CycleDocument>,
+    private usersService: UsersService,
   ) {}
 
   // ---- Wallet fundings (personal wallet ledger) -------------------------------
@@ -285,6 +310,72 @@ export class PlatformAdminFinanceService {
       limit,
       total,
       totalPages: Math.max(1, Math.ceil(total / limit)),
+    };
+  }
+
+  // ---- Service-charge totals (platform fee revenue) --------------------------
+
+  /**
+   * Totals for the admin console's "Service Charges" tab: every escrow
+   * transfer fee and bank payout fee the platform has collected, net of
+   * the fees handed back when a contribution or payout was reversed.
+   *
+   * Reads the platform admin's own WalletTransaction ledger (the only
+   * wallet service fees are credited to):
+   *  - SERVICE_FEE_CREDIT -> a fee was collected (contribution, donation,
+   *    cycle payout, or donation pool payout).
+   *  - SERVICE_FEE_DEBIT  -> a previously-credited fee was reversed.
+   *
+   * Admin-wallet withdrawals are intentionally NOT netted off: a
+   * withdrawal is a single lump sum that can't be attributed between
+   * service fees and bill commissions, so subtracting it would understate
+   * the fees actually earned. Use the Admin Wallet tab for spendable
+   * balance.
+   */
+  async getServiceChargeTotals(): Promise<ServiceChargeTotals> {
+    const admin = await this.usersService.findPlatformAdmin();
+
+    const rows = await this.walletTxModel.aggregate<{
+      _id: WalletTransactionType;
+      total: number;
+      count: number;
+    }>([
+      {
+        $match: {
+          user: admin._id,
+          status: WalletTransactionStatus.SUCCESS,
+          type: {
+            $in: [
+              WalletTransactionType.SERVICE_FEE_CREDIT,
+              WalletTransactionType.SERVICE_FEE_DEBIT,
+            ],
+          },
+        },
+      },
+      {
+        $group: {
+          _id: '$type',
+          total: { $sum: '$amount' },
+          count: { $sum: 1 },
+        },
+      },
+    ]);
+
+    const credits = rows.find(
+      (row) => row._id === WalletTransactionType.SERVICE_FEE_CREDIT,
+    );
+    const debits = rows.find(
+      (row) => row._id === WalletTransactionType.SERVICE_FEE_DEBIT,
+    );
+
+    const totalCollected = credits?.total ?? 0;
+    const totalReversed = debits?.total ?? 0;
+
+    return {
+      totalCollected,
+      totalReversed,
+      netCollected: totalCollected - totalReversed,
+      chargeCount: credits?.count ?? 0,
     };
   }
 }

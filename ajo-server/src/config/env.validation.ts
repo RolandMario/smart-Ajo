@@ -25,9 +25,13 @@ export const envValidationSchema = Joi.object({
 
   //https://api.ng.termii.com/
   // Paystack (wallet funding + payouts)
-  PAYSTACK_SECRET_KEY: Joi.string().default(
-    'sk_test_f6436553a3e96c17fd447658dbde28b42ed70af7',
-  ),
+  //
+  // Deliberately has NO default. This used to fall back to a committed test
+  // key that Paystack has since revoked, so every payment call failed with
+  // `Invalid key` and it looked like an application bug. Leave it unset when
+  // payments are not needed: PaystackService detects the missing key at boot
+  // (warning) and returns an actionable 503 from payment endpoints.
+  PAYSTACK_SECRET_KEY: Joi.string().allow('').optional(),
   PAYSTACK_BASE_URL: Joi.string().default('https://api.paystack.co'),
   // Test-mode transfer OTP. Paystack normally sends this to the email/phone
   // registered on the dashboard account; some test accounts accept only the

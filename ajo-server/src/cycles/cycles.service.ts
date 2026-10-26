@@ -1,6 +1,8 @@
 import {
   BadRequestException,
+  ForbiddenException,
   forwardRef,
+  HttpException,
   Inject,
   Injectable,
   Logger,
@@ -31,16 +33,23 @@ import {
 import { GroupAccessService } from '../groups/group-access.service';
 import { WalletService } from '../wallet/wallet.service';
 import { PaystackService } from '../payments/paystack.service';
+import type { InitiateTransferResult } from '../payments/paystack.service';
 import { UsersService } from '../users/users.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { NotificationEvents } from '../notifications/notification-events';
+import { EscrowService } from './escrow.service';
+import { PlatformSettingsService } from '../platform-settings/platform-settings.service';
 import {
   ContributionFrequency,
   GroupStatus,
   InviteStatus,
   PayoutStatus,
 } from '../common/enums/group.enum';
-import { ContributionStatus, CycleStatus } from '../common/enums/cycle.enum';
+import {
+  ContributionStatus,
+  ContributionPaymentMethod,
+  CycleStatus,
+} from '../common/enums/cycle.enum';
 import {
   GroupWalletTransactionType,
   TransferStatus,
@@ -51,6 +60,13 @@ import {
 } from './interfaces/populated-cycle.interface';
 
 const MEMBER_USER_FIELDS = 'name phone email';
+
+/** Contribution states that still block a cycle payout. */
+const UNPAID_CONTRIBUTION_STATUSES: ContributionStatus[] = [
+  ContributionStatus.PENDING,
+  ContributionStatus.DEFAULTED,
+  ContributionStatus.AWAITING_CONFIRMATION,
+];
 
 @Injectable()
 export class CyclesService {
@@ -72,8 +88,10 @@ export class CyclesService {
     private walletService: WalletService,
     private paystack: PaystackService,
     private usersService: UsersService,
+    private escrowService: EscrowService,
     @Inject(forwardRef(() => NotificationsService))
     private notificationsService: NotificationsService,
+    private platformSettings: PlatformSettingsService,
   ) {}
 
   // ---- Private helpers -------------------------------------------------------
@@ -96,6 +114,20 @@ export class CyclesService {
         break;
     }
     return next;
+  }
+
+  /**
+   * The reference members are asked to put on a bank transfer into the
+   * group's escrow account, e.g. `AJO-3F9K2A-2` (group join code + the
+   * member's rotation position). Unique within a group, which is all the
+   * narration matcher needs.
+   */
+  private buildPaymentReference(
+    group: GroupDocument,
+    position?: number,
+  ): string | undefined {
+    if (!group.joinCode || !position) return undefined;
+    return `AJO-${group.joinCode.toUpperCase()}-${position}`;
   }
 
   private async createCycleWithContributions(
@@ -131,6 +163,10 @@ export class CyclesService {
         user: m.user,
         amount: group.contributionAmount,
         status: ContributionStatus.PENDING,
+        paymentReference: this.buildPaymentReference(
+          group,
+          m.position ?? undefined,
+        ),
       })),
       { session },
     );
@@ -363,6 +399,11 @@ export class CyclesService {
       await session.endSession();
     }
 
+    // Provision the group's escrow Dedicated Virtual Account (best-effort:
+    // a Paystack outage must never block activation — the admin can retry
+    // via POST :id/escrow-account/refresh).
+    await this.escrowService.getOrCreateGroupEscrowAccount(group);
+
     void this.notificationsService.send(
       NotificationEvents.groupActivated({
         userIds: members.map((m) => m.user.toString()),
@@ -440,185 +481,536 @@ export class CyclesService {
         .lean<PopulatedContribution[]>(),
     ]);
 
+    await this.backfillPaymentReferences(group, contributions);
+
     return {
       cycle: populatedCycle,
       contributions,
+      // The DVA members transfer into when paying by bank transfer. Null
+      // until provisioning succeeds — the app shows a "provisioning" state.
+      escrowAccount: this.escrowService.getStoredEscrowAccount(group),
       isAdmin: membership.isGroupAdmin,
+      // Advisory only: lets the app warn the admin, before they tap
+      // "Initiate payout", that the recipient still has to register a payout
+      // bank account. `initiatePayout` is the source of truth.
+      recipientPayoutReady: await this.recipientPayoutReady(populatedCycle),
     };
   }
 
-  // ---- Wallet contribution debit (replaces manual mark-paid) ------------------
+  /**
+   * Whether the cycle's recipient can actually receive a Paystack transfer.
+   * Never throws — a failure here must not stop the app from rendering the
+   * cycle; it just reports `false`.
+   */
+  private async recipientPayoutReady(cycle: PopulatedCycle): Promise<boolean> {
+    const recipientUserId = cycle.recipientMember?.user?._id;
+    if (!recipientUserId) return false;
+
+    try {
+      const recipient = await this.usersService.findById(
+        recipientUserId.toString(),
+      );
+      return Boolean(recipient?.bankAccount?.paystackRecipientCode);
+    } catch {
+      return false;
+    }
+  }
 
   /**
-   * Attempts to debit `contributionAmount` from every member's personal
-   * wallet for the current open cycle, crediting the group's central
-   * account for each successful debit. Members with insufficient balance
-   * are skipped — their contribution remains PENDING.
-   *
-   * Returns a summary of who was debited and who still has a PENDING
-   * contribution. Admin-triggered (manual button). See
-   * `collectContributionsSystem` for the auto-collect cron path, which
-   * shares the same core logic but skips the admin-permission check.
+   * Contributions created before `paymentReference` existed (or whose
+   * group join code changed) get their narration reference filled in on
+   * read, so the pay-by-transfer instructions always show one. Best-effort
+   * — a write failure must never break reading the cycle.
    */
-  async collectContributions(
-    adminUserId: string,
+  private async backfillPaymentReferences(
+    group: GroupDocument,
+    contributions: PopulatedContribution[],
+  ): Promise<void> {
+    const missing = contributions.filter((c) => !c.paymentReference);
+
+    if (missing.length === 0) return;
+
+    try {
+      const members = await this.groupMemberModel
+        .find({
+          group: group._id,
+          _id: { $in: missing.map((c) => c.member) },
+        })
+        .select('position')
+        .lean();
+
+      const positionByMember = new Map(
+        members.map((m) => [m._id.toString(), m.position ?? undefined]),
+      );
+
+      await Promise.all(
+        missing.map((contribution) => {
+          const reference = this.buildPaymentReference(
+            group,
+            positionByMember.get(contribution.member.toString()),
+          );
+
+          if (!reference) return Promise.resolve();
+
+          contribution.paymentReference = reference;
+
+          return this.contributionModel
+            .updateOne(
+              { _id: contribution._id },
+              { paymentReference: reference },
+            )
+            .exec();
+        }),
+      );
+    } catch (err) {
+      this.logger.warn(
+        `Failed to backfill payment references for group ${group._id.toString()}: ${String(err)}`,
+      );
+    }
+  }
+
+  // ---- Member-initiated payments ---------------------------------------------
+
+  /**
+   * Member pays their own contribution from their wallet. Debits the
+   * contribution amount plus the platform's wallet -> escrow transfer fee,
+   * credits the group's central wallet, and moves the contribution straight
+   * to PAID — no admin involvement.
+   *
+   * The fee is a percentage of the amount moved (see
+   * PlatformSetting.escrowTransferFeePercent), read at the moment of the
+   * transfer so a rate change by a platform admin applies immediately.
+   */
+  async payContributionFromWallet(
+    userId: string,
     groupId: string,
-    cycleId: string,
+    contributionId: string,
   ) {
     const group = await this.groupAccess.getGroupOrThrow(groupId);
-    await this.groupAccess.assertGroupAdmin(group._id, adminUserId);
+    await this.groupAccess.assertAcceptedMember(group._id, userId);
 
-    const cycle = await this.getCycleOrThrow(group, cycleId);
-    const results = await this.collectContributionsCore(group, cycle);
-
-    const summary = await this.getCurrentCycle(adminUserId, groupId);
-
-    return { results, ...summary };
-  }
-
-  /**
-   * System-triggered counterpart of `collectContributions`, used by
-   * `AutoCollectScheduler` for groups with `autoCollectEnabled: true`.
-   * No admin user is involved — there's no permission check, since this
-   * runs unattended on a schedule on the group's own behalf.
-   */
-  async collectContributionsSystem(group: GroupDocument, cycle: CycleDocument) {
-    return this.collectContributionsCore(group, cycle);
-  }
-
-  private async collectContributionsCore(
-    group: GroupDocument,
-    cycle: CycleDocument,
-  ): Promise<{ userId: string; success: boolean }[]> {
-    if (cycle.status !== CycleStatus.OPEN) {
-      throw new BadRequestException('This cycle is no longer open');
-    }
-
-    const pendingContributions = await this.contributionModel.find({
-      cycle: cycle._id,
-      status: ContributionStatus.PENDING,
-    });
-
-    // Get or create the platform admin wallet for service fee collection
-    const platformAdmin = await this.usersService.findPlatformAdmin();
-    const platformAdminWallet = await this.walletService.getOrCreateWallet(
-      platformAdmin._id.toString(),
+    const contribution = await this.getOwnContributionOrThrow(
+      group,
+      userId,
+      contributionId,
     );
 
-    const results: { userId: string; success: boolean }[] = [];
+    if (contribution.status === ContributionStatus.PAID) {
+      return this.getCurrentCycle(userId, groupId);
+    }
 
-    for (const contribution of pendingContributions) {
-      const session = await this.connection.startSession();
-      let debited = false;
+    if (contribution.status === ContributionStatus.AWAITING_CONFIRMATION) {
+      throw new BadRequestException(
+        'This contribution is already awaiting the admin’s confirmation of your bank transfer.',
+      );
+    }
 
-      try {
-        await session.withTransaction(async () => {
-          const serviceFee = group.serviceFee;
+    const cycle = await this.getOpenCycleForContribution(group, contribution);
+    const serviceFee = await this.platformSettings.calculateEscrowTransferFee(
+      contribution.amount,
+    );
+    const totalDue = contribution.amount + serviceFee;
 
-          debited = await this.walletService.debitForContribution(
-            contribution.user,
-            contribution.amount,
+    const wallet = await this.walletService.getOrCreateWallet(userId);
+    const balance = wallet.balance ?? 0;
+
+    if (balance < totalDue) {
+      throw new BadRequestException(
+        `Insufficient wallet balance. You need ₦${totalDue.toLocaleString()} (contribution ₦${contribution.amount.toLocaleString()} + service fee ₦${serviceFee.toLocaleString()}) but have ₦${balance.toLocaleString()}. Please fund your wallet and try again.`,
+      );
+    }
+
+    const platformAdmin = await this.usersService.findPlatformAdmin();
+    const session = await this.connection.startSession();
+
+    try {
+      await session.withTransaction(async () => {
+        const debited = await this.walletService.debitForContribution(
+          contribution.user,
+          contribution.amount,
+          {
+            group: group._id,
+            cycle: cycle._id,
+            contribution: contribution._id,
+          },
+          session,
+          serviceFee,
+        );
+
+        if (!debited) {
+          // Balance changed between the check above and the debit — abort
+          // so nothing is half-applied.
+          throw new BadRequestException(
+            'Your wallet balance is no longer sufficient. Please fund your wallet and try again.',
+          );
+        }
+
+        await this.creditGroupWallet(
+          group._id,
+          contribution.amount,
+          { cycle: cycle._id, contribution: contribution._id },
+          session,
+        );
+
+        if (serviceFee > 0) {
+          await this.walletService.creditServiceFee(
+            platformAdmin._id.toString(),
+            serviceFee,
             {
               group: group._id,
               cycle: cycle._id,
               contribution: contribution._id,
             },
             session,
-            serviceFee,
-          );
-
-          if (debited) {
-            await this.creditGroupWallet(
-              group._id,
-              contribution.amount,
-              { cycle: cycle._id, contribution: contribution._id },
-              session,
-            );
-
-            // Credit service fee to platform admin wallet if applicable
-            if (serviceFee > 0) {
-              await this.walletService.creditServiceFee(
-                platformAdmin._id.toString(),
-                serviceFee,
-                {
-                  group: group._id,
-                  cycle: cycle._id,
-                  contribution: contribution._id,
-                },
-                session,
-              );
-            }
-
-            contribution.serviceFee = serviceFee;
-            contribution.status = ContributionStatus.PAID;
-            contribution.paidAt = new Date();
-            await contribution.save({ session });
-          }
-
-          results.push({
-            userId: contribution.user.toString(),
-            success: debited,
-          });
-        });
-      } catch (err) {
-        this.logger.error(
-          `Failed to collect contribution ${contribution._id.toString()}: ${String(err)}`,
-        );
-        results.push({ userId: contribution.user.toString(), success: false });
-      } finally {
-        await session.endSession();
-      }
-
-      // Notify the member of the outcome. Done outside the transaction —
-      // a notification failure must never roll back a financial debit.
-      try {
-        const wallet = await this.walletService.getOrCreateWallet(
-          contribution.user.toString(),
-        );
-
-        if (debited) {
-          void this.notificationsService.send(
-            NotificationEvents.contributionDebited({
-              userIds: [contribution.user.toString()],
-              groupName: group.name,
-              amount: contribution.amount,
-              newBalance: wallet.balance,
-              data: {
-                groupId: group._id.toString(),
-                cycleId: cycle._id.toString(),
-              },
-            }),
-          );
-        } else {
-          const memberUser = await this.usersService.findById(
-            contribution.user.toString(),
-          );
-          const phones = memberUser
-            ? new Map([[contribution.user.toString(), memberUser.phone]])
-            : undefined;
-
-          void this.notificationsService.send(
-            NotificationEvents.contributionFailedInsufficient({
-              userIds: [contribution.user.toString()],
-              groupName: group.name,
-              amount: contribution.amount,
-              currentBalance: wallet.balance,
-              data: {
-                groupId: group._id.toString(),
-                cycleId: cycle._id.toString(),
-              },
-              phones,
-            }),
           );
         }
-      } catch (err) {
-        this.logger.error(
-          `Failed to send contribution notification: ${String(err)}`,
-        );
-      }
+
+        contribution.serviceFee = serviceFee;
+        contribution.paymentMethod = ContributionPaymentMethod.WALLET;
+        contribution.status = ContributionStatus.PAID;
+        contribution.paidAt = new Date();
+        await contribution.save({ session });
+      });
+    } finally {
+      await session.endSession();
     }
 
-    return results;
+    const updatedWallet = await this.walletService.getOrCreateWallet(userId);
+
+    void this.notificationsService.send(
+      NotificationEvents.contributionPaid({
+        userIds: [userId],
+        groupName: group.name,
+        amount: contribution.amount,
+        newBalance: updatedWallet.balance ?? 0,
+        serviceFee,
+        data: { groupId, cycleId: cycle._id.toString() },
+      }),
+    );
+
+    return this.getCurrentCycle(userId, groupId);
+  }
+
+  /**
+   * Member reports they've sent a bank transfer into the group's escrow
+   * account. The contribution moves to AWAITING_CONFIRMATION and the
+   * service fee is charged up-front (refunded if the admin rejects the
+   * claim). `debitServiceFee` throws when the wallet can't cover the fee,
+   * which aborts the transaction and leaves the contribution PENDING.
+   */
+  async notifyBankTransferPayment(
+    userId: string,
+    groupId: string,
+    contributionId: string,
+    claimedReference?: string,
+  ) {
+    const group = await this.groupAccess.getGroupOrThrow(groupId);
+    await this.groupAccess.assertAcceptedMember(group._id, userId);
+
+    const contribution = await this.getOwnContributionOrThrow(
+      group,
+      userId,
+      contributionId,
+    );
+
+    if (contribution.status === ContributionStatus.PAID) {
+      throw new BadRequestException('This contribution has already been paid.');
+    }
+
+    const cycle = await this.getOpenCycleForContribution(group, contribution);
+    const serviceFee = await this.platformSettings.calculateEscrowTransferFee(
+      contribution.amount,
+    );
+
+    const adminMembership = await this.groupMemberModel.findOne({
+      group: group._id,
+      isGroupAdmin: true,
+    });
+
+    const session = await this.connection.startSession();
+
+    try {
+      await session.withTransaction(async () => {
+        if (serviceFee > 0) {
+          await this.walletService.debitServiceFee(
+            contribution.user,
+            serviceFee,
+            {
+              group: group._id,
+              cycle: cycle._id,
+              contribution: contribution._id,
+            },
+            session,
+          );
+        }
+
+        contribution.paymentMethod = ContributionPaymentMethod.BANK_TRANSFER;
+        contribution.serviceFee = serviceFee;
+        contribution.status = ContributionStatus.AWAITING_CONFIRMATION;
+        contribution.paymentNotifiedAt = new Date();
+        contribution.claimedTransferReference =
+          claimedReference?.trim() || undefined;
+        await contribution.save({ session });
+      });
+    } finally {
+      await session.endSession();
+    }
+
+    if (adminMembership) {
+      const memberUser = await this.usersService.findById(userId);
+
+      void this.notificationsService.send(
+        NotificationEvents.contributionAwaitingConfirmation({
+          userIds: [adminMembership.user.toString()],
+          memberName: memberUser?.name ?? memberUser?.phone ?? 'A member',
+          groupName: group.name,
+          amount: contribution.amount,
+          reference:
+            contribution.claimedTransferReference ??
+            contribution.paymentReference,
+          data: { groupId, cycleId: cycle._id.toString() },
+        }),
+      );
+    }
+
+    return this.getCurrentCycle(userId, groupId);
+  }
+
+  /**
+   * Admin verifies a claimed bank transfer. If the matching escrow deposit
+   * already landed (the webhook credited the group wallet on settle) it is
+   * allocated to the contribution; otherwise the group wallet is credited
+   * now (cash / out-of-band transfer the webhook never saw). Either way the
+   * contribution becomes PAID and the platform service fee is credited.
+   */
+  async confirmContributionPaid(
+    adminUserId: string,
+    groupId: string,
+    contributionId: string,
+  ) {
+    const group = await this.groupAccess.getGroupOrThrow(groupId);
+    await this.groupAccess.assertGroupAdmin(group._id, adminUserId);
+
+    const contribution = await this.getContributionOrThrow(
+      group,
+      contributionId,
+    );
+
+    if (contribution.status === ContributionStatus.PAID) {
+      return this.getCurrentCycle(adminUserId, groupId);
+    }
+
+    if (contribution.status !== ContributionStatus.AWAITING_CONFIRMATION) {
+      throw new BadRequestException(
+        'Only a contribution the member reported as paid by bank transfer can be confirmed.',
+      );
+    }
+
+    const cycle = await this.getOpenCycleForContribution(group, contribution);
+    // The fee was charged when the member reported the transfer
+    // (notifyBankTransferPayment) and snapshotted on the contribution.
+    // A contribution with no snapshot (created before service charges
+    // existed) was confirmed without a fee, so it must not be charged now.
+    const serviceFee = contribution.serviceFee ?? 0;
+
+    const deposit =
+      await this.escrowService.findUnallocatedDepositForContribution({
+        groupId: group._id,
+        cycleId: cycle._id,
+        contributionId: contribution._id,
+        amount: contribution.amount,
+      });
+
+    const platformAdmin = await this.usersService.findPlatformAdmin();
+    const session = await this.connection.startSession();
+
+    try {
+      await session.withTransaction(async () => {
+        if (deposit) {
+          // Money already settled in escrow and the group wallet was
+          // credited by the webhook — just link it to the contribution.
+          await this.escrowService.allocateDeposit(
+            deposit,
+            {
+              cycle: cycle._id,
+              contribution: contribution._id,
+              adminUserId,
+            },
+            session,
+          );
+        } else {
+          await this.creditGroupWallet(
+            group._id,
+            contribution.amount,
+            { cycle: cycle._id, contribution: contribution._id },
+            session,
+          );
+        }
+
+        if (serviceFee > 0) {
+          await this.walletService.creditServiceFee(
+            platformAdmin._id.toString(),
+            serviceFee,
+            {
+              group: group._id,
+              cycle: cycle._id,
+              contribution: contribution._id,
+            },
+            session,
+          );
+        }
+
+        contribution.status = ContributionStatus.PAID;
+        contribution.paymentMethod = ContributionPaymentMethod.BANK_TRANSFER;
+        contribution.serviceFee = serviceFee;
+        contribution.paidAt = new Date();
+        contribution.confirmedBy = new Types.ObjectId(adminUserId);
+        contribution.confirmedAt = new Date();
+        await contribution.save({ session });
+      });
+    } finally {
+      await session.endSession();
+    }
+
+    void this.notificationsService.send(
+      NotificationEvents.contributionConfirmed({
+        userIds: [contribution.user.toString()],
+        groupName: group.name,
+        amount: contribution.amount,
+        roundLabel: `cycle ${cycle.cycleNumber}`,
+        data: { groupId, cycleId: cycle._id.toString() },
+      }),
+    );
+
+    return this.getCurrentCycle(adminUserId, groupId);
+  }
+
+  /**
+   * Admin rejects a claimed bank transfer: the contribution returns to
+   * PENDING, the service fee is refunded to the member's wallet, and any
+   * escrow deposit the narration matcher pre-linked is released back to
+   * the reconciliation queue (the money itself stays in the group wallet).
+   */
+  async rejectContributionPayment(
+    adminUserId: string,
+    groupId: string,
+    contributionId: string,
+    reason?: string,
+  ) {
+    const group = await this.groupAccess.getGroupOrThrow(groupId);
+    await this.groupAccess.assertGroupAdmin(group._id, adminUserId);
+
+    const contribution = await this.getContributionOrThrow(
+      group,
+      contributionId,
+    );
+
+    if (contribution.status !== ContributionStatus.AWAITING_CONFIRMATION) {
+      throw new BadRequestException(
+        'Only a contribution awaiting confirmation can be rejected.',
+      );
+    }
+
+    const cycle = await this.getOpenCycleForContribution(group, contribution);
+    const serviceFee = contribution.serviceFee ?? 0;
+
+    const session = await this.connection.startSession();
+
+    try {
+      await session.withTransaction(async () => {
+        await this.escrowService.releaseDepositForContribution(
+          group._id,
+          contribution._id,
+          session,
+        );
+
+        if (serviceFee > 0) {
+          await this.walletService.refundServiceFee(
+            contribution.user,
+            serviceFee,
+            {
+              group: group._id,
+              cycle: cycle._id,
+              contribution: contribution._id,
+            },
+            session,
+          );
+        }
+
+        contribution.status = ContributionStatus.PENDING;
+        contribution.paymentMethod = undefined;
+        contribution.serviceFee = 0;
+        contribution.lastRejectedAt = new Date();
+        contribution.lastRejectionReason = reason;
+        await contribution.save({ session });
+      });
+    } finally {
+      await session.endSession();
+    }
+
+    void this.notificationsService.send(
+      NotificationEvents.contributionRejected({
+        userIds: [contribution.user.toString()],
+        groupName: group.name,
+        amount: contribution.amount,
+        reason,
+        data: { groupId, cycleId: cycle._id.toString() },
+      }),
+    );
+
+    return this.getCurrentCycle(adminUserId, groupId);
+  }
+
+  // ---- Payment helpers --------------------------------------------------------
+
+  private async getContributionOrThrow(
+    group: GroupDocument,
+    contributionId: string,
+  ): Promise<ContributionDocument> {
+    if (!Types.ObjectId.isValid(contributionId)) {
+      throw new BadRequestException('Invalid contribution id');
+    }
+
+    const contribution = await this.contributionModel.findOne({
+      _id: contributionId,
+      group: group._id,
+    });
+
+    if (!contribution) throw new NotFoundException('Contribution not found');
+
+    return contribution;
+  }
+
+  private async getOwnContributionOrThrow(
+    group: GroupDocument,
+    userId: string,
+    contributionId: string,
+  ): Promise<ContributionDocument> {
+    const contribution = await this.getContributionOrThrow(
+      group,
+      contributionId,
+    );
+
+    if (contribution.user.toString() !== userId) {
+      throw new ForbiddenException('This contribution does not belong to you');
+    }
+
+    return contribution;
+  }
+
+  private async getOpenCycleForContribution(
+    group: GroupDocument,
+    contribution: ContributionDocument,
+  ): Promise<CycleDocument> {
+    const cycle = await this.cycleModel.findById(contribution.cycle);
+
+    if (!cycle) throw new NotFoundException('Cycle not found');
+
+    if (cycle.status !== CycleStatus.OPEN) {
+      throw new BadRequestException('This cycle is no longer open');
+    }
+
+    return cycle;
   }
 
   // ---- Payout -----------------------------------------------------------------
@@ -638,6 +1030,11 @@ export class CyclesService {
    * FAILED by the Paystack transfer webhook.
    */
   async initiatePayout(adminUserId: string, groupId: string, cycleId: string) {
+    // Fail before touching money: with no usable Paystack key the transfer
+    // can never be sent, and the old debit → refund dance left a FAILED
+    // payout plus two ledger entries behind on every attempt.
+    this.paystack.assertConfigured();
+
     const group = await this.groupAccess.getGroupOrThrow(groupId);
     await this.groupAccess.assertGroupAdmin(group._id, adminUserId);
 
@@ -653,14 +1050,43 @@ export class CyclesService {
       );
     }
 
-    const pendingCount = await this.contributionModel.countDocuments({
-      cycle: cycle._id,
-      status: ContributionStatus.PENDING,
-    });
+    // Payout requires every contribution to be PAID. A member's claimed
+    // bank transfer (AWAITING_CONFIRMATION) is not paid until the admin
+    // verifies it, so it blocks the payout like an unpaid one.
+    //
+    // The whole cycle is loaded (not just the unpaid rows) because the
+    // payout amount is derived from what was actually collected — see
+    // `payoutAmount` below.
+    const cycleContributions = await this.contributionModel
+      .find({ cycle: cycle._id })
+      .select('status amount')
+      .lean();
 
-    if (pendingCount > 0) {
+    if (cycleContributions.length === 0) {
       throw new BadRequestException(
-        `${pendingCount} member(s) still have pending contributions. Run collect-contributions first.`,
+        'Payout blocked: this cycle has no contributions to pay out',
+      );
+    }
+
+    const unpaid = cycleContributions.filter((contribution) =>
+      UNPAID_CONTRIBUTION_STATUSES.includes(contribution.status),
+    );
+
+    if (unpaid.length > 0) {
+      const awaitingConfirmation = unpaid.filter(
+        (c) => c.status === ContributionStatus.AWAITING_CONFIRMATION,
+      ).length;
+      const stillUnpaid = unpaid.length - awaitingConfirmation;
+
+      const parts = [
+        stillUnpaid > 0 ? `${stillUnpaid} member(s) have not paid` : null,
+        awaitingConfirmation > 0
+          ? `${awaitingConfirmation} payment(s) are awaiting your confirmation`
+          : null,
+      ].filter(Boolean);
+
+      throw new BadRequestException(
+        `Payout blocked: ${parts.join(' and ')}. Confirm or reject the claimed bank transfers, and wait for the remaining members to pay.`,
       );
     }
 
@@ -681,7 +1107,36 @@ export class CyclesService {
       );
     }
 
-    const payoutAmount = group.contributionAmount * group.totalSlots;
+    // Pay out exactly what this cycle collected. `contributionAmount *
+    // totalSlots` looks equivalent, but the group's settings (and roster)
+    // can change after a cycle starts while every contribution keeps the
+    // amount it was created with — using the live group settings then asks
+    // the group wallet for money the members never paid and the payout dies
+    // with "Insufficient group wallet balance".
+    const payoutAmount = cycleContributions
+      .filter((contribution) => contribution.status === ContributionStatus.PAID)
+      .reduce((sum, contribution) => sum + contribution.amount, 0);
+
+    if (payoutAmount <= 0) {
+      throw new BadRequestException(
+        'Payout blocked: this cycle has no confirmed contributions to pay out',
+      );
+    }
+
+    // Platform payout charge: a percentage of the amount leaving escrow,
+    // kept by the platform admin's wallet. The group's central account is
+    // still debited the full payout — the fee simply never reaches the
+    // recipient's bank account.
+    const payoutFee =
+      await this.platformSettings.calculatePayoutFee(payoutAmount);
+    const netAmount = payoutAmount - payoutFee;
+
+    if (netAmount <= 0) {
+      throw new BadRequestException(
+        `Payout blocked: the ₦${payoutAmount.toLocaleString()} collected doesn't cover the ₦${payoutFee.toLocaleString()} platform payout fee.`,
+      );
+    }
+
     const paystackReference = `payout_${cycleId}_${randomUUID()}`;
 
     // Debit the group wallet and create the Payout record inside a
@@ -691,23 +1146,61 @@ export class CyclesService {
 
     try {
       await session.withTransaction(async () => {
-        const [payoutDoc] = await this.payoutModel.create(
-          [
-            {
-              group: group._id,
-              cycle: cycle._id,
-              recipientMember: recipientMember._id,
-              recipientUser: recipientUser._id,
-              initiatedBy: new Types.ObjectId(adminUserId),
-              amount: payoutAmount,
-              status: TransferStatus.PENDING,
-              paystackReference,
-            },
-          ],
-          { session },
-        );
+        // One Payout document per cycle (unique index on `cycle`). A failed
+        // attempt is refunded but keeps its document, so a retry MUST reuse
+        // it: creating a second one trips the unique index and every later
+        // "Initiate payout" tap dies with a duplicate-key 500.
+        const existing = await this.payoutModel
+          .findOne({ cycle: cycle._id })
+          .session(session);
 
-        payout = payoutDoc;
+        if (existing) {
+          if (existing.status === TransferStatus.SUCCESS) {
+            throw new BadRequestException(
+              'This cycle has already been paid out',
+            );
+          }
+
+          if (existing.status === TransferStatus.PENDING) {
+            throw new BadRequestException(
+              'A payout for this cycle is already in progress. Wait for Paystack to confirm it before trying again.',
+            );
+          }
+
+          existing.recipientMember = recipientMember._id;
+          existing.recipientUser = recipientUser._id;
+          existing.initiatedBy = new Types.ObjectId(adminUserId);
+          existing.amount = payoutAmount;
+          existing.fee = payoutFee;
+          existing.netAmount = netAmount;
+          existing.status = TransferStatus.PENDING;
+          existing.paystackReference = paystackReference;
+          existing.paystackTransferCode = undefined;
+          existing.failureReason = undefined;
+          existing.completedAt = undefined;
+          await existing.save({ session });
+          payout = existing;
+        } else {
+          const [payoutDoc] = await this.payoutModel.create(
+            [
+              {
+                group: group._id,
+                cycle: cycle._id,
+                recipientMember: recipientMember._id,
+                recipientUser: recipientUser._id,
+                initiatedBy: new Types.ObjectId(adminUserId),
+                amount: payoutAmount,
+                fee: payoutFee,
+                netAmount,
+                status: TransferStatus.PENDING,
+                paystackReference,
+              },
+            ],
+            { session },
+          );
+
+          payout = payoutDoc;
+        }
 
         await this.debitGroupWallet(
           group._id,
@@ -723,58 +1216,141 @@ export class CyclesService {
     // Initiate the Paystack transfer OUTSIDE the transaction (Paystack is
     // an external system — mixing it with a Mongo transaction would leave
     // the transaction open across a network call, which is unsafe). If
-    // Paystack fails, we update the Payout status to FAILED and refund
-    // the group wallet.
+    // Paystack refuses the transfer, we update the Payout status to FAILED
+    // and refund the group wallet.
+    let transfer: InitiateTransferResult;
+
     try {
-      const transfer = await this.paystack.initiateTransfer({
-        amountNaira: payoutAmount,
+      transfer = await this.paystack.initiateTransfer({
+        amountNaira: netAmount,
         recipientCode: recipientUser.bankAccount.paystackRecipientCode,
         reason: `Ajo payout – ${group.name} cycle ${cycle.cycleNumber}`,
         reference: paystackReference,
       });
+    } catch (err) {
+      const reason = this.describePayoutFailure(err);
+      this.logger.error(
+        `Paystack transfer failed for payout ${payout!._id.toString()}: ${reason}`,
+      );
+      await this.handleFailedPayout(payout!, group._id, cycle._id, reason);
 
-      payout!.paystackTransferCode = transfer.transferCode;
+      // Report the failure instead of returning a 200 with a FAILED payout
+      // (which made the app announce "Payout initiated successfully" for a
+      // transfer that never left Paystack). The group wallet is refunded by
+      // handleFailedPayout, so the admin can retry immediately.
+      throw new BadRequestException(
+        `Payout could not be sent: ${reason}. Your group wallet has been refunded — please try again.`,
+      );
+    }
 
-      void this.notificationsService.send(
-        NotificationEvents.payoutInitiated({
-          userIds: [recipientUser._id.toString()],
-          groupName: group.name,
-          amount: payoutAmount,
-          bankName: recipientUser.bankAccount.bankName,
-          accountNumber: recipientUser.bankAccount.accountNumber,
-          data: {
-            groupId: group._id.toString(),
-            cycleId: cycle._id.toString(),
-          },
-        }),
+    payout!.paystackTransferCode = transfer.transferCode;
+
+    // Persist the transfer code BEFORE finalizing. If local finalization
+    // fails below, the code must survive so the Paystack webhook (or the
+    // `seed:resolve-pending-payouts` reconciliation) can still complete it.
+    await payout!.save();
+
+    void this.notificationsService.send(
+      NotificationEvents.payoutInitiated({
+        userIds: [recipientUser._id.toString()],
+        groupName: group.name,
+        amount: netAmount,
+        bankName: recipientUser.bankAccount.bankName,
+        accountNumber: recipientUser.bankAccount.accountNumber,
+        data: {
+          groupId: group._id.toString(),
+          cycleId: cycle._id.toString(),
+        },
+      }),
+    );
+
+    if (transfer.status === 'success') {
+      await this.finalizeAcceptedPayout(payout!, cycle, group);
+    } else if (transfer.status === 'otp' && this.paystack.isTestMode()) {
+      // In test mode, Paystack returns 'otp' for transfers. Auto-resolve
+      // with the test OTP so the payout completes without requiring a
+      // webhook callback (which won't reach localhost).
+      this.logger.log(
+        `Test mode: resolving OTP for transfer ${transfer.transferCode}`,
       );
 
-      if (transfer.status === 'success') {
-        await this.finalizeSuccessfulPayout(payout!, cycle, group);
-      } else if (transfer.status === 'otp' && this.paystack.isTestMode()) {
-        // In test mode, Paystack returns 'otp' for transfers. Auto-resolve
-        // with the test OTP so the payout completes without requiring a
-        // webhook callback (which won't reach localhost).
-        this.logger.log(
-          `Test mode: resolving OTP for transfer ${transfer.transferCode}`,
-        );
+      try {
         await this.paystack.resolveOtp(
           transfer.transferCode,
           this.paystack.testTransferOtp(),
         );
-        await this.finalizeSuccessfulPayout(payout!, cycle, group);
-      } else {
-        // 'pending' or 'otp' in live mode — webhook will finalize.
-        await payout!.save();
+      } catch (err) {
+        // The OTP was rejected, so the transfer never left Paystack and the
+        // money is still with us: fail + refund so the admin can retry.
+        const reason = this.describePayoutFailure(err);
+        this.logger.error(
+          `Paystack transfer ${transfer.transferCode} could not be finalized ` +
+            `with the test OTP: ${reason}`,
+        );
+        await this.handleFailedPayout(payout!, group._id, cycle._id, reason);
+
+        throw new BadRequestException(
+          `Payout could not be sent: ${reason}. Your group wallet has been refunded — please try again.`,
+        );
       }
-    } catch (err) {
-      this.logger.error(
-        `Paystack transfer failed for payout ${payout!._id.toString()}: ${String(err)}`,
-      );
-      await this.handleFailedPayout(payout!, group._id, cycle._id, String(err));
+
+      // OTP accepted — the transfer is now committed at Paystack.
+      await this.finalizeAcceptedPayout(payout!, cycle, group);
     }
+    // 'pending' or 'otp' in live mode — the webhook finalizes.
 
     return this.payoutModel.findById(payout!._id).lean();
+  }
+
+  /**
+   * Finalizes a payout that Paystack has already accepted.
+   *
+   * Deliberately never rethrows: the money is on its way, so a local failure
+   * here (Mongo blip, missing rotation slot, ...) must NOT be reported as a
+   * failed transfer — the caller would refund the group wallet and the
+   * recipient would effectively be paid twice. The payout keeps its
+   * `paystackTransferCode` and stays PENDING so the webhook (or
+   * `seed:resolve-pending-payouts`) can finish it.
+   */
+  private async finalizeAcceptedPayout(
+    payout: PayoutDocument,
+    cycle: CycleDocument,
+    group: GroupDocument,
+  ): Promise<void> {
+    try {
+      await this.finalizeSuccessfulPayout(payout, cycle, group);
+    } catch (err) {
+      this.logger.error(
+        `Payout ${payout._id.toString()} was accepted by Paystack (transfer ` +
+          `${payout.paystackTransferCode ?? 'unknown'}) but local finalization ` +
+          `failed: ${this.describePayoutFailure(err)}. Keeping it PENDING — ` +
+          'the webhook will finalize it. Do not refund automatically.',
+      );
+    }
+  }
+
+  /**
+   * Turns an unknown thrown value into a message fit for the admin's screen.
+   * Paystack errors arrive as HttpExceptions whose response body carries the
+   * gateway's own message, which is far more useful than `Error: ...`.
+   */
+  private describePayoutFailure(err: unknown): string {
+    if (err instanceof HttpException) {
+      const response = err.getResponse();
+
+      if (typeof response === 'string') return response;
+
+      if (response && typeof response === 'object') {
+        const message = (response as { message?: string | string[] }).message;
+
+        if (Array.isArray(message)) return message.join(' ');
+        if (message) return message;
+      }
+    }
+
+    if (err instanceof Error && err.message) return err.message;
+
+    return String(err);
   }
 
   /**
@@ -788,6 +1364,13 @@ export class CyclesService {
     cycle: CycleDocument,
     group: GroupDocument,
   ): Promise<void> {
+    // The platform's payout charge is only recognised once the transfer
+    // actually succeeded — a failed transfer never earns it. Read the
+    // platform admin before opening the transaction (it's a plain lookup).
+    const payoutFee = payout.fee ?? 0;
+    const platformAdmin =
+      payoutFee > 0 ? await this.usersService.findPlatformAdmin() : null;
+
     const session = await this.connection.startSession();
 
     // Capture values set inside the transaction for use after it completes
@@ -801,6 +1384,24 @@ export class CyclesService {
         payout.status = TransferStatus.SUCCESS;
         payout.completedAt = new Date();
         await payout.save({ session });
+
+        // Recognise the platform's payout charge on the admin wallet.
+        if (platformAdmin && payoutFee > 0) {
+          await this.walletService.creditServiceFee(
+            platformAdmin._id.toString(),
+            payoutFee,
+            { group: group._id, cycle: cycle._id },
+            session,
+            {
+              reference: `payout_fee_${payout._id.toString()}`,
+              metadata: {
+                source: 'payout_fee',
+                payout: payout._id.toString(),
+                grossAmount: payout.amount,
+              },
+            },
+          );
+        }
 
         cycle.status = CycleStatus.COMPLETED;
         cycle.completedAt = new Date();
@@ -832,10 +1433,22 @@ export class CyclesService {
             .findOne({ group: group._id, position: nextPosition })
             .session(session);
 
-          if (!nextRecipient)
-            throw new BadRequestException(
-              `No member at rotation position ${nextPosition}`,
+          // A missing member at the next rotation position used to throw,
+          // which rolled back this transaction AFTER Paystack had already
+          // sent the money: the payout stayed PENDING forever, the group
+          // wallet stayed debited and every retry answered "already in
+          // progress". Close the group instead — the funds have moved, so
+          // there is nothing left to schedule.
+          if (!nextRecipient) {
+            this.logger.warn(
+              `Group ${group._id.toString()} has no member at rotation ` +
+                `position ${nextPosition} (totalSlots=${group.totalSlots}); ` +
+                'completing the group after the final payout.',
             );
+            group.status = GroupStatus.COMPLETED;
+            await group.save({ session });
+            return;
+          }
 
           const members = await this.groupMemberModel
             .find({ group: group._id, inviteStatus: InviteStatus.ACCEPTED })
@@ -876,7 +1489,7 @@ export class CyclesService {
       NotificationEvents.payoutSuccess({
         userIds: [payout.recipientUser.toString()],
         groupName: group.name,
-        amount: payout.amount,
+        amount: payout.netAmount || payout.amount,
         data: { groupId: group._id.toString(), cycleId: cycle._id.toString() },
       }),
     );
@@ -951,6 +1564,17 @@ export class CyclesService {
     payout: PayoutDocument,
     group: GroupDocument,
   ): Promise<void> {
+    // A reversal can arrive for a transfer that was still PENDING locally
+    // (the webhook beat our finalization) or one we already marked
+    // SUCCESS. In the second case the platform fee was already credited,
+    // so it has to be clawed back alongside the group wallet refund.
+    const feeWasCredited =
+      payout.status === TransferStatus.SUCCESS && (payout.fee ?? 0) > 0;
+    const platformAdmin = feeWasCredited
+      ? await this.usersService.findPlatformAdmin()
+      : null;
+    const payoutFee = payout.fee ?? 0;
+
     const session = await this.connection.startSession();
 
     try {
@@ -964,6 +1588,22 @@ export class CyclesService {
           { cycle: payout.cycle, payout: payout._id },
           session,
         );
+
+        if (platformAdmin && feeWasCredited) {
+          await this.walletService.reverseServiceFeeCredit(
+            platformAdmin._id.toString(),
+            payoutFee,
+            { group: group._id, cycle: payout.cycle },
+            session,
+            {
+              reference: `payout_fee_reversal_${payout._id.toString()}`,
+              metadata: {
+                source: 'payout_fee_reversal',
+                payout: payout._id.toString(),
+              },
+            },
+          );
+        }
       });
     } finally {
       await session.endSession();
@@ -979,7 +1619,7 @@ export class CyclesService {
         NotificationEvents.payoutReversed({
           userIds: [adminMembership.user.toString()],
           groupName: group.name,
-          amount: payout.amount,
+          amount: payout.netAmount || payout.amount,
           data: { groupId: group._id.toString() },
         }),
       );

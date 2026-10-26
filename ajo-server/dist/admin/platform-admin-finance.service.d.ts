@@ -6,6 +6,7 @@ import { CycleDocument } from '../cycles/schemas/cycle.schema';
 import { ListWalletTransactionsQueryDto } from './dto/list-wallet-transactions-query.dto';
 import { ListPayoutsQueryDto } from './dto/list-payouts-query.dto';
 import { ListGroupWalletTransactionsQueryDto } from './dto/list-group-wallet-transactions-query.dto';
+import { UsersService } from '../users/users.service';
 export interface PaginatedWalletTransactions {
     transactions: Array<{
         id: string;
@@ -79,13 +80,21 @@ export interface PaginatedGroupWalletTransactions {
     total: number;
     totalPages: number;
 }
+export interface ServiceChargeTotals {
+    totalCollected: number;
+    totalReversed: number;
+    netCollected: number;
+    chargeCount: number;
+}
 export declare class PlatformAdminFinanceService {
     private walletTxModel;
     private payoutModel;
     private groupWalletTxModel;
     private cycleModel;
-    constructor(walletTxModel: Model<WalletTransactionDocument>, payoutModel: Model<PayoutDocument>, groupWalletTxModel: Model<GroupWalletTransactionDocument>, cycleModel: Model<CycleDocument>);
+    private usersService;
+    constructor(walletTxModel: Model<WalletTransactionDocument>, payoutModel: Model<PayoutDocument>, groupWalletTxModel: Model<GroupWalletTransactionDocument>, cycleModel: Model<CycleDocument>, usersService: UsersService);
     listWalletTransactions(query: ListWalletTransactionsQueryDto): Promise<PaginatedWalletTransactions>;
     listPayouts(query: ListPayoutsQueryDto): Promise<PaginatedPayouts>;
     listGroupWalletTransactions(query: ListGroupWalletTransactionsQueryDto): Promise<PaginatedGroupWalletTransactions>;
+    getServiceChargeTotals(): Promise<ServiceChargeTotals>;
 }

@@ -191,12 +191,12 @@ const styles = StyleSheet.create({
   title: {
     fontSize: typography.sizes.xxl,
     fontWeight: typography.weights.bold,
-    color: colors.ink,
+    color: colors.forestLightInk,
     marginBottom: spacing.xs,
   },
   subtitle: {
     fontSize: typography.sizes.base,
-    color: colors.inkSoft,
+    color: colors.forestLightInkSoft,
     marginBottom: spacing.xl,
     lineHeight: 22,
   },
@@ -206,10 +206,10 @@ const styles = StyleSheet.create({
   memberRow: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: colors.surface,
+    backgroundColor: colors.white,
     borderRadius: radii.md,
     borderWidth: 1,
-    borderColor: colors.line,
+    borderColor: colors.forestLightLine,
     padding: spacing.md,
     marginBottom: spacing.sm,
   },
@@ -217,7 +217,7 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 16,
-    backgroundColor: colors.primary,
+    backgroundColor: colors.forestAction,
     alignItems: "center",
     justifyContent: "center",
     marginRight: spacing.md,
@@ -233,11 +233,11 @@ const styles = StyleSheet.create({
   memberName: {
     fontSize: typography.sizes.base,
     fontWeight: typography.weights.medium,
-    color: colors.ink,
+    color: colors.forestLightInk,
   },
   memberRole: {
     fontSize: typography.sizes.xs,
-    color: colors.inkSoft,
+    color: colors.forestLightInkSoft,
   },
   moveButtons: {
     flexDirection: "row",
@@ -247,7 +247,7 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: colors.primarySoft,
+    backgroundColor: colors.forestLightPill,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -256,10 +256,10 @@ const styles = StyleSheet.create({
   },
   moveButtonText: {
     fontSize: typography.sizes.sm,
-    color: colors.primary,
+    color: colors.forestAction,
   },
   moveButtonTextDisabled: {
-    color: colors.inkFaint,
+    color: colors.forestLightInkFaint,
   },
   actions: {
     paddingTop: spacing.lg,

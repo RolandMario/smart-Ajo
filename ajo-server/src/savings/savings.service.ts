@@ -41,6 +41,20 @@ const FREQUENCY_LABEL: Record<ContributionFrequency, string> = {
   [ContributionFrequency.MONTHLY]: 'monthly',
 };
 
+/** Activity rows per page in the plan detail ("Recent activity"). */
+export const SAVING_ACTIVITY_PAGE_SIZE = 10;
+
+/** Hard cap so a client cannot ask for the whole history in one call. */
+const SAVING_ACTIVITY_MAX_PAGE_SIZE = 50;
+
+/** Coerces a query-string number to a positive integer, else `fallback`. */
+function positiveInt(value: number | undefined, fallback: number): number {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value < 1) {
+    return fallback;
+  }
+  return Math.trunc(value);
+}
+
 @Injectable()
 export class SavingsService {
   private readonly logger = new Logger(SavingsService.name);
@@ -139,7 +153,53 @@ export class SavingsService {
     if (!plan) {
       throw new NotFoundException('Savings plan not found');
     }
+
+    // Plans created before `intervalCount` existed carry no interval count:
+    // the app then renders no "Pay" action (0 of 0 intervals) and the cycle
+    // can never complete, because `collectedCount >= undefined` is never
+    // true. Derive it once from (frequency, duration) and persist it.
+    const derived = this.derivedIntervalCount(plan);
+    if (derived) {
+      plan.intervalCount = derived;
+      try {
+        await plan.save();
+      } catch (err) {
+        // A legacy document may still fail validation for other missing
+        // fields (see seed:fix-savings-plan-durations). The in-memory value
+        // is enough for this request, so never block the read.
+        this.logger.warn(
+          `Could not persist derived intervalCount for savings plan ${plan._id.toString()}: ${String(err)}`,
+        );
+      }
+    }
+
     return plan;
+  }
+
+  /**
+   * The interval count to fall back on for a plan that never snapshotted one,
+   * or `null` when the plan already has a usable count.
+   */
+  private derivedIntervalCount(plan: {
+    intervalCount?: number;
+    startAt?: Date;
+    frequency: ContributionFrequency;
+    durationUnit?: SavingDurationUnit;
+    durationValue?: number;
+    durationMonths?: number;
+  }): number | null {
+    if (Number(plan.intervalCount) > 0) return null;
+
+    try {
+      return this.computeCycle(
+        plan.startAt ?? new Date(),
+        plan.frequency,
+        plan.durationUnit ?? SavingDurationUnit.MONTHS,
+        plan.durationValue ?? plan.durationMonths ?? 3,
+      ).intervalCount;
+    } catch {
+      return null;
+    }
   }
 
   // ---- Creation / read ------------------------------------------------------
@@ -166,7 +226,8 @@ export class SavingsService {
       savingsBalance: 0,
       lifetimeSaved: 0,
       status: SavingPlanStatus.ACTIVE,
-      // Set due in the past so the scheduler collects the first interval promptly.
+      // The first interval is due immediately — the member pays it from their
+      // wallet with the "Pay" action on the plan (nothing is debited for them).
       nextDueAt: now,
       startAt: now,
       endAt,
@@ -196,117 +257,164 @@ export class SavingsService {
       .sort({ createdAt: -1 })
       .lean();
 
-    return plans;
+    // Show legacy plans (no snapshotted `intervalCount`) with their derived
+    // schedule instead of "0 of undefined" in the list; opening the plan
+    // persists the derived value (see `requireOwnPlan`).
+    return plans.map((plan) => {
+      const derived = this.derivedIntervalCount(plan);
+      return derived ? { ...plan, intervalCount: derived } : plan;
+    });
   }
 
-  async getPlan(userId: string, planId: string) {
+  /**
+   * Plan detail + one page of its activity ledger, newest first.
+   *
+   * `page` / `limit` are optional (the mobile "Recent activity" list asks for
+   * 10 rows per page); the response echoes the resolved `page`/`limit` plus
+   * `total`, so the client can render "Page 1 of 3" without guessing. An
+   * out-of-range page is clamped to the last page instead of returning an
+   * empty list.
+   */
+  async getPlan(
+    userId: string,
+    planId: string,
+    opts: { page?: number; limit?: number } = {},
+  ) {
     const plan = await this.requireOwnPlan(userId, planId);
+
+    const limit = Math.min(
+      positiveInt(opts.limit, SAVING_ACTIVITY_PAGE_SIZE),
+      SAVING_ACTIVITY_MAX_PAGE_SIZE,
+    );
+    const total = await this.savingTxModel.countDocuments({ plan: plan._id });
+    const pageCount = Math.max(1, Math.ceil(total / limit));
+    const page = Math.min(positiveInt(opts.page, 1), pageCount);
 
     const transactions = await this.savingTxModel
       .find({ plan: plan._id })
       .sort({ createdAt: -1 })
-      .limit(50)
+      .skip((page - 1) * limit)
+      .limit(limit)
       .lean();
 
-    return { plan, transactions };
+    return { plan, transactions, page, limit, total };
   }
 
-  // ---- Auto-collection (scheduler) ------------------------------------------
+  // ---- Interval payment (member-initiated) ----------------------------------
 
   /**
-   * Finds every active plan whose next due moment has passed and tries to
-   * auto-debit the wallet. Called by the cron scheduler. Handles the
-   * catch-up case (e.g. server was offline across several intervals) by
-   * collecting multiple due intervals in sequence.
+   * Pays one interval of the plan out of the member's Ajo wallet.
+   *
+   * There is no background auto-debit any more: the member taps "Pay" on a
+   * plan and the amount moves wallet -> plan `savingsBalance` immediately.
+   * Payment is allowed whenever the plan is ACTIVE with intervals left —
+   * including before `nextDueAt` (paying early is fine) — so `nextDueAt` is
+   * only a schedule marker for the UI.
+   *
+   * The reference is deterministic for (plan, cycle, interval) and
+   * `SavingTransaction.reference` is unique, so a double tap or a retried
+   * request can only ever charge the wallet once: the duplicate insert
+   * aborts the transaction, and the current plan state is returned instead
+   * of an error.
    */
-  async processDuePlans(): Promise<void> {
-    const now = new Date();
-    const duePlans = await this.savingPlanModel.find({
-      status: SavingPlanStatus.ACTIVE,
-      nextDueAt: { $lte: now },
-    });
+  async payInterval(userId: string, planId: string) {
+    const plan = await this.requireOwnPlan(userId, planId);
 
-    for (const plan of duePlans) {
-      try {
-        await this.processPlan(plan);
-      } catch (err) {
-        this.logger.error(
-          `Failed to process savings plan ${plan._id.toString()}: ${String(err)}`,
-        );
-      }
-    }
-  }
-
-  private async processPlan(plan: SavingPlanDocument): Promise<void> {
-    const userId = plan.user.toString();
-
-    while (
-      plan.status === SavingPlanStatus.ACTIVE &&
-      plan.nextDueAt <= new Date() &&
-      plan.collectedCount < plan.intervalCount
-    ) {
-      const sequence = plan.collectedCount;
-      const reference = `saving_${plan._id.toString()}_${plan.cycleNumber}_${sequence}`;
-
-      const session = await this.connection.startSession();
-      let debited = false;
-      try {
-        await session.withTransaction(async () => {
-          debited = await this.walletService.debitForSavings(
-            plan.user,
-            plan.amount,
-            { savingPlan: plan._id },
-            reference,
-            session,
-          );
-
-          if (debited) {
-            await this.savingTxModel.create(
-              [
-                {
-                  plan: plan._id,
-                  user: plan.user,
-                  type: SavingTransactionType.SAVING_DEBIT,
-                  amount: plan.amount,
-                  reference,
-                  cycleNumber: plan.cycleNumber,
-                },
-              ],
-              { session },
-            );
-
-            plan.collectedCount += 1;
-            plan.savingsBalance += plan.amount;
-            plan.lifetimeSaved += plan.amount;
-            plan.nextDueAt = this.nextDue(plan.nextDueAt, plan.frequency);
-            await plan.save({ session });
-          }
-        });
-      } finally {
-        await session.endSession();
-      }
-
-      if (!debited) {
-        await this.notifyInsufficient(plan);
-        return;
-      }
-
-      void this.notificationsService.send(
-        NotificationEvents.savingDebited({
-          userIds: [userId],
-          planName: plan.name,
-          amount: plan.amount,
-          newBalance: plan.savingsBalance,
-        }),
+    if (plan.status !== SavingPlanStatus.ACTIVE) {
+      throw new BadRequestException(
+        'This savings plan is not accepting payments right now.',
       );
     }
 
-    // Cycle finished — mark complete so Withdraw becomes available.
     if (plan.collectedCount >= plan.intervalCount) {
-      plan.status = SavingPlanStatus.COMPLETED;
-      plan.endAt = new Date();
-      await plan.save();
+      throw new BadRequestException(
+        'Every interval in this cycle has already been paid.',
+      );
+    }
 
+    const sequence = plan.collectedCount;
+    const reference = `saving_${plan._id.toString()}_${plan.cycleNumber}_${sequence}`;
+    const now = new Date();
+    let cycleCompleted = false;
+
+    const session = await this.connection.startSession();
+    try {
+      await session.withTransaction(async () => {
+        // Write the plan-ledger entry first: its unique `reference` is the
+        // idempotency guard. A duplicate aborts the transaction before the
+        // wallet is touched, so a double tap can't debit twice.
+        await this.savingTxModel.create(
+          [
+            {
+              plan: plan._id,
+              user: plan.user,
+              type: SavingTransactionType.SAVING_DEBIT,
+              amount: plan.amount,
+              reference,
+              cycleNumber: plan.cycleNumber,
+            },
+          ],
+          { session },
+        );
+
+        const debited = await this.walletService.debitForSavings(
+          plan.user,
+          plan.amount,
+          { savingPlan: plan._id },
+          reference,
+          session,
+        );
+
+        if (!debited) {
+          // Throwing rolls the transaction back, ledger entry included, so an
+          // unpaid interval never shows up in the history.
+          throw new BadRequestException(
+            'Insufficient wallet balance. Top up your wallet and try again.',
+          );
+        }
+
+        plan.collectedCount += 1;
+        plan.savingsBalance += plan.amount;
+        plan.lifetimeSaved += plan.amount;
+        // Measure the next interval from whichever is later: the previous due
+        // moment (on-time or early payment keeps the cadence) or now (a late
+        // payment restarts the cadence from today).
+        plan.nextDueAt = this.nextDue(
+          new Date(Math.max(plan.nextDueAt.getTime(), now.getTime())),
+          plan.frequency,
+        );
+
+        if (plan.collectedCount >= plan.intervalCount) {
+          // Cycle finished — Withdraw becomes available.
+          cycleCompleted = true;
+          plan.status = SavingPlanStatus.COMPLETED;
+          plan.endAt = now;
+        }
+
+        await plan.save({ session });
+      });
+    } catch (err) {
+      if (this.isDuplicateKeyError(err)) {
+        this.logger.warn(
+          `Savings interval already paid (${reference}); ignoring duplicate request.`,
+        );
+        return this.getPlan(userId, planId);
+      }
+      throw err;
+    } finally {
+      await session.endSession();
+    }
+
+    void this.notificationsService.send(
+      NotificationEvents.savingDebited({
+        userIds: [userId],
+        planName: plan.name,
+        amount: plan.amount,
+        newBalance: plan.savingsBalance,
+      }),
+    );
+
+    if (cycleCompleted) {
       void this.notificationsService.send(
         NotificationEvents.savingCompleted({
           userIds: [userId],
@@ -315,31 +423,17 @@ export class SavingsService {
         }),
       );
     }
+
+    return this.getPlan(userId, planId);
   }
 
-  private async notifyInsufficient(plan: SavingPlanDocument): Promise<void> {
-    const now = new Date();
-    const last = plan.lastInsufficientNotifiedAt;
-    if (last && now.getTime() - last.getTime() < 6 * 60 * 60 * 1000) {
-      return; // Throttle to avoid notification spam every scheduler run.
-    }
-
-    plan.lastInsufficientNotifiedAt = now;
-    await plan.save();
-
-    const userId = plan.user.toString();
-    const user = await this.usersService.findById(userId);
-    const wallet = await this.walletService.getOrCreateWallet(userId);
-
-    void this.notificationsService.send(
-      NotificationEvents.savingInsufficient({
-        userIds: [userId],
-        planName: plan.name,
-        amount: plan.amount,
-        currentBalance: wallet.balance ?? 0,
-        phones: user?.phone ? new Map([[userId, user.phone]]) : undefined,
-      }),
+  /** Mongo duplicate-key error (E11000), possibly wrapped by the driver. */
+  private isDuplicateKeyError(err: unknown): boolean {
+    const code = (err as { code?: number | string } | null)?.code;
+    const message = String(
+      (err as { message?: string } | null)?.message ?? err,
     );
+    return code === 11000 || code === '11000' || message.includes('E11000');
   }
 
   // ---- Withdrawal -----------------------------------------------------------
@@ -371,6 +465,11 @@ export class SavingsService {
     }
 
     const amount = plan.savingsBalance;
+    // Fail before the withdrawal lock is written: `lastWithdrawalReference`
+    // blocks retries until a webhook clears it, so an unconfigured Paystack
+    // key would otherwise strand the plan in "withdrawal in progress".
+    this.paystack.assertConfigured();
+
     // A fresh reference per attempt: Paystack treats a reference as used
     // forever once a transfer is created (even a failed one), and the
     // (plan, cycleNumber) pair is stable across retries — so a deterministic

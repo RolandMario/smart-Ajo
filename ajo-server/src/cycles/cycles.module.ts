@@ -16,12 +16,14 @@ import {
   EscrowDepositSchema,
 } from './schemas/escrow-deposit.schema';
 import { CyclesService } from './cycles.service';
+import { EscrowService } from './escrow.service';
 import { CyclesController } from './cycles.controller';
 import { GroupsModule } from '../groups/groups.module';
 import { WalletModule } from '../wallet/wallet.module';
 import { PaymentsModule } from '../payments/payments.module';
 import { UsersModule } from '../users/users.module';
 import { NotificationsModule } from '../notifications/notifications.module';
+import { PlatformSettingsModule } from '../platform-settings/platform-settings.module';
 
 @Module({
   imports: [
@@ -41,9 +43,10 @@ import { NotificationsModule } from '../notifications/notifications.module';
     PaymentsModule,
     UsersModule,
     forwardRef(() => NotificationsModule),
+    PlatformSettingsModule,
   ],
   controllers: [CyclesController],
-  providers: [CyclesService],
-  exports: [CyclesService, MongooseModule],
+  providers: [CyclesService, EscrowService],
+  exports: [CyclesService, EscrowService, MongooseModule],
 })
 export class CyclesModule {}

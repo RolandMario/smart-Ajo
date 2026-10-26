@@ -2,6 +2,7 @@ export declare enum NotificationType {
     GROUP_INVITE_RECEIVED = "group_invite_received",
     GROUP_INVITE_ACCEPTED = "group_invite_accepted",
     GROUP_INVITE_DECLINED = "group_invite_declined",
+    GROUP_MEMBER_JOINED = "group_member_joined",
     GROUP_ACTIVATED = "group_activated",
     GROUP_UPDATED = "group_updated",
     GROUP_CONTINUED = "group_continued",
@@ -12,6 +13,11 @@ export declare enum NotificationType {
     CONTRIBUTION_DEBITED = "contribution_debited",
     CONTRIBUTION_FAILED_INSUFFICIENT = "contribution_failed_insufficient",
     CONTRIBUTION_DEFAULTED = "contribution_defaulted",
+    CONTRIBUTION_PAID = "contribution_paid",
+    CONTRIBUTION_AWAITING_CONFIRMATION = "contribution_awaiting_confirmation",
+    CONTRIBUTION_CONFIRMED = "contribution_confirmed",
+    CONTRIBUTION_REJECTED = "contribution_rejected",
+    ESCROW_DEPOSIT_RECEIVED = "escrow_deposit_received",
     PAYOUT_INITIATED = "payout_initiated",
     PAYOUT_SUCCESS = "payout_success",
     PAYOUT_FAILED = "payout_failed",
@@ -22,7 +28,14 @@ export declare enum NotificationType {
     SAVING_DEBITED = "saving_debited",
     SAVING_INSUFFICIENT = "saving_insufficient",
     SAVING_COMPLETED = "saving_completed",
-    SAVING_WITHDRAWN = "saving_withdrawn"
+    SAVING_WITHDRAWN = "saving_withdrawn",
+    DONATION_RECEIVED = "donation_received",
+    DONATION_RECEIVED_ADMIN = "donation_received_admin",
+    DONATION_MEMBER_JOINED = "donation_member_joined",
+    DONATION_PAYOUT_SUCCESS = "donation_payout_success",
+    DONATION_PAYOUT_FAILED = "donation_payout_failed",
+    DONATION_PAYOUT_REVERSED = "donation_payout_reversed",
+    DONATION_POOL_TERMINATED = "donation_pool_terminated"
 }
 export declare enum NotificationChannel {
     PUSH = "push",

@@ -10,13 +10,13 @@ import { ListGroupsQueryDto } from './dto/list-groups-query.dto';
 export interface PaginatedGroups {
     groups: Array<{
         id: string;
+        joinCode: string;
         name: string;
         status: string;
         contributionAmount: number;
         frequency: string;
         totalSlots: number;
         rotationMethod: string;
-        autoCollectEnabled: boolean;
         currentCycleNumber: number | null;
         createdAt: Date;
     }>;
@@ -49,6 +49,7 @@ export interface GroupCycleSummary {
     paidCount: number;
     defaultedCount: number;
     pendingCount: number;
+    awaitingConfirmationCount: number;
     completedAt?: Date;
 }
 export interface GroupPayoutSummary {
@@ -67,17 +68,26 @@ export interface GroupPayoutSummary {
 }
 export interface GroupDetail {
     id: string;
+    joinCode: string;
     name: string;
     status: string;
     contributionAmount: number;
     frequency: string;
     totalSlots: number;
     rotationMethod: string;
-    autoCollectEnabled: boolean;
     currentCycleNumber: number | null;
     orderLockedAt?: Date;
     startDate?: Date;
     centralWalletBalance: number;
+    serviceFee: number;
+    escrowAccount?: {
+        bankName: string;
+        accountName: string;
+        accountNumber: string;
+        provider: string;
+        currency: string;
+        active: boolean;
+    };
     admin?: {
         id: string;
         name?: string;
@@ -101,5 +111,4 @@ export declare class PlatformAdminGroupsService {
     listGroups(query: ListGroupsQueryDto): Promise<PaginatedGroups>;
     getGroupDetail(groupId: string): Promise<GroupDetail>;
     updateServiceFee(groupId: string, serviceFee: number | undefined): Promise<GroupDetail>;
-    setAutoCollect(groupId: string, enabled: boolean): Promise<GroupDetail>;
 }

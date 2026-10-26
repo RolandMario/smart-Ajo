@@ -185,11 +185,11 @@ const styles = StyleSheet.create({
   title: {
     fontSize: typography.sizes.xxl,
     fontWeight: typography.weights.bold,
-    color: colors.ink,
+    color: colors.forestLightInk,
   },
   subtitle: {
     fontSize: typography.sizes.sm,
-    color: colors.inkSoft,
+    color: colors.forestLightInkSoft,
     marginTop: spacing.xs,
   },
   list: {
@@ -204,22 +204,22 @@ const styles = StyleSheet.create({
   emptyTitle: {
     fontSize: typography.sizes.lg,
     fontWeight: typography.weights.semibold,
-    color: colors.ink,
+    color: colors.forestLightInk,
     marginBottom: spacing.sm,
   },
   emptySubtitle: {
     fontSize: typography.sizes.base,
-    color: colors.inkSoft,
+    color: colors.forestLightInkSoft,
     textAlign: "center",
   },
   transactionRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    backgroundColor: colors.surface,
+    backgroundColor: colors.white,
     borderRadius: radii.md,
     borderWidth: 1,
-    borderColor: colors.line,
+    borderColor: colors.forestLightLine,
     padding: spacing.md,
     marginBottom: spacing.sm,
   },
@@ -230,12 +230,12 @@ const styles = StyleSheet.create({
   transactionType: {
     fontSize: typography.sizes.base,
     fontWeight: typography.weights.medium,
-    color: colors.ink,
+    color: colors.forestLightInk,
     textTransform: "capitalize",
   },
   transactionDate: {
     fontSize: typography.sizes.xs,
-    color: colors.inkSoft,
+    color: colors.forestLightInkSoft,
     marginTop: spacing.xs,
   },
   transactionAmount: {

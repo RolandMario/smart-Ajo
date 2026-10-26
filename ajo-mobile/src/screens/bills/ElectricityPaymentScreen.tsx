@@ -91,12 +91,12 @@ export function ElectricityPaymentScreen({ navigation }: Props) {
 }
 
 const styles = StyleSheet.create({
-  title: {fontSize:typography.sizes.xxl,fontWeight:typography.weights.bold,color:colors.ink,marginBottom:spacing.lg},
-  label: {fontSize:typography.sizes.sm,fontWeight:typography.weights.medium,color:colors.inkSoft,marginBottom:spacing.xs},
+  title: {fontSize:typography.sizes.xxl,fontWeight:typography.weights.bold,color:colors.forestLightInk,marginBottom:spacing.lg},
+  label: {fontSize:typography.sizes.sm,fontWeight:typography.weights.medium,color:colors.forestLightInkSoft,marginBottom:spacing.xs},
   row: {flexDirection:"row",flexWrap:"wrap",gap:spacing.sm,marginBottom:spacing.md},
-  chip: {paddingHorizontal:spacing.md,paddingVertical:spacing.xs,borderRadius:radii.full,borderWidth:1,borderColor:colors.line,backgroundColor:colors.surface},
-  chipActive: {backgroundColor:colors.primary,borderColor:colors.primary},
-  chipText: {fontSize:typography.sizes.xs,fontWeight:typography.weights.semibold,color:colors.ink},
+  chip: {paddingHorizontal:spacing.md,paddingVertical:spacing.xs,borderRadius:radii.full,borderWidth:1,borderColor:colors.forestLightLine,backgroundColor:colors.white},
+  chipActive: {backgroundColor:colors.forestAction,borderColor:colors.forestAction},
+  chipText: {fontSize:typography.sizes.xs,fontWeight:typography.weights.semibold,color:colors.forestLightInk},
   chipTextActive: {color:colors.white},
   verifiedCard: {backgroundColor:colors.successSoft,padding:spacing.md,borderRadius:radii.md,marginBottom:spacing.lg},
   verifiedLabel: {fontSize:typography.sizes.base,fontWeight:typography.weights.semibold,color:colors.success},

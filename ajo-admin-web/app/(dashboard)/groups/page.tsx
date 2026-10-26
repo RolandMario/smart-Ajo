@@ -103,7 +103,6 @@ export default async function GroupsPage({ searchParams }: GroupsPageProps) {
                   <th className="px-5 py-3 font-medium">Frequency</th>
                   <th className="px-5 py-3 font-medium">Slots</th>
                   <th className="px-5 py-3 font-medium">Current cycle</th>
-                  <th className="px-5 py-3 font-medium">Auto-collect</th>
                   <th className="px-5 py-3 font-medium">Created</th>
                 </tr>
               </thead>
@@ -133,13 +132,6 @@ export default async function GroupsPage({ searchParams }: GroupsPageProps) {
                     <td className="px-5 py-3 text-ink-soft">{group.totalSlots}</td>
                     <td className="px-5 py-3 text-ink-soft">
                       {group.currentCycleNumber ?? "—"}
-                    </td>
-                    <td className="px-5 py-3">
-                      {group.autoCollectEnabled ? (
-                        <Badge tone="success">On</Badge>
-                      ) : (
-                        <Badge tone="neutral">Off</Badge>
-                      )}
                     </td>
                     <td className="px-5 py-3 text-ink-soft">{formatDate(group.createdAt)}</td>
                   </tr>

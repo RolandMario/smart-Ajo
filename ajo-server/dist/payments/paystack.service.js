@@ -13,11 +13,14 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 var PaystackService_1;
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.PaystackService = void 0;
+exports.PaystackService = exports.PAYSTACK_NOT_CONFIGURED_MESSAGE = void 0;
 const common_1 = require("@nestjs/common");
 const config_1 = require("@nestjs/config");
 const axios_1 = __importDefault(require("axios"));
 const crypto_1 = require("crypto");
+exports.PAYSTACK_NOT_CONFIGURED_MESSAGE = 'Payments are not configured on this server: PAYSTACK_SECRET_KEY is missing or invalid. ' +
+    'Set it to a valid Paystack secret key (sk_test_… for test mode, sk_live_… for live) and restart the server.';
+const PAYSTACK_PLACEHOLDER_PATTERN = /your[-_ ]?paystack|placeholder|changeme|replace[-_ ]?me|undefined|null|xxx+/i;
 let PaystackService = PaystackService_1 = class PaystackService {
     configService;
     logger = new common_1.Logger(PaystackService_1.name);
@@ -31,8 +34,9 @@ let PaystackService = PaystackService_1 = class PaystackService {
     ];
     constructor(configService) {
         this.configService = configService;
-        this.secretKey = this.configService.get('PAYSTACK_SECRET_KEY');
-        const baseURL = this.configService.get('PAYSTACK_BASE_URL');
+        this.secretKey = this.normalizeSecret(this.configService.get('PAYSTACK_SECRET_KEY'));
+        const baseURL = this.configService.get('PAYSTACK_BASE_URL')?.trim() ||
+            'https://api.paystack.co';
         this.client = axios_1.default.create({
             baseURL,
             headers: {
@@ -40,12 +44,51 @@ let PaystackService = PaystackService_1 = class PaystackService {
                 'Content-Type': 'application/json',
             },
         });
+        if (!this.isConfigured()) {
+            this.logger.warn('PAYSTACK_SECRET_KEY is missing or a placeholder — wallet funding, ' +
+                'virtual accounts, savings withdrawals and group payouts will fail ' +
+                'with a 503 until a valid key is configured (see PAYSTACK_NOT_CONFIGURED_MESSAGE).');
+        }
+    }
+    normalizeSecret(value) {
+        if (!value)
+            return '';
+        return value
+            .trim()
+            .replace(/^["'`]+/, '')
+            .replace(/["'`]+$/, '')
+            .trim();
+    }
+    isConfigured() {
+        if (!this.secretKey.startsWith('sk_'))
+            return false;
+        if (this.secretKey.length < 20)
+            return false;
+        return !PAYSTACK_PLACEHOLDER_PATTERN.test(this.secretKey);
+    }
+    assertConfigured() {
+        if (this.isConfigured())
+            return;
+        throw new common_1.ServiceUnavailableException(exports.PAYSTACK_NOT_CONFIGURED_MESSAGE);
+    }
+    isInvalidKeyError(error) {
+        if (!axios_1.default.isAxiosError(error))
+            return false;
+        if (error.response?.status !== 401)
+            return false;
+        const data = error.response.data;
+        const message = (data?.message ?? '').toLowerCase();
+        return data?.code === 'invalid_Key' || message.includes('invalid key');
     }
     handleError(action, error) {
         if (axios_1.default.isAxiosError(error)) {
             const message = error.response?.data?.message ??
                 error.message;
             this.logger.error(`Paystack ${action} failed: ${message}`);
+            if (this.isInvalidKeyError(error)) {
+                this.logger.error(exports.PAYSTACK_NOT_CONFIGURED_MESSAGE);
+                throw new common_1.ServiceUnavailableException(exports.PAYSTACK_NOT_CONFIGURED_MESSAGE);
+            }
             if (error.response &&
                 error.response.status >= 400 &&
                 error.response.status < 500) {
@@ -156,7 +199,10 @@ let PaystackService = PaystackService_1 = class PaystackService {
     }
     dvaBankCandidates() {
         const preferred = this.dvaPreferredBank().trim().toLowerCase();
-        return [preferred, ...this.DVA_BANK_POOL.filter((bank) => bank !== preferred)];
+        return [
+            preferred,
+            ...this.DVA_BANK_POOL.filter((bank) => bank !== preferred),
+        ];
     }
     isDvaBankUnavailableError(error) {
         const message = error instanceof Error ? error.message : String(error);
@@ -167,7 +213,10 @@ let PaystackService = PaystackService_1 = class PaystackService {
         let lastError;
         for (const bank of banks) {
             try {
-                return await this.requestDedicatedAccount({ ...params, preferredBank: bank });
+                return await this.requestDedicatedAccount({
+                    ...params,
+                    preferredBank: bank,
+                });
             }
             catch (err) {
                 lastError = err;
@@ -241,6 +290,7 @@ let PaystackService = PaystackService_1 = class PaystackService {
         }
     }
     async initiateTransfer(params) {
+        this.assertConfigured();
         try {
             const response = await this.client.post('/transfer', {
                 source: 'balance',

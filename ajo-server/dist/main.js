@@ -39,6 +39,7 @@ const config_1 = require("@nestjs/config");
 const express = __importStar(require("express"));
 const app_module_1 = require("./app.module");
 async function bootstrap() {
+    const logger = new common_1.Logger('Bootstrap');
     const app = await core_1.NestFactory.create(app_module_1.AppModule, {
         rawBody: true,
     });
@@ -54,8 +55,18 @@ async function bootstrap() {
     }));
     app.enableCors();
     const configService = app.get(config_1.ConfigService);
-    const port = configService.get('PORT') ?? 3000;
-    await app.listen(port);
+    const port = configService.get('PORT') ?? 5010;
+    try {
+        await app.listen(port);
+    }
+    catch (error) {
+        if (error?.code === 'EADDRINUSE') {
+            logger.error(`Port ${port} is already in use. Stop the process using it (lsof -nP -iTCP:${port} -sTCP:LISTEN) or set PORT in ajo-server/.env to a free port.`);
+            process.exit(1);
+        }
+        throw error;
+    }
+    logger.log(`ajo-server listening on http://localhost:${port}`);
 }
 void bootstrap();
 //# sourceMappingURL=main.js.map

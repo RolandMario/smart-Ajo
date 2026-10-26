@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
-import type { WalletStackParamList } from "../../navigation/types";
+import type { SavingsStackParamList } from "../../navigation/types";
 import { Screen } from "../../components/Screen";
 import { TextField } from "../../components/TextField";
 import { Button } from "../../components/Button";
@@ -15,7 +15,7 @@ import type {
 import { colors, radii, spacing, typography } from "../../theme";
 import { formatDuration, formatNaira } from "../../utils/format";
 
-type Props = NativeStackScreenProps<WalletStackParamList, "CreateSavingsPlan">;
+type Props = NativeStackScreenProps<SavingsStackParamList, "CreateSavingsPlan">;
 
 const FREQUENCIES: { label: string; value: ContributionFrequency }[] = [
   { label: "Daily", value: "daily" },
@@ -117,8 +117,9 @@ export function CreateSavingsPlanScreen({ navigation }: Props) {
     <Screen>
       <Text style={styles.title}>Create a Savings Plan</Text>
       <Text style={styles.subtitle}>
-        Ajo will automatically move your chosen amount into this plan at each
-        interval. When the cycle finishes, you can withdraw it to your bank.
+        {
+          "You fund this plan yourself: pay each interval from your Ajo wallet whenever you're ready — nothing is debited automatically. When the cycle finishes, you can withdraw it to your bank."
+        }
       </Text>
 
       {error && <ErrorBanner message={error} />}
@@ -252,19 +253,19 @@ const styles = StyleSheet.create({
   title: {
     fontSize: typography.sizes.xxl,
     fontWeight: typography.weights.bold,
-    color: colors.ink,
+    color: colors.forestLightInk,
     marginBottom: spacing.xs,
   },
   subtitle: {
     fontSize: typography.sizes.base,
-    color: colors.inkSoft,
+    color: colors.forestLightInkSoft,
     marginBottom: spacing.xl,
     lineHeight: 22,
   },
   sectionLabel: {
     fontSize: typography.sizes.sm,
     fontWeight: typography.weights.medium,
-    color: colors.inkSoft,
+    color: colors.forestLightInkSoft,
     marginBottom: spacing.sm,
     marginTop: spacing.sm,
   },
@@ -278,21 +279,21 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.md,
     borderRadius: radii.md,
     borderWidth: 1,
-    borderColor: colors.line,
+    borderColor: colors.forestLightLine,
     alignItems: "center",
-    backgroundColor: colors.surface,
+    backgroundColor: colors.white,
   },
   optionSelected: {
-    backgroundColor: colors.primarySoft,
-    borderColor: colors.primary,
+    backgroundColor: colors.forestLightPill,
+    borderColor: colors.forestAction,
   },
   optionText: {
     fontSize: typography.sizes.sm,
     fontWeight: typography.weights.medium,
-    color: colors.inkSoft,
+    color: colors.forestLightInkSoft,
   },
   optionTextSelected: {
-    color: colors.primary,
+    color: colors.forestAction,
   },
   chipWrap: {
     flexDirection: "row",
@@ -305,26 +306,26 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm,
     borderRadius: radii.full,
     borderWidth: 1,
-    borderColor: colors.line,
-    backgroundColor: colors.surface,
+    borderColor: colors.forestLightLine,
+    backgroundColor: colors.white,
     alignItems: "center",
   },
   chipSelected: {
-    backgroundColor: colors.primarySoft,
-    borderColor: colors.primary,
+    backgroundColor: colors.forestLightPill,
+    borderColor: colors.forestAction,
   },
   chipText: {
     fontSize: typography.sizes.sm,
     fontWeight: typography.weights.medium,
-    color: colors.inkSoft,
+    color: colors.forestLightInkSoft,
   },
   chipTextSelected: {
-    color: colors.primary,
+    color: colors.forestAction,
   },
   summaryText: {
     fontSize: typography.sizes.base,
     fontWeight: typography.weights.semibold,
-    color: colors.primary,
+    color: colors.forestAction,
     marginTop: spacing.md,
     marginBottom: spacing.sm,
   },

@@ -5,12 +5,32 @@ import {
   GroupStatus,
   RotationMethod,
 } from '../../common/enums/group.enum';
+import { DedicatedAccountSchema } from '../../users/schemas/dedicated-account.schema';
+import type { DedicatedAccount } from '../../users/schemas/dedicated-account.schema';
 
 export type GroupDocument = Group & Document;
 
 @Schema({ timestamps: true })
 export class Group {
   _id!: Types.ObjectId;
+
+  /**
+   * Human-friendly, unique "Group ID" shared by the admin so members can
+   * find and join this group (see `join-code.ts` for the format). This is
+   * what a potential member types into the app's "Join Group" screen — it
+   * is intentionally distinct from the Mongo `_id`, which is long and not
+   * pleasant to share/type. Generated once at creation; unique across all
+   * groups.
+   */
+  @Prop({
+    type: String,
+    required: true,
+    unique: true,
+    index: true,
+    uppercase: true,
+    trim: true,
+  })
+  joinCode!: string;
 
   @Prop({ required: true, trim: true })
   name!: string;
@@ -93,18 +113,6 @@ export class Group {
   currentRound!: number;
 
   /**
-   * When true, a daily scheduled job (AutoCollectScheduler) attempts to
-   * debit every member's wallet for the current cycle's contribution
-   * once its dueDate has arrived, without the admin needing to trigger
-   * `POST .../collect-contributions` manually. Members with
-   * insufficient balance are still just skipped (no fee/penalty) and
-   * remain `pending`/`defaulted`. Defaults to false — admin must
-   * explicitly opt in per group via `PATCH /groups/:id/auto-collect`.
-   */
-  @Prop({ default: false })
-  autoCollectEnabled!: boolean;
-
-  /**
    * Platform service fee per member per contribution, in the smallest
    * currency unit. Collected alongside the contribution amount when
    * contributions are collected. Goes to the platform admin's wallet.
@@ -112,6 +120,20 @@ export class Group {
    */
   @Prop({ default: 0, min: 0 })
   serviceFee!: number;
+
+  /**
+   * The group's escrow account — a Paystack Dedicated Virtual Account
+   * (its own NUBAN) that members transfer their contribution into when
+   * paying by local bank transfer. Provisioned (best-effort) when the
+   * group is activated; `POST :id/escrow-account/refresh` retries.
+   *
+   * Inbound transfers settle as Paystack `charge.success` webhooks and
+   * are recorded as unallocated EscrowDeposits against the group's
+   * central wallet, which the group admin then allocates to the paying
+   * member's contribution (or which auto-match by narration reference).
+   */
+  @Prop({ type: DedicatedAccountSchema })
+  escrowAccount?: DedicatedAccount;
 }
 
 export const GroupSchema = SchemaFactory.createForClass(Group);

@@ -196,7 +196,7 @@ export function TransactionReceiptScreen({ navigation, route }: Props) {
           )}
           <View style={styles.amountRow}>
             <Text style={styles.label}>Amount</Text>
-            <Text style={[styles.amount, { color: isCredit ? colors.success : colors.ink }]}>
+            <Text style={[styles.amount, { color: isCredit ? colors.success : colors.forestLightInk }]}>
               {isCredit ? "+" : "−"}
               {formatNaira(transaction.amount)}
             </Text>
@@ -244,10 +244,10 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   receipt: {
-    backgroundColor: colors.surface,
+    backgroundColor: colors.white,
     borderRadius: radii.lg,
     borderWidth: 1,
-    borderColor: colors.line,
+    borderColor: colors.forestLightLine,
     padding: spacing.xl,
     marginBottom: spacing.xl,
   },
@@ -267,25 +267,25 @@ const styles = StyleSheet.create({
   brandName: {
     fontSize: typography.sizes.xl,
     fontWeight: typography.weights.bold,
-    color: colors.ink,
+    color: colors.forestLightInk,
     letterSpacing: 0.5,
   },
   brandTagline: {
     fontSize: typography.sizes.xs,
     fontWeight: typography.weights.medium,
-    color: colors.inkSoft,
+    color: colors.forestLightInkSoft,
     marginTop: 2,
   },
   accentRule: {
     height: 3,
-    backgroundColor: colors.accent,
+    backgroundColor: colors.gold,
     borderRadius: 2,
     marginBottom: spacing.lg,
   },
   receiptTitle: {
     fontSize: typography.sizes.lg,
     fontWeight: typography.weights.bold,
-    color: colors.ink,
+    color: colors.forestLightInk,
     marginBottom: spacing.md,
     textAlign: "center",
   },
@@ -307,7 +307,7 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     paddingVertical: spacing.sm,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.line,
+    borderBottomColor: colors.forestLightLine,
   },
   amountRow: {
     flexDirection: "row",
@@ -315,17 +315,17 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     paddingVertical: spacing.sm,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.line,
+    borderBottomColor: colors.forestLightLine,
   },
   label: {
     fontSize: typography.sizes.sm,
-    color: colors.inkSoft,
+    color: colors.forestLightInkSoft,
     marginRight: spacing.md,
   },
   value: {
     fontSize: typography.sizes.base,
     fontWeight: typography.weights.medium,
-    color: colors.ink,
+    color: colors.forestLightInk,
     textAlign: "right",
     flexShrink: 1,
   },

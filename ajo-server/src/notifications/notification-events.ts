@@ -63,6 +63,23 @@ export const NotificationEvents = {
     };
   },
 
+  /**
+   * Someone joined a group by entering its shared Group ID on the Join
+   * Group screen — sent to the group admin. Distinct from
+   * `groupInviteAccepted` (which is the old phone-invite flow's accept).
+   */
+  groupMemberJoined(
+    params: EventParams & { memberName: string; groupName: string },
+  ): SendNotificationParams {
+    return {
+      ...params,
+      type: NotificationType.GROUP_MEMBER_JOINED,
+      title: 'New Group Member',
+      body: `${params.memberName} joined your "${params.groupName}" group.`,
+      smsEnabled: true,
+    };
+  },
+
   // ---- Group lifecycle -------------------------------------------------------
 
   groupActivated(
@@ -187,6 +204,115 @@ export const NotificationEvents = {
       type: NotificationType.CONTRIBUTION_DEBITED,
       title: 'Contribution Paid',
       body: `₦${params.amount.toLocaleString()} has been deducted from your wallet for "${params.groupName}". New wallet balance: ₦${params.newBalance.toLocaleString()}.`,
+    };
+  },
+
+  /**
+   * Sent to the member after they pay a contribution from their own
+   * wallet (self-serve flow). Distinct from `contributionDebited`, which
+   * the old admin-triggered bulk collection used.
+   */
+  contributionPaid(
+    params: EventParams & {
+      groupName: string;
+      amount: number;
+      newBalance: number;
+      serviceFee?: number;
+    },
+  ): SendNotificationParams {
+    const feeLine =
+      params.serviceFee && params.serviceFee > 0
+        ? ` (incl. ₦${params.serviceFee.toLocaleString()} service fee)`
+        : '';
+    return {
+      ...params,
+      type: NotificationType.CONTRIBUTION_PAID,
+      title: 'Contribution Paid ✅',
+      body: `₦${params.amount.toLocaleString()}${feeLine} has been deducted from your wallet for "${params.groupName}". New wallet balance: ₦${params.newBalance.toLocaleString()}.`,
+      smsEnabled: true,
+    };
+  },
+
+  /**
+   * Sent to the GROUP ADMIN when a member claims they've sent a bank
+   * transfer into the group's escrow account — so the admin can check
+   * their bank/escrow feed and confirm or reject the payment.
+   */
+  contributionAwaitingConfirmation(
+    params: EventParams & {
+      memberName: string;
+      groupName: string;
+      amount: number;
+      reference?: string;
+    },
+  ): SendNotificationParams {
+    const refLine = params.reference ? ` Reference: ${params.reference}.` : '';
+    return {
+      ...params,
+      type: NotificationType.CONTRIBUTION_AWAITING_CONFIRMATION,
+      title: 'Payment to Confirm',
+      body: `${params.memberName} says they've transferred ₦${params.amount.toLocaleString()} to the "${params.groupName}" escrow account.${refLine} Confirm it once verified.`,
+      smsEnabled: true,
+    };
+  },
+
+  /**
+   * Sent to the member once the group admin confirms their bank transfer.
+   */
+  contributionConfirmed(
+    params: EventParams & {
+      groupName: string;
+      amount: number;
+      roundLabel?: string;
+    },
+  ): SendNotificationParams {
+    return {
+      ...params,
+      type: NotificationType.CONTRIBUTION_CONFIRMED,
+      title: 'Contribution Confirmed ✅',
+      body: `Your ₦${params.amount.toLocaleString()} contribution for "${params.groupName}" has been confirmed${params.roundLabel ? ` (${params.roundLabel})` : ''}.`,
+      smsEnabled: true,
+    };
+  },
+
+  /**
+   * Sent to the member when the group admin rejects a claimed bank
+   * transfer (e.g. the money never arrived). The service fee, if any,
+   * is refunded to their wallet.
+   */
+  contributionRejected(
+    params: EventParams & {
+      groupName: string;
+      amount: number;
+      reason?: string;
+    },
+  ): SendNotificationParams {
+    return {
+      ...params,
+      type: NotificationType.CONTRIBUTION_REJECTED,
+      title: 'Payment Not Confirmed',
+      body: `Your ₦${params.amount.toLocaleString()} bank transfer for "${params.groupName}" could not be confirmed${params.reason ? `: ${params.reason}` : ''}. Any service fee has been refunded to your wallet — please try again or contact your group admin.`,
+      smsEnabled: true,
+    };
+  },
+
+  /**
+   * Sent to the group admin when funds land in the group's escrow
+   * Dedicated Virtual Account and have not been attributed to a member
+   * yet, so the admin can allocate the deposit.
+   */
+  escrowDepositReceived(
+    params: EventParams & {
+      groupName: string;
+      amount: number;
+      senderName?: string;
+    },
+  ): SendNotificationParams {
+    return {
+      ...params,
+      type: NotificationType.ESCROW_DEPOSIT_RECEIVED,
+      title: 'Escrow Transfer Received',
+      body: `₦${params.amount.toLocaleString()} has landed in the "${params.groupName}" escrow account${params.senderName ? ` from ${params.senderName}` : ''}. Open the group to allocate it to a member's contribution.`,
     };
   },
 
@@ -354,7 +480,7 @@ export const NotificationEvents = {
       ...params,
       type: NotificationType.SAVING_CREATED,
       title: 'Savings Plan Started',
-      body: `Your "${params.planName}" savings plan is live. Ajo will auto-save ₦${params.amount.toLocaleString()} ${params.frequency}.`,
+      body: `Your "${params.planName}" savings plan is live. Pay ₦${params.amount.toLocaleString()} from your wallet whenever a ${params.frequency} interval is due.`,
     };
   },
 
@@ -368,24 +494,8 @@ export const NotificationEvents = {
     return {
       ...params,
       type: NotificationType.SAVING_DEBITED,
-      title: 'Auto-Savings Collected',
-      body: `₦${params.amount.toLocaleString()} saved to "${params.planName}". Plan balance: ₦${params.newBalance.toLocaleString()}.`,
-    };
-  },
-
-  savingInsufficient(
-    params: EventParams & {
-      planName: string;
-      amount: number;
-      currentBalance: number;
-    },
-  ): SendNotificationParams {
-    return {
-      ...params,
-      type: NotificationType.SAVING_INSUFFICIENT,
-      title: 'Top-Up Needed for Savings',
-      body: `Your wallet balance (₦${params.currentBalance.toLocaleString()}) is too low for the ₦${params.amount.toLocaleString()} "${params.planName}" auto-save. Please top up.`,
-      smsEnabled: true,
+      title: 'Savings Payment Received',
+      body: `₦${params.amount.toLocaleString()} paid from your wallet into "${params.planName}". Plan balance: ₦${params.newBalance.toLocaleString()}.`,
     };
   },
 
@@ -409,6 +519,122 @@ export const NotificationEvents = {
       type: NotificationType.SAVING_WITHDRAWN,
       title: 'Savings Withdrawn',
       body: `₦${params.amount.toLocaleString()} from "${params.planName}" has been sent to your bank account.`,
+      smsEnabled: true,
+    };
+  },
+
+  // ---- Pool donations ("pool collections") -----------------------------------
+
+  /** Someone joined a pool by its Group ID — sent to the pool admin. */
+  donationMemberJoined(
+    params: EventParams & { memberName: string; poolName: string },
+  ): SendNotificationParams {
+    return {
+      ...params,
+      type: NotificationType.DONATION_MEMBER_JOINED,
+      title: 'New Pool Member',
+      body: `${params.memberName} joined your "${params.poolName}" pool.`,
+      smsEnabled: true,
+    };
+  },
+
+  /** Receipt for the donor's own donation. */
+  donationReceived(
+    params: EventParams & {
+      poolName: string;
+      amount: number;
+      windowLabel: string;
+      escrowBalance: number;
+    },
+  ): SendNotificationParams {
+    return {
+      ...params,
+      type: NotificationType.DONATION_RECEIVED,
+      title: 'Donation Received',
+      body: `Thank you! ₦${params.amount.toLocaleString()} was added to "${params.poolName}" from your wallet. The pool now holds ₦${params.escrowBalance.toLocaleString()}.`,
+    };
+  },
+
+  /** A member donated to the admin's pool. */
+  donationReceivedAdmin(
+    params: EventParams & {
+      donorName: string;
+      poolName: string;
+      amount: number;
+      totalCollected: number;
+    },
+  ): SendNotificationParams {
+    return {
+      ...params,
+      type: NotificationType.DONATION_RECEIVED_ADMIN,
+      title: 'New Pool Donation',
+      body: `${params.donorName} donated ₦${params.amount.toLocaleString()} to "${params.poolName}". Total collected: ₦${params.totalCollected.toLocaleString()}.`,
+      smsEnabled: true,
+    };
+  },
+
+  donationPayoutSuccess(
+    params: EventParams & {
+      poolName: string;
+      amount: number;
+      fee?: number;
+      bankName: string;
+      accountNumber: string;
+    },
+  ): SendNotificationParams {
+    const masked = `****${params.accountNumber.slice(-4)}`;
+    const feeNote = params.fee
+      ? ` (₦${params.fee.toLocaleString()} platform fee deducted)`
+      : '';
+    return {
+      ...params,
+      type: NotificationType.DONATION_PAYOUT_SUCCESS,
+      title: 'Pool Payout Successful',
+      body: `₦${params.amount.toLocaleString()} from "${params.poolName}" has been sent to your ${params.bankName} account ${masked}${feeNote}.`,
+      smsEnabled: true,
+    };
+  },
+
+  donationPayoutFailed(
+    params: EventParams & {
+      poolName: string;
+      amount: number;
+      reason?: string;
+    },
+  ): SendNotificationParams {
+    return {
+      ...params,
+      type: NotificationType.DONATION_PAYOUT_FAILED,
+      title: 'Pool Payout Failed',
+      body: `The ₦${params.amount.toLocaleString()} payout for "${params.poolName}" failed${params.reason ? ` (${params.reason})` : ''}. The money is back in the pool — please try again.`,
+      smsEnabled: true,
+    };
+  },
+
+  donationPayoutReversed(
+    params: EventParams & { poolName: string; amount: number },
+  ): SendNotificationParams {
+    return {
+      ...params,
+      type: NotificationType.DONATION_PAYOUT_REVERSED,
+      title: 'Pool Payout Reversed',
+      body: `The ₦${params.amount.toLocaleString()} payout for "${params.poolName}" was reversed by the bank. The money is back in the pool — please contact support.`,
+      smsEnabled: true,
+    };
+  },
+
+  /**
+   * Broadcast to every pool member once 2/3 of the fully paid members voted
+   * to terminate the pool and the termination went through.
+   */
+  donationPoolTerminated(
+    params: EventParams & { poolName: string },
+  ): SendNotificationParams {
+    return {
+      ...params,
+      type: NotificationType.DONATION_POOL_TERMINATED,
+      title: 'Pool Terminated',
+      body: `"${params.poolName}" was terminated after more than two-thirds of its fully paid members voted to end it. Donations are closed; the admin can still pay out the pool balance.`,
       smsEnabled: true,
     };
   },

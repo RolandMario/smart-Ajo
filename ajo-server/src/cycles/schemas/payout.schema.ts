@@ -35,6 +35,24 @@ export class Payout {
   @Prop({ required: true, min: 1 })
   amount!: number;
 
+  /**
+   * Platform payout service charge taken out of `amount` (see
+   * PlatformSetting.payoutFeePercent). The group's central account is
+   * debited the full `amount`; the recipient receives `netAmount`.
+   */
+  @Prop({ default: 0, min: 0 })
+  fee!: number;
+
+  /**
+   * `amount - fee` — what actually reaches the recipient's bank account.
+   *
+   * Not `required`: payouts created before platform fees existed have no
+   * value stored, and finalizing one must still succeed. Reads fall back
+   * to `amount`, which is what those payouts were sent as.
+   */
+  @Prop({ default: 0, min: 0 })
+  netAmount!: number;
+
   @Prop({ type: String, enum: TransferStatus, default: TransferStatus.PENDING })
   status!: TransferStatus;
 

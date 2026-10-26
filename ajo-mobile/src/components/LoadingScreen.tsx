@@ -5,7 +5,7 @@ import { colors } from "../theme";
 export function LoadingScreen() {
   return (
     <View style={styles.container}>
-      <ActivityIndicator size="large" color={colors.primary} />
+      <ActivityIndicator size="large" color={colors.forestAction} />
     </View>
   );
 }
@@ -15,6 +15,6 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: colors.canvas,
+    backgroundColor: colors.forestLightCanvas,
   },
 });

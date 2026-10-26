@@ -5,6 +5,9 @@ import type {
   RegisterDeviceTokenPayload,
 } from "../types/api";
 
+/** Rows per page in the Alerts inbox. */
+export const NOTIFICATION_PAGE_SIZE = 10;
+
 export async function listNotifications(
   limit?: number,
   skip?: number,
@@ -14,6 +17,17 @@ export async function listNotifications(
   if (skip !== undefined) params.set("skip", String(skip));
   const qs = params.toString();
   return authedFetch<NotificationListResponse>(`/notifications${qs ? `?${qs}` : ""}`);
+}
+
+/** One page of the inbox, newest first (`page` is 1-based). */
+export async function listNotificationPage(
+  page: number,
+): Promise<NotificationListResponse> {
+  const safePage = Math.max(1, Math.trunc(page) || 1);
+  return listNotifications(
+    NOTIFICATION_PAGE_SIZE,
+    (safePage - 1) * NOTIFICATION_PAGE_SIZE,
+  );
 }
 
 export async function markRead(dto: MarkReadPayload): Promise<void> {

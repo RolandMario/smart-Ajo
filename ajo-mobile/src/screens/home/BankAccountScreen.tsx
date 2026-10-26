@@ -176,23 +176,23 @@ const styles = StyleSheet.create({
   title: {
     fontSize: typography.sizes.xxl,
     fontWeight: typography.weights.bold,
-    color: colors.ink,
+    color: colors.forestLightInk,
     marginBottom: spacing.xs,
   },
   subtitle: {
     fontSize: typography.sizes.base,
-    color: colors.inkSoft,
+    color: colors.forestLightInkSoft,
     marginBottom: spacing.xl,
     lineHeight: 22,
   },
   helperText: {
     fontSize: typography.sizes.xs,
-    color: colors.inkFaint,
+    color: colors.forestLightInkFaint,
     fontStyle: "italic",
     marginBottom: spacing.lg,
   },
   currentCard: {
-    backgroundColor: colors.primarySoft,
+    backgroundColor: colors.forestLightPill,
     borderRadius: radii.md,
     padding: spacing.md,
     marginBottom: spacing.lg,
@@ -200,12 +200,12 @@ const styles = StyleSheet.create({
   currentTitle: {
     fontSize: typography.sizes.sm,
     fontWeight: typography.weights.semibold,
-    color: colors.primary,
+    color: colors.forestAction,
     marginBottom: spacing.xs,
   },
   currentDetail: {
     fontSize: typography.sizes.base,
-    color: colors.ink,
+    color: colors.forestLightInk,
   },
   successContainer: {
     flex: 1,
@@ -221,7 +221,7 @@ const styles = StyleSheet.create({
   },
   successText: {
     fontSize: typography.sizes.base,
-    color: colors.inkSoft,
+    color: colors.forestLightInkSoft,
     textAlign: "center",
     marginBottom: spacing.xl,
   },

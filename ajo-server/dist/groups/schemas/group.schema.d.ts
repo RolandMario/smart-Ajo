@@ -1,8 +1,10 @@
 import { Document, Types } from 'mongoose';
 import { ContributionFrequency, GroupStatus, RotationMethod } from '../../common/enums/group.enum';
+import type { DedicatedAccount } from '../../users/schemas/dedicated-account.schema';
 export type GroupDocument = Group & Document;
 export declare class Group {
     _id: Types.ObjectId;
+    joinCode: string;
     name: string;
     createdBy: Types.ObjectId;
     contributionAmount: number;
@@ -14,8 +16,8 @@ export declare class Group {
     startDate?: Date;
     currentCycleNumber?: number | null;
     currentRound: number;
-    autoCollectEnabled: boolean;
     serviceFee: number;
+    escrowAccount?: DedicatedAccount;
 }
 export declare const GroupSchema: import("mongoose").Schema<Group, import("mongoose").Model<Group, any, any, any, any, any, Group>, {}, {}, {}, {}, import("mongoose").DefaultSchemaOptions, Group, Document<unknown, {}, Group, {
     id: string;
@@ -27,6 +29,15 @@ export declare const GroupSchema: import("mongoose").Schema<Group, import("mongo
     id: string;
 }, {
     _id?: import("mongoose").SchemaDefinitionProperty<Types.ObjectId, Group, Document<unknown, {}, Group, {
+        id: string;
+    }, import("mongoose").DefaultSchemaOptions> & Omit<Group & Required<{
+        _id: Types.ObjectId;
+    }> & {
+        __v: number;
+    }, "id"> & {
+        id: string;
+    }> | undefined;
+    joinCode?: import("mongoose").SchemaDefinitionProperty<string, Group, Document<unknown, {}, Group, {
         id: string;
     }, import("mongoose").DefaultSchemaOptions> & Omit<Group & Required<{
         _id: Types.ObjectId;
@@ -134,7 +145,7 @@ export declare const GroupSchema: import("mongoose").Schema<Group, import("mongo
     }, "id"> & {
         id: string;
     }> | undefined;
-    autoCollectEnabled?: import("mongoose").SchemaDefinitionProperty<boolean, Group, Document<unknown, {}, Group, {
+    serviceFee?: import("mongoose").SchemaDefinitionProperty<number, Group, Document<unknown, {}, Group, {
         id: string;
     }, import("mongoose").DefaultSchemaOptions> & Omit<Group & Required<{
         _id: Types.ObjectId;
@@ -143,7 +154,7 @@ export declare const GroupSchema: import("mongoose").Schema<Group, import("mongo
     }, "id"> & {
         id: string;
     }> | undefined;
-    serviceFee?: import("mongoose").SchemaDefinitionProperty<number, Group, Document<unknown, {}, Group, {
+    escrowAccount?: import("mongoose").SchemaDefinitionProperty<DedicatedAccount | undefined, Group, Document<unknown, {}, Group, {
         id: string;
     }, import("mongoose").DefaultSchemaOptions> & Omit<Group & Required<{
         _id: Types.ObjectId;

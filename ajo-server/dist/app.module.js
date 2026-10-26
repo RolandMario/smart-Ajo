@@ -27,6 +27,7 @@ const notifications_module_1 = require("./notifications/notifications.module");
 const admin_module_1 = require("./admin/admin.module");
 const bills_module_1 = require("./bills/bills.module");
 const savings_module_1 = require("./savings/savings.module");
+const donations_module_1 = require("./donations/donations.module");
 let AppModule = class AppModule {
 };
 exports.AppModule = AppModule;
@@ -58,6 +59,7 @@ exports.AppModule = AppModule = __decorate([
             admin_module_1.AdminModule,
             bills_module_1.BillsModule,
             savings_module_1.SavingsModule,
+            donations_module_1.DonationsModule,
         ],
         controllers: [app_controller_1.AppController],
         providers: [app_service_1.AppService],

@@ -18,19 +18,25 @@ const common_1 = require("@nestjs/common");
 const paystack_service_1 = require("../payments/paystack.service");
 const wallet_service_1 = require("../wallet/wallet.service");
 const cycles_service_1 = require("../cycles/cycles.service");
+const escrow_service_1 = require("../cycles/escrow.service");
 const savings_service_1 = require("../savings/savings.service");
+const donations_service_1 = require("../donations/donations.service");
 const wallet_enum_1 = require("../common/enums/wallet.enum");
 let WebhookController = WebhookController_1 = class WebhookController {
     paystack;
     walletService;
     cyclesService;
+    escrowService;
     savingsService;
+    donationsService;
     logger = new common_1.Logger(WebhookController_1.name);
-    constructor(paystack, walletService, cyclesService, savingsService) {
+    constructor(paystack, walletService, cyclesService, escrowService, savingsService, donationsService) {
         this.paystack = paystack;
         this.walletService = walletService;
         this.cyclesService = cyclesService;
+        this.escrowService = escrowService;
         this.savingsService = savingsService;
+        this.donationsService = donationsService;
     }
     handleWebhook(req, signature) {
         const rawBody = req.rawBody;
@@ -88,6 +94,18 @@ let WebhookController = WebhookController_1 = class WebhookController {
             this.logger.log(`Wallet funded via webhook: ref=${reference}, amount=${amountNaira} NGN`);
             return;
         }
+        const { customerCode, accountNumber } = this.extractEscrowIdentifiers(data);
+        const escrowHandled = await this.escrowService.creditEscrowDeposit({
+            customerCode,
+            accountNumber,
+            amountNaira,
+            reference,
+            paystackData: data,
+        });
+        if (escrowHandled) {
+            this.logger.log(`Escrow deposit credited: ref=${reference}, amount=${amountNaira} NGN`);
+            return;
+        }
         const customer = data.customer ?? {};
         const phone = customer.phone;
         if (!phone) {
@@ -104,6 +122,19 @@ let WebhookController = WebhookController_1 = class WebhookController {
             ? `Wallet funded via dedicated account: ref=${reference}, amount=${amountNaira} NGN`
             : `charge.success ref=${reference}: already credited or unknown customer — skipping`);
     }
+    extractEscrowIdentifiers(data) {
+        const customer = data.customer ?? {};
+        const authorization = data.authorization ?? {};
+        const dedicated = data.dedicated_account ?? {};
+        const asString = (value) => typeof value === 'string' && value.trim().length > 0 ? value : undefined;
+        return {
+            customerCode: asString(customer.customer_code) ?? asString(data.customer_code),
+            accountNumber: asString(dedicated.account_number) ??
+                asString(data.receiver_bank_account_number) ??
+                asString(authorization.receiver_bank_account_number) ??
+                asString(data.account_number),
+        };
+    }
     async handleTransferSuccess(data) {
         const reference = data.reference;
         if (!reference) {
@@ -116,6 +147,10 @@ let WebhookController = WebhookController_1 = class WebhookController {
             if (savingPlan) {
                 this.logger.log(`Savings withdrawal finalized via webhook: ref=${reference}`);
                 await this.savingsService.completeWithdrawal(reference);
+                return;
+            }
+            if (await this.donationsService.completePayout(reference)) {
+                this.logger.log(`Pool donation payout finalized via webhook: ref=${reference}`);
                 return;
             }
             this.logger.warn(`transfer.success: no payout found for reference ${reference}`);
@@ -146,11 +181,14 @@ let WebhookController = WebhookController_1 = class WebhookController {
         }
         const payout = await this.cyclesService.findPayoutByReference(reference);
         if (!payout) {
+            const reason = data.reason ?? 'Transfer failed';
             const savingPlan = await this.savingsService.findSavingPlanByWithdrawalReference(reference);
             if (savingPlan) {
-                const reason = data.reason ?? 'Transfer failed';
                 this.logger.warn(`Savings withdrawal failed via webhook: ref=${reference}, reason=${reason}`);
                 await this.savingsService.failWithdrawal(reference, reason);
+            }
+            else if (await this.donationsService.failPayout(reference, reason)) {
+                this.logger.warn(`Pool donation payout failed via webhook: ref=${reference}, reason=${reason}`);
             }
             else {
                 this.logger.warn(`transfer.failed: no payout found for reference ${reference}`);
@@ -175,6 +213,9 @@ let WebhookController = WebhookController_1 = class WebhookController {
                 this.logger.warn(`Savings withdrawal reversed via webhook: ref=${reference}`);
                 await this.savingsService.failWithdrawal(reference, 'Reversed');
             }
+            else if (await this.donationsService.reversePayout(reference)) {
+                this.logger.warn(`Pool donation payout reversed via webhook: ref=${reference}`);
+            }
             return;
         }
         const group = await this.cyclesService.findGroupById(payout.group);
@@ -198,6 +239,8 @@ exports.WebhookController = WebhookController = WebhookController_1 = __decorate
     __metadata("design:paramtypes", [paystack_service_1.PaystackService,
         wallet_service_1.WalletService,
         cycles_service_1.CyclesService,
-        savings_service_1.SavingsService])
+        escrow_service_1.EscrowService,
+        savings_service_1.SavingsService,
+        donations_service_1.DonationsService])
 ], WebhookController);
 //# sourceMappingURL=webhook.controller.js.map

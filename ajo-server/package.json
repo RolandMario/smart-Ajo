@@ -24,7 +24,9 @@
     "seed:fix-savings-plan-durations": "ts-node -r tsconfig-paths/register src/database/seeds/fix-savings-plan-durations.ts",
     "seed:fix-savings-withdrawal-lock": "ts-node -r tsconfig-paths/register src/database/seeds/fix-savings-withdrawal-lock.ts",
     "seed:backfill-cycle-rounds": "ts-node -r tsconfig-paths/register src/database/seeds/backfill-cycle-rounds.ts",
-    "seed:purge-terminated-groups": "ts-node -r tsconfig-paths/register src/database/seeds/purge-terminated-groups.ts"
+    "seed:backfill-join-codes": "ts-node -r tsconfig-paths/register src/database/seeds/backfill-join-codes.ts",
+    "seed:purge-terminated-groups": "ts-node -r tsconfig-paths/register src/database/seeds/purge-terminated-groups.ts",
+    "seed:purge-terminated-pools": "ts-node -r tsconfig-paths/register src/database/seeds/purge-terminated-pools.ts"
   },
   "dependencies": {
     "@nestjs/common": "^11.0.1",

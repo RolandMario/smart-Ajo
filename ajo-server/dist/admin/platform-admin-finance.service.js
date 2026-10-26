@@ -21,16 +21,19 @@ const payout_schema_1 = require("../cycles/schemas/payout.schema");
 const group_wallet_transaction_schema_1 = require("../cycles/schemas/group-wallet-transaction.schema");
 const cycle_schema_1 = require("../cycles/schemas/cycle.schema");
 const wallet_enum_1 = require("../common/enums/wallet.enum");
+const users_service_1 = require("../users/users.service");
 let PlatformAdminFinanceService = class PlatformAdminFinanceService {
     walletTxModel;
     payoutModel;
     groupWalletTxModel;
     cycleModel;
-    constructor(walletTxModel, payoutModel, groupWalletTxModel, cycleModel) {
+    usersService;
+    constructor(walletTxModel, payoutModel, groupWalletTxModel, cycleModel, usersService) {
         this.walletTxModel = walletTxModel;
         this.payoutModel = payoutModel;
         this.groupWalletTxModel = groupWalletTxModel;
         this.cycleModel = cycleModel;
+        this.usersService = usersService;
     }
     async listWalletTransactions(query) {
         const page = query.page ?? 1;
@@ -174,6 +177,40 @@ let PlatformAdminFinanceService = class PlatformAdminFinanceService {
             totalPages: Math.max(1, Math.ceil(total / limit)),
         };
     }
+    async getServiceChargeTotals() {
+        const admin = await this.usersService.findPlatformAdmin();
+        const rows = await this.walletTxModel.aggregate([
+            {
+                $match: {
+                    user: admin._id,
+                    status: wallet_enum_1.WalletTransactionStatus.SUCCESS,
+                    type: {
+                        $in: [
+                            wallet_enum_1.WalletTransactionType.SERVICE_FEE_CREDIT,
+                            wallet_enum_1.WalletTransactionType.SERVICE_FEE_DEBIT,
+                        ],
+                    },
+                },
+            },
+            {
+                $group: {
+                    _id: '$type',
+                    total: { $sum: '$amount' },
+                    count: { $sum: 1 },
+                },
+            },
+        ]);
+        const credits = rows.find((row) => row._id === wallet_enum_1.WalletTransactionType.SERVICE_FEE_CREDIT);
+        const debits = rows.find((row) => row._id === wallet_enum_1.WalletTransactionType.SERVICE_FEE_DEBIT);
+        const totalCollected = credits?.total ?? 0;
+        const totalReversed = debits?.total ?? 0;
+        return {
+            totalCollected,
+            totalReversed,
+            netCollected: totalCollected - totalReversed,
+            chargeCount: credits?.count ?? 0,
+        };
+    }
 };
 exports.PlatformAdminFinanceService = PlatformAdminFinanceService;
 exports.PlatformAdminFinanceService = PlatformAdminFinanceService = __decorate([
@@ -185,6 +222,7 @@ exports.PlatformAdminFinanceService = PlatformAdminFinanceService = __decorate([
     __metadata("design:paramtypes", [mongoose_2.Model,
         mongoose_2.Model,
         mongoose_2.Model,
-        mongoose_2.Model])
+        mongoose_2.Model,
+        users_service_1.UsersService])
 ], PlatformAdminFinanceService);
 //# sourceMappingURL=platform-admin-finance.service.js.map

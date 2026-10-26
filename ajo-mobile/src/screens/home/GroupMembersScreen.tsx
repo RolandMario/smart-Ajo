@@ -1,5 +1,6 @@
 import React, { useCallback, useRef, useState } from "react";
 import {
+  Alert,
   AppState,
   FlatList,
   StyleSheet,
@@ -19,14 +20,16 @@ import type { GroupMember } from "../../types/api";
 import { useAuth } from "../../auth/AuthContext";
 import { colors, radii, spacing, typography } from "../../theme";
 import { statusLabel } from "../../utils/format";
+import { loadClipboardSafe } from "../../utils/expo-clipboard-client";
 
 type Props = NativeStackScreenProps<GroupsStackParamList, "GroupMembers">;
 
 export function GroupMembersScreen({ navigation, route }: Props) {
-  const { groupId } = route.params;
+  const { groupId, joinCode: routeJoinCode } = route.params;
   const { user } = useAuth();
   const [members, setMembers] = useState<GroupMember[]>([]);
   const [loading, setLoading] = useState(true);
+  const [sharing, setSharing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const hasDataRef = useRef(false);
 
@@ -79,14 +82,38 @@ export function GroupMembersScreen({ navigation, route }: Props) {
   const myMembership = members.find((m) => m.user._id === user?.id);
   const isAdmin = myMembership?.isGroupAdmin ?? false;
 
+  async function handleShareGroupId() {
+    const code = routeJoinCode;
+    if (!code) return;
+    setSharing(true);
+    try {
+      const Clipboard = await loadClipboardSafe();
+      if (Clipboard) {
+        await Clipboard.setStringAsync(`Join my Ajo group\nGroup ID: ${code}`);
+        Alert.alert(
+          "Group ID copied",
+          `Share the ID so others can search & join.\n\n${code}`,
+        );
+      } else {
+        Alert.alert("Group ID", code);
+      }
+    } catch {
+      Alert.alert("Group ID", code);
+    } finally {
+      setSharing(false);
+    }
+  }
+
   return (
     <Screen scrollable={false}>
       {error && <ErrorBanner message={error} />}
 
       {isAdmin && (
         <Button
-          title="Invite Members"
-          onPress={() => navigation.navigate("InviteMember", { groupId })}
+          title="Share Group ID"
+          icon="share-social-outline"
+          onPress={handleShareGroupId}
+          loading={sharing}
           style={styles.inviteButton}
         />
       )}
@@ -117,7 +144,7 @@ export function GroupMembersScreen({ navigation, route }: Props) {
                   backgroundColor:
                     item.payoutStatus === "collected"
                       ? colors.successSoft
-                      : colors.primarySoft,
+                      : colors.forestLightPill,
                 },
               ]}
             >
@@ -128,7 +155,7 @@ export function GroupMembersScreen({ navigation, route }: Props) {
                     color:
                       item.payoutStatus === "collected"
                         ? colors.success
-                        : colors.primary,
+                        : colors.forestAction,
                   },
                 ]}
               >
@@ -196,7 +223,7 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: typography.sizes.lg,
     fontWeight: typography.weights.semibold,
-    color: colors.ink,
+    color: colors.forestLightInk,
     marginBottom: spacing.md,
     marginTop: spacing.sm,
   },
@@ -207,10 +234,10 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    backgroundColor: colors.surface,
+    backgroundColor: colors.white,
     borderRadius: radii.md,
     borderWidth: 1,
-    borderColor: colors.line,
+    borderColor: colors.forestLightLine,
     padding: spacing.md,
     marginBottom: spacing.sm,
   },
@@ -221,11 +248,11 @@ const styles = StyleSheet.create({
   memberName: {
     fontSize: typography.sizes.base,
     fontWeight: typography.weights.medium,
-    color: colors.ink,
+    color: colors.forestLightInk,
   },
   memberDetail: {
     fontSize: typography.sizes.xs,
-    color: colors.inkSoft,
+    color: colors.forestLightInkSoft,
     marginTop: spacing.xs,
   },
   statusBadge: {

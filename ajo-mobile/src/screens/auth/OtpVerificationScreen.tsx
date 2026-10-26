@@ -9,6 +9,7 @@ import { Button } from "../../components/Button";
 import { ErrorBanner } from "../../components/ErrorBanner";
 import { useAuth } from "../../auth/AuthContext";
 import { ApiError } from "../../api/api-error";
+import { updateProfile } from "../../api/auth";
 import { formatPhoneForDisplay } from "../../utils/phone";
 import { colors, spacing, typography } from "../../theme";
 
@@ -17,8 +18,8 @@ type Props = NativeStackScreenProps<AuthStackParamList, "OtpVerification">;
 const RESEND_COOLDOWN_SECONDS = 30;
 
 export function OtpVerificationScreen({ route, navigation }: Props) {
-  const { phone } = route.params;
-  const { verifyOtp, requestOtp } = useAuth();
+  const { phone, fullName } = route.params;
+  const { verifyOtp, requestOtp, refreshUser } = useAuth();
 
   const [code, setCode] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -44,6 +45,23 @@ export function OtpVerificationScreen({ route, navigation }: Props) {
 
     try {
       await verifyOtp(phone, code);
+
+      // The register flow collected a full name, but `POST /auth/register`
+      // accepts only { phone, email, password } and no token exists until
+      // the code above is verified — so this is the first moment the name
+      // can be saved, via `PATCH /auth/me`. Deliberately best-effort: the
+      // user is already signed in by this point, and a failed name write
+      // must not strand them on this screen over a field they can edit
+      // from Profile → Edit Profile.
+      if (fullName) {
+        try {
+          await updateProfile({ name: fullName });
+          await refreshUser();
+        } catch {
+          // Ignore — see above.
+        }
+      }
+
       // No navigation call needed here — AuthContext flips `status` to
       // "signedIn", and the root navigator (see RootNavigator.tsx)
       // reacts by swapping the entire stack to the Main tabs. Trying to
@@ -134,12 +152,12 @@ const styles = StyleSheet.create({
   title: {
     fontSize: typography.sizes.xxxl,
     fontWeight: typography.weights.bold,
-    color: colors.ink,
+    color: colors.forestLightInk,
     marginBottom: spacing.sm,
   },
   subtitle: {
     fontSize: typography.sizes.base,
-    color: colors.inkSoft,
+    color: colors.forestLightInkSoft,
     lineHeight: 22,
   },
   resendRow: {
@@ -151,7 +169,7 @@ const styles = StyleSheet.create({
   },
   resendText: {
     fontSize: typography.sizes.sm,
-    color: colors.inkSoft,
+    color: colors.forestLightInkSoft,
   },
   resendButton: {
     minHeight: undefined,

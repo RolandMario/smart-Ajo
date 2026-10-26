@@ -18,8 +18,10 @@ interface SplashScreenProps {
 }
 
 export function SplashScreen({ navigation }: SplashScreenProps) {
-  const fadeAnim = React.useRef(new Animated.Value(0)).current;
-  const scaleAnim = React.useRef(new Animated.Value(0.85)).current;
+  // Lazy-initialised Animated.Values (no ref reads during render, so the
+  // react-hooks/refs rule stays quiet).
+  const [fadeAnim] = React.useState(() => new Animated.Value(0));
+  const [scaleAnim] = React.useState(() => new Animated.Value(0.85));
 
   React.useEffect(() => {
     // Fade in and zoom in animation over 3 seconds
@@ -38,10 +40,10 @@ export function SplashScreen({ navigation }: SplashScreenProps) {
       }),
     ]).start();
 
-    // Navigate to PhoneEntry screen after 10 seconds
+    // Navigate to the welcome screen once the fade/zoom has played out
     const timer = setTimeout(() => {
-      navigation.replace("PhoneEntry");
-    }, 10000);
+      navigation.replace("Welcome");
+    }, 2200);
 
     return () => clearTimeout(timer);
   }, [navigation]);
@@ -91,7 +93,7 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: colors.canvas,
+    backgroundColor: colors.forestLightCanvas,
   },
   content: {
     alignItems: "center",
@@ -115,14 +117,14 @@ const styles = StyleSheet.create({
   appName: {
     fontSize: typography.sizes.xxxl + 8,
     fontWeight: typography.weights.bold,
-    color: colors.ink,
+    color: colors.forestLightInk,
     marginBottom: spacing.sm,
     letterSpacing: 1,
   },
   tagline: {
     fontSize: typography.sizes.base,
     fontWeight: typography.weights.medium,
-    color: colors.inkSoft,
+    color: colors.forestLightInkSoft,
     marginBottom: spacing.xl,
     textAlign: "center",
     paddingHorizontal: spacing.xxl,
@@ -130,7 +132,7 @@ const styles = StyleSheet.create({
   decorativeLine: {
     width: 60,
     height: 4,
-    backgroundColor: colors.accent,
+    backgroundColor: colors.gold,
     borderRadius: 2,
     marginTop: spacing.md,
   },
@@ -142,7 +144,7 @@ const styles = StyleSheet.create({
   versionText: {
     fontSize: typography.sizes.xs,
     fontWeight: typography.weights.regular,
-    color: colors.inkFaint,
+    color: colors.forestLightInkFaint,
     textTransform: "uppercase",
     letterSpacing: 1.5,
   },

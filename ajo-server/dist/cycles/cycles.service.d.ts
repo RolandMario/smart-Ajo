@@ -11,6 +11,8 @@ import { WalletService } from '../wallet/wallet.service';
 import { PaystackService } from '../payments/paystack.service';
 import { UsersService } from '../users/users.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { EscrowService } from './escrow.service';
+import { PlatformSettingsService } from '../platform-settings/platform-settings.service';
 import { CycleStatus } from '../common/enums/cycle.enum';
 import { PopulatedContribution, PopulatedCycle } from './interfaces/populated-cycle.interface';
 export declare class CyclesService {
@@ -25,10 +27,13 @@ export declare class CyclesService {
     private walletService;
     private paystack;
     private usersService;
+    private escrowService;
     private notificationsService;
+    private platformSettings;
     private readonly logger;
-    constructor(cycleModel: Model<CycleDocument>, contributionModel: Model<ContributionDocument>, groupMemberModel: Model<GroupMemberDocument>, groupWalletModel: Model<GroupWalletDocument>, groupWalletTxModel: Model<GroupWalletTransactionDocument>, payoutModel: Model<PayoutDocument>, connection: Connection, groupAccess: GroupAccessService, walletService: WalletService, paystack: PaystackService, usersService: UsersService, notificationsService: NotificationsService);
+    constructor(cycleModel: Model<CycleDocument>, contributionModel: Model<ContributionDocument>, groupMemberModel: Model<GroupMemberDocument>, groupWalletModel: Model<GroupWalletDocument>, groupWalletTxModel: Model<GroupWalletTransactionDocument>, payoutModel: Model<PayoutDocument>, connection: Connection, groupAccess: GroupAccessService, walletService: WalletService, paystack: PaystackService, usersService: UsersService, escrowService: EscrowService, notificationsService: NotificationsService, platformSettings: PlatformSettingsService);
     private computeNextDueDate;
+    private buildPaymentReference;
     private createCycleWithContributions;
     private creditGroupWallet;
     private debitGroupWallet;
@@ -38,7 +43,9 @@ export declare class CyclesService {
     activateGroup(adminUserId: string, groupId: string): Promise<{
         cycle: PopulatedCycle;
         contributions: PopulatedContribution[];
+        escrowAccount: import("./escrow.service").PublicEscrowAccount | null;
         isAdmin: boolean;
+        recipientPayoutReady: boolean;
     }>;
     listCycles(userId: string, groupId: string): Promise<{
         paidCount: number;
@@ -66,27 +73,50 @@ export declare class CyclesService {
     getCurrentCycle(userId: string, groupId: string): Promise<{
         cycle: PopulatedCycle;
         contributions: PopulatedContribution[];
+        escrowAccount: import("./escrow.service").PublicEscrowAccount | null;
         isAdmin: boolean;
+        recipientPayoutReady: boolean;
     }>;
-    collectContributions(adminUserId: string, groupId: string, cycleId: string): Promise<{
+    private recipientPayoutReady;
+    private backfillPaymentReferences;
+    payContributionFromWallet(userId: string, groupId: string, contributionId: string): Promise<{
         cycle: PopulatedCycle;
         contributions: PopulatedContribution[];
+        escrowAccount: import("./escrow.service").PublicEscrowAccount | null;
         isAdmin: boolean;
-        results: {
-            userId: string;
-            success: boolean;
-        }[];
+        recipientPayoutReady: boolean;
     }>;
-    collectContributionsSystem(group: GroupDocument, cycle: CycleDocument): Promise<{
-        userId: string;
-        success: boolean;
-    }[]>;
-    private collectContributionsCore;
+    notifyBankTransferPayment(userId: string, groupId: string, contributionId: string, claimedReference?: string): Promise<{
+        cycle: PopulatedCycle;
+        contributions: PopulatedContribution[];
+        escrowAccount: import("./escrow.service").PublicEscrowAccount | null;
+        isAdmin: boolean;
+        recipientPayoutReady: boolean;
+    }>;
+    confirmContributionPaid(adminUserId: string, groupId: string, contributionId: string): Promise<{
+        cycle: PopulatedCycle;
+        contributions: PopulatedContribution[];
+        escrowAccount: import("./escrow.service").PublicEscrowAccount | null;
+        isAdmin: boolean;
+        recipientPayoutReady: boolean;
+    }>;
+    rejectContributionPayment(adminUserId: string, groupId: string, contributionId: string, reason?: string): Promise<{
+        cycle: PopulatedCycle;
+        contributions: PopulatedContribution[];
+        escrowAccount: import("./escrow.service").PublicEscrowAccount | null;
+        isAdmin: boolean;
+        recipientPayoutReady: boolean;
+    }>;
+    private getContributionOrThrow;
+    private getOwnContributionOrThrow;
+    private getOpenCycleForContribution;
     initiatePayout(adminUserId: string, groupId: string, cycleId: string): Promise<(Payout & import("mongoose").Document<Types.ObjectId, any, any, Record<string, any>, {}> & Required<{
         _id: Types.ObjectId;
     }> & {
         __v: number;
     }) | null>;
+    private finalizeAcceptedPayout;
+    private describePayoutFailure;
     finalizeSuccessfulPayout(payout: PayoutDocument, cycle: CycleDocument, group: GroupDocument): Promise<void>;
     handleFailedPayout(payout: PayoutDocument, groupId: Types.ObjectId, cycleId: Types.ObjectId, reason: string): Promise<void>;
     handleReversedPayout(payout: PayoutDocument, group: GroupDocument): Promise<void>;

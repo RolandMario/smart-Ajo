@@ -1,9 +1,11 @@
 /**
  * Lifecycle of an individual savings plan.
  *
- * ACTIVE    -> currently collecting auto-debits from the wallet on each
- *              interval. When `collectedCount` reaches `intervalCount`,
- *              the cycle completes and the plan transitions to COMPLETED.
+ * ACTIVE    -> accepting member-initiated payments. The member pays each
+ *              interval from their wallet ("Pay" on the plan) — nothing is
+ *              debited automatically. When `collectedCount` reaches
+ *              `intervalCount`, the cycle completes and the plan transitions
+ *              to COMPLETED.
  * COMPLETED -> the current cycle's savings have been fully collected; the
  *              Withdraw button becomes available. Before withdrawing, the
  *              plan sits in this state holding `savingsBalance`.
@@ -24,8 +26,8 @@ export enum SavingPlanStatus {
 /**
  * Type of a SavingTransaction (the plan-scoped audit ledger).
  *
- * SAVING_DEBIT     -> wallet was debited at an interval and credited to
- *                     the plan's savingsBalance.
+ * SAVING_DEBIT     -> the member paid one interval from their wallet and the
+ *                     amount was credited to the plan's savingsBalance.
  * SAVING_WITHDRAWAL-> the accumulated savingsBalance was paid out to the
  *                     member's bank account via Paystack.
  * SAVING_REFUND    -> a failed/reversed withdrawal was returned to the

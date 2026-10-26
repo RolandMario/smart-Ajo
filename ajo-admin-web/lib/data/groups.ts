@@ -31,10 +31,3 @@ export async function updateServiceFee(groupId: string, serviceFee: number): Pro
     body: { serviceFee },
   });
 }
-
-export async function updateGroupAutoCollect(groupId: string, enabled: boolean): Promise<PlatformGroupDetail> {
-  return authedFetch<PlatformGroupDetail>(`/admin/groups/${groupId}/auto-collect`, {
-    method: 'PATCH',
-    body: { enabled },
-  });
-}

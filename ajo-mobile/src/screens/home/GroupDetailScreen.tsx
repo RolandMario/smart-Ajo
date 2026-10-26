@@ -6,7 +6,6 @@ import {
   StyleSheet,
   Text,
   View,
-  Pressable,
 } from "react-native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useFocusEffect } from "@react-navigation/native";
@@ -16,11 +15,12 @@ import { Button } from "../../components/Button";
 import { ErrorBanner } from "../../components/ErrorBanner";
 import { LoadingScreen } from "../../components/LoadingScreen";
 import { ApiError } from "../../api/api-error";
-import { getGroupDetail, listMyInvites, respondToInvite, terminateGroup } from "../../api/groups";
-import type { GroupDetail, MyInviteListItem } from "../../types/api";
+import { getGroupDetail, terminateGroup } from "../../api/groups";
+import type { GroupDetail } from "../../types/api";
 import { useAuth } from "../../auth/AuthContext";
 import { colors, radii, spacing, typography } from "../../theme";
 import { formatNaira, statusLabel, formatDate } from "../../utils/format";
+import { loadClipboardSafe } from "../../utils/expo-clipboard-client";
 
 type Props = NativeStackScreenProps<GroupsStackParamList, "GroupDetail">;
 
@@ -28,10 +28,9 @@ export function GroupDetailScreen({ navigation, route }: Props) {
   const { groupId } = route.params;
   const { user } = useAuth();
   const [detail, setDetail] = useState<GroupDetail | null>(null);
-  const [invites, setInvites] = useState<MyInviteListItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [responding, setResponding] = useState<string | null>(null);
+  const [sharing, setSharing] = useState(false);
   const hasDataRef = useRef(false);
 
   // Refresh data when app comes to foreground (e.g., after payout completes)
@@ -54,20 +53,16 @@ export function GroupDetailScreen({ navigation, route }: Props) {
 
   async function fetchData() {
     try {
-      // When navigating via the invite banner, groupId is "invites" — a
-      // magic string, not a real group ID.  Skip getGroupDetail in that
-      // case so we don't send "invites" to the server (which rejects it
-      // as an invalid ObjectId).
-      const [groupData, inviteData] = await Promise.all([
-        groupId === "invites" ? Promise.resolve(null) : getGroupDetail(groupId),
-        listMyInvites(),
-      ]);
+      const groupData = await getGroupDetail(groupId);
       setDetail(groupData);
-      setInvites(inviteData);
       setError(null);
     } catch (err) {
       if (err instanceof ApiError) {
-        setError(err.message);
+        setError(
+          err.isForbidden
+            ? "You're not a member of this group yet. Ask the admin for the Group ID, then join from the Join Group screen."
+            : err.message,
+        );
       } else {
         setError("Failed to load group details");
       }
@@ -83,72 +78,52 @@ export function GroupDetailScreen({ navigation, route }: Props) {
     }, [groupId]),
   );
 
-  async function handleRespond(inviteId: string, action: "accept" | "decline") {
-    setResponding(inviteId);
+  async function handleShareGroupId() {
+    const group = detail?.group;
+    if (!group?.joinCode) return;
+
+    const code = group.joinCode;
+    setSharing(true);
     try {
-      await respondToInvite(inviteId, action);
-      await fetchData();
-    } catch (err) {
-      if (err instanceof ApiError) {
-        setError(err.message);
+      const Clipboard = await loadClipboardSafe();
+      if (Clipboard) {
+        const message = `Join my Ajo group "${group.name}"\nGroup ID: ${code}`;
+        await Clipboard.setStringAsync(message);
+        Alert.alert(
+          "Group ID copied",
+          `Share the ID below so others can search & join.\n\n${code}`,
+        );
+      } else {
+        Alert.alert("Group ID", code);
       }
+    } catch {
+      Alert.alert("Group ID", code);
     } finally {
-      setResponding(null);
+      setSharing(false);
     }
   }
 
   if (loading) return <LoadingScreen />;
-  if (!detail && !error && groupId !== "invites") return <LoadingScreen />;
 
-  // If this is the invites view (groupId === "invites"), show pending invites
-  if (groupId === "invites") {
+  if (!detail) {
+    // The request failed — 403 for a non-member (e.g. someone who tapped
+    // "View group" from the Join screen), 404 for a deleted group, or a
+    // network error. Render the banner instead of destructuring `null`: the
+    // old `detail!` assertion threw a TypeError inside render, which crashed
+    // the whole screen before the error could be shown.
     return (
       <Screen>
-        <Text style={styles.title}>Pending Invites</Text>
-        {error && <ErrorBanner message={error} />}
-        {invites.length === 0 ? (
-          <View style={styles.emptySection}>
-            <Text style={styles.emptyText}>No pending invites</Text>
-          </View>
-        ) : (
-          <ScrollView>
-            {invites.map((invite) => (
-              <View key={invite.inviteId} style={styles.inviteCard}>
-                <Text style={styles.inviteGroupName}>
-                  {invite.group.name}
-                </Text>
-                <Text style={styles.inviteDetail}>
-                  Invited by {invite.group.createdBy.name ?? invite.group.createdBy.phone}
-                </Text>
-                <Text style={styles.inviteDetail}>
-                  {formatNaira(invite.group.contributionAmount)} / {invite.group.frequency} · {invite.group.totalSlots} slots
-                </Text>
-                <View style={styles.inviteActions}>
-                  <Button
-                    title="Accept"
-                    onPress={() => handleRespond(invite.inviteId, "accept")}
-                    loading={responding === invite.inviteId}
-                    style={styles.inviteActionButton}
-                  />
-                  <Button
-                    title="Decline"
-                    variant="secondary"
-                    onPress={() => handleRespond(invite.inviteId, "decline")}
-                    loading={responding === invite.inviteId}
-                    style={styles.inviteActionButton}
-                  />
-                </View>
-              </View>
-            ))}
-          </ScrollView>
-        )}
+        <Text style={styles.groupName}>{"Can't open this group"}</Text>
+        <ErrorBanner
+          message={error ?? "This group isn't available right now."}
+        />
+        <Button title="Go back" onPress={() => navigation.goBack()} />
       </Screen>
     );
   }
 
-  const { group, members } = detail!;
+  const { group, members } = detail;
   const acceptedMembers = members.filter((m) => m.inviteStatus === "accepted");
-  const pendingMembers = members.filter((m) => m.inviteStatus === "pending");
   const myMembership = members.find((m) => m.user?._id === user?.id);
   const isAdmin = myMembership?.isGroupAdmin ?? false;
 
@@ -167,10 +142,10 @@ export function GroupDetailScreen({ navigation, route }: Props) {
                   group.status === "active"
                     ? colors.successSoft
                     : group.status === "completed"
-                    ? colors.accentSoft
+                    ? colors.goldSoft
                     : group.status === "order_locked"
                     ? colors.warningSoft
-                    : colors.primarySoft,
+                    : colors.forestLightPill,
               },
             ]}
           >
@@ -182,10 +157,10 @@ export function GroupDetailScreen({ navigation, route }: Props) {
                     group.status === "active"
                       ? colors.success
                       : group.status === "completed"
-                      ? colors.accent
+                      ? colors.gold
                       : group.status === "order_locked"
                       ? colors.warning
-                      : colors.primary,
+                      : colors.forestAction,
                 },
               ]}
             >
@@ -198,6 +173,7 @@ export function GroupDetailScreen({ navigation, route }: Props) {
           <InfoRow label="Contribution" value={`${formatNaira(group.contributionAmount)} / ${group.frequency}`} />
           <InfoRow label="Members" value={`${acceptedMembers.length} / ${group.totalSlots}`} />
           <InfoRow label="Rotation" value={group.rotationMethod === "random" ? "Random" : "Manual"} />
+          <InfoRow label="Group ID" value={group.joinCode} />
           <InfoRow label="Created" value={formatDate(group.createdAt)} isLast />
         </View>
 
@@ -211,8 +187,10 @@ export function GroupDetailScreen({ navigation, route }: Props) {
               style={styles.actionButton}
             />
             <Button
-              title="Invite Members"
-              onPress={() => navigation.navigate("InviteMember", { groupId })}
+              title="Share Group ID"
+              icon="share-social-outline"
+              onPress={handleShareGroupId}
+              loading={sharing}
               style={styles.actionButton}
             />
             {acceptedMembers.length === group.totalSlots && (
@@ -254,7 +232,7 @@ export function GroupDetailScreen({ navigation, route }: Props) {
           </View>
         )}
 
-        {/* Completed group actions — admin can continue or terminate */}
+        {/* Completed group actions — admin can continue or permanently delete */}
         {isAdmin && group.status === "completed" && (
           <View style={styles.actionSection}>
             <Text style={styles.sectionTitle}>Group Completed</Text>
@@ -264,16 +242,17 @@ export function GroupDetailScreen({ navigation, route }: Props) {
               style={styles.actionButton}
             />
             <Button
-              title="Terminate Group"
-              variant="secondary"
+              title="Delete Group"
+              icon="trash-outline"
+              variant="danger"
               onPress={() => {
                 Alert.alert(
-                  "Terminate Group",
-                  "Are you sure you want to permanently end this group? This action cannot be undone.",
+                  "Delete Group",
+                  "This permanently deletes the group along with its cycles, contributions, payouts and member history. Members' wallet balances are not affected. This cannot be undone.",
                   [
                     { text: "Cancel", style: "cancel" },
                     {
-                      text: "Terminate",
+                      text: "Delete",
                       style: "destructive",
                       onPress: async () => {
                         try {
@@ -283,7 +262,7 @@ export function GroupDetailScreen({ navigation, route }: Props) {
                           if (err instanceof ApiError) {
                             setError(err.message);
                           } else {
-                            setError("Failed to terminate group");
+                            setError("Failed to delete group");
                           }
                         }
                       },
@@ -319,7 +298,7 @@ export function GroupDetailScreen({ navigation, route }: Props) {
                     backgroundColor:
                       member.payoutStatus === "collected"
                         ? colors.successSoft
-                        : colors.primarySoft,
+                        : colors.forestLightPill,
                   },
                 ]}
               >
@@ -330,7 +309,7 @@ export function GroupDetailScreen({ navigation, route }: Props) {
                       color:
                         member.payoutStatus === "collected"
                           ? colors.success
-                          : colors.primary,
+                          : colors.forestAction,
                     },
                   ]}
                 >
@@ -345,7 +324,12 @@ export function GroupDetailScreen({ navigation, route }: Props) {
           <Button
             title="View All Members & Invites"
             variant="secondary"
-            onPress={() => navigation.navigate("GroupMembers", { groupId })}
+            onPress={() =>
+              navigation.navigate("GroupMembers", {
+                groupId,
+                joinCode: group.joinCode,
+              })
+            }
             style={styles.viewAllButton}
           />
         )}
@@ -372,12 +356,6 @@ function InfoRow({
 }
 
 const styles = StyleSheet.create({
-  title: {
-    fontSize: typography.sizes.xxl,
-    fontWeight: typography.weights.bold,
-    color: colors.ink,
-    marginBottom: spacing.lg,
-  },
   header: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -387,7 +365,7 @@ const styles = StyleSheet.create({
   groupName: {
     fontSize: typography.sizes.xxl,
     fontWeight: typography.weights.bold,
-    color: colors.ink,
+    color: colors.forestLightInk,
     flex: 1,
     marginRight: spacing.sm,
   },
@@ -401,10 +379,10 @@ const styles = StyleSheet.create({
     fontWeight: typography.weights.medium,
   },
   infoCard: {
-    backgroundColor: colors.surface,
+    backgroundColor: colors.white,
     borderRadius: radii.lg,
     borderWidth: 1,
-    borderColor: colors.line,
+    borderColor: colors.forestLightLine,
     marginBottom: spacing.lg,
   },
   infoRow: {
@@ -416,16 +394,16 @@ const styles = StyleSheet.create({
   },
   infoRowBorder: {
     borderBottomWidth: 1,
-    borderBottomColor: colors.line,
+    borderBottomColor: colors.forestLightLine,
   },
   infoLabel: {
     fontSize: typography.sizes.sm,
-    color: colors.inkSoft,
+    color: colors.forestLightInkSoft,
   },
   infoValue: {
     fontSize: typography.sizes.base,
     fontWeight: typography.weights.medium,
-    color: colors.ink,
+    color: colors.forestLightInk,
   },
   actionSection: {
     marginBottom: spacing.lg,
@@ -433,7 +411,7 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: typography.sizes.lg,
     fontWeight: typography.weights.semibold,
-    color: colors.ink,
+    color: colors.forestLightInk,
     marginBottom: spacing.md,
   },
   actionButton: {
@@ -443,21 +421,21 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    backgroundColor: colors.surface,
+    backgroundColor: colors.white,
     borderRadius: radii.md,
     borderWidth: 1,
-    borderColor: colors.line,
+    borderColor: colors.forestLightLine,
     padding: spacing.md,
     marginBottom: spacing.sm,
   },
   memberName: {
     fontSize: typography.sizes.base,
     fontWeight: typography.weights.medium,
-    color: colors.ink,
+    color: colors.forestLightInk,
   },
   memberRole: {
     fontSize: typography.sizes.xs,
-    color: colors.inkSoft,
+    color: colors.forestLightInkSoft,
     marginTop: spacing.xs,
   },
   memberStatus: {
@@ -471,42 +449,5 @@ const styles = StyleSheet.create({
   },
   viewAllButton: {
     marginBottom: spacing.xl,
-  },
-  emptySection: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingTop: spacing.xxxl,
-  },
-  emptyText: {
-    fontSize: typography.sizes.base,
-    color: colors.inkSoft,
-  },
-  inviteCard: {
-    backgroundColor: colors.surface,
-    borderRadius: radii.lg,
-    borderWidth: 1,
-    borderColor: colors.line,
-    padding: spacing.lg,
-    marginBottom: spacing.md,
-  },
-  inviteGroupName: {
-    fontSize: typography.sizes.lg,
-    fontWeight: typography.weights.semibold,
-    color: colors.ink,
-    marginBottom: spacing.xs,
-  },
-  inviteDetail: {
-    fontSize: typography.sizes.sm,
-    color: colors.inkSoft,
-    marginBottom: spacing.xs,
-  },
-  inviteActions: {
-    flexDirection: "row",
-    gap: spacing.sm,
-    marginTop: spacing.md,
-  },
-  inviteActionButton: {
-    flex: 1,
   },
 });
