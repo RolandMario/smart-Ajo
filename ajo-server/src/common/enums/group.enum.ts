@@ -24,7 +24,10 @@ export enum RotationMethod {
  *                     Cycle engine (Phase 3) takes over from here.
  * ACTIVE           -> contribution cycles are running.
  * COMPLETED        -> every member has collected their payout.
- * TERMINATED       -> admin chose to end the group after completion.
+ * TERMINATED       -> legacy marker from before termination deleted groups.
+ *                     Terminating a group now removes it (and its data) from
+ *                     the database, so this value only survives on rows
+ *                     written by older versions of the API.
  */
 export enum GroupStatus {
   OPEN_FOR_INVITES = 'open_for_invites',

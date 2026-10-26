@@ -42,6 +42,7 @@ npm run seed:fix-wallet-balances         # backfill helper
 npm run seed:resolve-pending-payouts     # backfill helper
 npm run seed:fix-savings-plan-durations  # backfill legacy savings plans missing durationUnit/durationValue
 npm run seed:fix-savings-withdrawal-lock  # clear stale savings withdrawal locks left by a crash
+npm run seed:purge-terminated-groups     # purge groups left behind by old terminate (dry run; -- --confirm deletes)
 ```
 `PAYSTACK_SECRET_KEY` and `POST /webhooks/paystack` are required for funding/payouts to resolve outside the manual `GET /wallet/fund/verify/:reference` fallback. Use [ngrok](https://ngrok.com) during local dev to receive webhooks. Dedicated Virtual Accounts (`GET /wallet/dedicated-account`, `PAYSTACK_DVA_PREFERRED_BANK`) must be enabled on the Paystack business — bank transfers into a member's virtual account arrive as `charge.success` webhooks and are matched to the user by the Paystack customer's phone.
 
@@ -90,7 +91,7 @@ The app is a NestJS 11 monolith with `MongooseModule`, JWT auth (`@nestjs/jwt` +
 - `auth/` — phone+OTP (mobile) and email+password (admin web) login flows; `JwtStrategy` re-fetches the user on every request so role/`isActive` changes take effect immediately. Guards: `JwtAuthGuard`, `PlatformAdminGuard` (under `src/common/guards/`).
 - `users/` — `User` schema (phone-based identity, optional email, `role: user | platform_admin`, `isActive`, `bankAccount`).
 - `otp/` — bcrypt-hashed codes with a Mongo TTL index on `expiresAt` and `attempt` limiting; SMS delivery via `TermiiService`.
-- `groups/` + `invites` controller — `Group`, `GroupMember` schemas. Rotation order locking (`manual` or CSPRNG `random`). `GroupAccessService` centralizes "is this user the admin / an accepted member" checks shared with `cycles/`.
+- `groups/` + `invites` controller — `Group`, `GroupMember` schemas. Rotation order locking (`manual` or CSPRNG `random`). `GroupAccessService` centralizes "is this user the admin / an accepted member" checks shared with `cycles/`. `POST /groups/:id/terminate` (admin, COMPLETED only, group wallet balance must be ₦0) **deletes** the group and every group-scoped record — memberships, cycles, contributions, group wallet + its ledger, escrow deposits, payouts — in one Mongo transaction; members' personal `WalletTransaction` history is kept. `GroupStatus.TERMINATED` therefore only survives on legacy rows — `npm run seed:purge-terminated-groups` purges those (`GroupsService.purgeTerminatedGroups`, dry run unless `--confirm`; groups whose account still holds money are skipped and reported).
 - `cycles/` — `Cycle`, `Contribution` schemas (one contribution per (cycle, member)). Activation creates Cycle 1 + per-member `Wallet` + a `GroupWallet`. `collectContributionsCore` is the shared debit/notify routine used by both the manual admin endpoint and the `AutoCollectScheduler`.
 - `wallet/` — `Wallet`, `WalletTransaction`, `GroupWallet`, `GroupWalletTransaction`. Personal wallet funding via Paystack; central account debited on contribution collection and credited on reversal.
 - `payments/` — `PaystackService` (transaction init, resolve bank, transfer recipient, transfer, constant-time HMAC verify via `crypto.timingSafeEqual` on `req.rawBody`) and `VTPassService` (bill payments — airtime/data/etc. via VTPass, with a single retry+requery for pending transactions).

@@ -114,6 +114,7 @@ the app yet, `POST /groups/:id/invites` returns 404 until they do.
 | GET    | `/groups/:id/members`       | Bearer JWT              | — | Member roster only (ACCEPTED members only) |
 | POST   | `/groups/:id/invites`       | Bearer JWT, group admin | `{ phone }` | Sends an invite. Fails (404) if the phone isn't a registered Ajo user; also fails if the group is full, not open for invites, or the phone is already invited/a member |
 | POST   | `/groups/:id/rotation/lock` | Bearer JWT, group admin | `{ order?: string[] }` | Locks the payout order. `order` (array of GroupMember ids) is required if `rotationMethod` is `manual`; ignored if `random`. Requires all `totalSlots` to be ACCEPTED first. |
+| POST   | `/groups/:id/terminate`     | Bearer JWT, group admin | — | Permanently ends a COMPLETED group: deletes the group and every group-scoped record (memberships, cycles, contributions, group wallet + its ledger, escrow deposits, payouts) in one Mongo transaction. Refuses while the group account still holds money. Members' personal `WalletTransaction` history is kept. |
 
 ### Invites
 
@@ -133,6 +134,14 @@ the app yet, `POST /groups/:id/invites` returns 404 until they do.
   been created and contributions are being collected.
 - **completed**: set automatically once the final cycle's payout has been
   initiated — every member has now collected.
+- **terminated**: legacy only. Terminating a group now deletes it (see
+  `POST /groups/:id/terminate`) rather than marking it, so this value only
+  survives on rows written by older versions of the API. Those rows are
+  invisible to the app (filtered out of `GET /groups`, Group-ID search and
+  invites) and are purged with `npm run seed:purge-terminated-groups` — a dry
+  run by default, `--confirm` to actually delete. A legacy group whose central
+  account still holds money is skipped and reported so it can be paid out
+  first.
 
 ## Phase 3 — Cycle Engine
 

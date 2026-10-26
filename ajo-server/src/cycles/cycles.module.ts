@@ -11,6 +11,10 @@ import {
   GroupWalletTransactionSchema,
 } from './schemas/group-wallet-transaction.schema';
 import { Payout, PayoutSchema } from './schemas/payout.schema';
+import {
+  EscrowDeposit,
+  EscrowDepositSchema,
+} from './schemas/escrow-deposit.schema';
 import { CyclesService } from './cycles.service';
 import { CyclesController } from './cycles.controller';
 import { GroupsModule } from '../groups/groups.module';
@@ -30,6 +34,7 @@ import { NotificationsModule } from '../notifications/notifications.module';
         schema: GroupWalletTransactionSchema,
       },
       { name: Payout.name, schema: PayoutSchema },
+      { name: EscrowDeposit.name, schema: EscrowDepositSchema },
     ]),
     forwardRef(() => GroupsModule),
     WalletModule,

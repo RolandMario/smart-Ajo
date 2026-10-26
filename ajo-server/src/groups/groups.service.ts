@@ -19,6 +19,15 @@ import {
   GroupWallet,
   GroupWalletDocument,
 } from '../cycles/schemas/group-wallet.schema';
+import {
+  GroupWalletTransaction,
+  GroupWalletTransactionDocument,
+} from '../cycles/schemas/group-wallet-transaction.schema';
+import {
+  EscrowDeposit,
+  EscrowDepositDocument,
+} from '../cycles/schemas/escrow-deposit.schema';
+import { Payout, PayoutDocument } from '../cycles/schemas/payout.schema';
 import { Group, GroupDocument } from './schemas/group.schema';
 import {
   GroupMember,
@@ -45,6 +54,22 @@ import { NotificationEvents } from '../notifications/notification-events';
 
 const MEMBER_USER_FIELDS = 'name phone email';
 
+/**
+ * Outcome of `GroupsService.purgeTerminatedGroups` — the legacy cleanup that
+ * finishes what older API versions left behind (a `status: 'terminated'` row
+ * plus all of its group-scoped data).
+ */
+export interface TerminatedGroupPurgeResult {
+  /** How many groups were found with `status: 'terminated'`. */
+  scanned: number;
+  /** Groups deleted — or, on a dry run, that would be deleted. */
+  purged: Array<{ id: string; name: string }>;
+  /** Groups left alone because their central account still holds money. */
+  skipped: Array<{ id: string; name: string; balance: number }>;
+  /** True when nothing was deleted. */
+  dryRun: boolean;
+}
+
 @Injectable()
 export class GroupsService {
   constructor(
@@ -56,6 +81,12 @@ export class GroupsService {
     private contributionModel: Model<ContributionDocument>,
     @InjectModel(GroupWallet.name)
     private groupWalletModel: Model<GroupWalletDocument>,
+    @InjectModel(GroupWalletTransaction.name)
+    private groupWalletTxModel: Model<GroupWalletTransactionDocument>,
+    @InjectModel(EscrowDeposit.name)
+    private escrowDepositModel: Model<EscrowDepositDocument>,
+    @InjectModel(Payout.name)
+    private payoutModel: Model<PayoutDocument>,
     @InjectConnection() private connection: Connection,
     private usersService: UsersService,
     private groupAccess: GroupAccessService,
@@ -687,9 +718,18 @@ export class GroupsService {
   }
 
   /**
-   * Admin-only. Permanently terminates a completed group.
-   * The group is hidden from the mobile app (filtered out of listMyGroups)
-   * and marked as TERMINATED in the admin web panel.
+   * Admin-only. Permanently ends a completed group by deleting it — and
+   * every record that belongs to it — from the database.
+   *
+   * Cascaded: GroupMember, Cycle, Contribution, GroupWallet,
+   * GroupWalletTransaction, EscrowDeposit, Payout, then the Group itself.
+   * Members' personal wallet ledger (`WalletTransaction`) is deliberately
+   * left alone — that is the user's own money history, not group data.
+   *
+   * Nothing is left behind to filter out: the group no longer appears in
+   * `listMyGroups`, invites, Group-ID search, or the admin panel because the
+   * row is gone. Members are notified after the delete commits. The delete
+   * itself lives in `purgeGroup`, shared with the legacy cleanup script.
    */
   async terminateGroup(adminUserId: string, groupId: string) {
     const group = await this.groupAccess.getGroupOrThrow(groupId);
@@ -699,26 +739,137 @@ export class GroupsService {
       throw new BadRequestException('Only completed groups can be terminated');
     }
 
-    group.autoCollectEnabled = false;
-    group.status = GroupStatus.TERMINATED;
-    await group.save();
+    // Never wipe a group while member money is still sitting in its central
+    // account — that balance has to be paid out first.
+    const groupWallet = await this.groupWalletModel.findOne({
+      group: group._id,
+    });
+    if (groupWallet && groupWallet.balance > 0) {
+      throw new BadRequestException(
+        `The group account still holds ₦${groupWallet.balance.toLocaleString()}. ` +
+          'Pay it out before terminating the group.',
+      );
+    }
 
-    // Notify all members
     const members = await this.groupMemberModel.find({
       group: group._id,
       inviteStatus: InviteStatus.ACCEPTED,
     });
     const memberIds = members.map((m) => m.user.toString());
 
+    // Captured before the documents are deleted — the notification still has
+    // to name the group.
+    const groupObjectId = group._id;
+    const groupName = group.name;
+
+    await this.purgeGroup(groupObjectId);
+
+    // Notify all members
     void this.notificationsService.send(
       NotificationEvents.groupTerminated({
         userIds: memberIds,
-        groupName: group.name,
-        data: { groupId: group._id.toString() },
+        groupName,
+        data: { groupId: groupObjectId.toString() },
       }),
     );
 
-    return { groupId: group._id.toString(), status: group.status };
+    return {
+      groupId: groupObjectId.toString(),
+      status: GroupStatus.TERMINATED,
+    };
+  }
+
+  /**
+   * Deletes a group and every document scoped to it: GroupWalletTransaction,
+   * EscrowDeposit, Payout, Contribution, Cycle, GroupWallet, GroupMember, then
+   * the Group itself.
+   *
+   * Everything is group-scoped, so it all goes in one transaction — a
+   * half-deleted group would leave cycles/contributions pointing at nothing.
+   * Members' personal wallet ledger (`WalletTransaction`) is deliberately left
+   * alone: that is the user's own money history, not group data.
+   *
+   * Shared by `terminateGroup` (the live path) and `purgeTerminatedGroups`
+   * (the one-off legacy cleanup), so both paths delete exactly the same
+   * records.
+   */
+  async purgeGroup(groupId: Types.ObjectId): Promise<void> {
+    const session = await this.connection.startSession();
+    try {
+      await session.withTransaction(async () => {
+        await this.groupWalletTxModel.deleteMany(
+          { group: groupId },
+          { session },
+        );
+        await this.escrowDepositModel.deleteMany(
+          { group: groupId },
+          { session },
+        );
+        await this.payoutModel.deleteMany({ group: groupId }, { session });
+        await this.contributionModel.deleteMany(
+          { group: groupId },
+          { session },
+        );
+        await this.cycleModel.deleteMany({ group: groupId }, { session });
+        await this.groupWalletModel.deleteMany({ group: groupId }, { session });
+        await this.groupMemberModel.deleteMany({ group: groupId }, { session });
+        await this.groupModel.deleteOne({ _id: groupId }, { session });
+      });
+    } finally {
+      await session.endSession();
+    }
+  }
+
+  // ---- Legacy purge (groups terminated before termination deleted them) ---
+
+  /**
+   * One-off cleanup for groups terminated by older versions of the API, which
+   * flipped `status` to TERMINATED and left the row — plus its memberships,
+   * cycles, contributions, wallet ledger, escrow deposits and payouts — in the
+   * database. Each legacy group is purged exactly the way `terminateGroup`
+   * purges a group today.
+   *
+   * A legacy group whose central account still holds money is skipped and
+   * reported instead: that balance belongs to the members and has to be paid
+   * out first, the same rule live termination enforces.
+   *
+   * Idempotent — re-running it only finds whatever is still marked TERMINATED.
+   * Backs `npm run seed:purge-terminated-groups`.
+   */
+  async purgeTerminatedGroups(
+    options: { dryRun?: boolean } = {},
+  ): Promise<TerminatedGroupPurgeResult> {
+    const dryRun = options.dryRun ?? false;
+
+    const terminatedGroups = await this.groupModel
+      .find({ status: GroupStatus.TERMINATED })
+      .select('name');
+
+    const purged: TerminatedGroupPurgeResult['purged'] = [];
+    const skipped: TerminatedGroupPurgeResult['skipped'] = [];
+
+    for (const group of terminatedGroups) {
+      const groupWallet = await this.groupWalletModel
+        .findOne({ group: group._id })
+        .select('balance');
+
+      if (groupWallet && groupWallet.balance > 0) {
+        skipped.push({
+          id: group._id.toString(),
+          name: group.name,
+          balance: groupWallet.balance,
+        });
+        continue;
+      }
+
+      if (!dryRun) {
+        await this.purgeGroup(group._id);
+      }
+
+      purged.push({ id: group._id.toString(), name: group.name });
+    }
+
+    return { dryRun, scanned: terminatedGroups.length, purged, skipped };
   }
 
   // ---- Auto-collect toggle (Phase 6) -----------------------------------------
