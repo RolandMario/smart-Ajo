@@ -82,9 +82,9 @@ export function BillConfirmationScreen({ navigation, route }: Props) {
 }
 
 const styles = StyleSheet.create({
-  title: { fontSize: typography.sizes.xxl, fontWeight: typography.weights.bold, color: colors.ink, marginBottom: spacing.lg },
-  card: { backgroundColor: colors.surface, borderRadius: radii.lg, borderWidth: 1, borderColor: colors.line, padding: spacing.xl, marginBottom: spacing.xl },
-  label: { fontSize: typography.sizes.xs, color: colors.inkSoft, marginTop: spacing.sm, marginBottom: spacing.xs, textTransform: "uppercase" as const },
-  value: { fontSize: typography.sizes.base, color: colors.ink, fontWeight: typography.weights.medium },
-  amount: { fontSize: typography.sizes.xxl, fontWeight: typography.weights.bold, color: colors.primary },
+  title: { fontSize: typography.sizes.xxl, fontWeight: typography.weights.bold, color: colors.forestLightInk, marginBottom: spacing.lg },
+  card: { backgroundColor: colors.white, borderRadius: radii.lg, borderWidth: 1, borderColor: colors.forestLightLine, padding: spacing.xl, marginBottom: spacing.xl },
+  label: { fontSize: typography.sizes.xs, color: colors.forestLightInkSoft, marginTop: spacing.sm, marginBottom: spacing.xs, textTransform: "uppercase" as const },
+  value: { fontSize: typography.sizes.base, color: colors.forestLightInk, fontWeight: typography.weights.medium },
+  amount: { fontSize: typography.sizes.xxl, fontWeight: typography.weights.bold, color: colors.forestAction },
 });

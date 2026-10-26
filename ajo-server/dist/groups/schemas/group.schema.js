@@ -13,8 +13,10 @@ exports.GroupSchema = exports.Group = void 0;
 const mongoose_1 = require("@nestjs/mongoose");
 const mongoose_2 = require("mongoose");
 const group_enum_1 = require("../../common/enums/group.enum");
+const dedicated_account_schema_1 = require("../../users/schemas/dedicated-account.schema");
 let Group = class Group {
     _id;
+    joinCode;
     name;
     createdBy;
     contributionAmount;
@@ -26,10 +28,21 @@ let Group = class Group {
     startDate;
     currentCycleNumber;
     currentRound;
-    autoCollectEnabled;
     serviceFee;
+    escrowAccount;
 };
 exports.Group = Group;
+__decorate([
+    (0, mongoose_1.Prop)({
+        type: String,
+        required: true,
+        unique: true,
+        index: true,
+        uppercase: true,
+        trim: true,
+    }),
+    __metadata("design:type", String)
+], Group.prototype, "joinCode", void 0);
 __decorate([
     (0, mongoose_1.Prop)({ required: true, trim: true }),
     __metadata("design:type", String)
@@ -83,13 +96,13 @@ __decorate([
     __metadata("design:type", Number)
 ], Group.prototype, "currentRound", void 0);
 __decorate([
-    (0, mongoose_1.Prop)({ default: false }),
-    __metadata("design:type", Boolean)
-], Group.prototype, "autoCollectEnabled", void 0);
-__decorate([
     (0, mongoose_1.Prop)({ default: 0, min: 0 }),
     __metadata("design:type", Number)
 ], Group.prototype, "serviceFee", void 0);
+__decorate([
+    (0, mongoose_1.Prop)({ type: dedicated_account_schema_1.DedicatedAccountSchema }),
+    __metadata("design:type", Function)
+], Group.prototype, "escrowAccount", void 0);
 exports.Group = Group = __decorate([
     (0, mongoose_1.Schema)({ timestamps: true })
 ], Group);

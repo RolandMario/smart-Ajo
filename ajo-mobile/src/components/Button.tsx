@@ -4,18 +4,33 @@ import {
   Pressable,
   StyleSheet,
   Text,
+  View,
   type PressableProps,
   type StyleProp,
   type ViewStyle,
 } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 import { colors, radii, spacing, typography } from "../theme";
 
-type ButtonVariant = "primary" | "secondary" | "ghost";
+type ButtonVariant =
+  | "primary"
+  | "secondary"
+  | "ghost"
+  | "gold"
+  | "outline"
+  | "forest"
+  | "outlineLight"
+  | "danger";
+
+/** The exact literal-union of valid Ionicon glyph names. */
+type IoniconName = React.ComponentProps<typeof Ionicons>["name"];
 
 interface ButtonProps extends Omit<PressableProps, "style"> {
   title: string;
   variant?: ButtonVariant;
   loading?: boolean;
+  /** Optional leading glyph, tinted with the label colour for the variant. */
+  icon?: IoniconName;
   style?: StyleProp<ViewStyle>;
 }
 
@@ -23,6 +38,7 @@ export function Button({
   title,
   variant = "primary",
   loading = false,
+  icon,
   disabled,
   style,
   ...props
@@ -44,13 +60,12 @@ export function Button({
       {...props}
     >
       {loading ? (
-        <ActivityIndicator color={variant === "primary" ? colors.white : colors.primary} />
+        <ActivityIndicator color={labelColors[variant]} />
       ) : (
-        <Text
-          style={[styles.label, variant === "primary" ? styles.labelOnPrimary : styles.labelOnLight]}
-        >
-          {title}
-        </Text>
+        <View style={styles.content}>
+          {icon ? <Ionicons name={icon} size={20} color={labelColors[variant]} /> : null}
+          <Text style={[styles.label, { color: labelColors[variant] }]}>{title}</Text>
+        </View>
       )}
     </Pressable>
   );
@@ -70,26 +85,56 @@ const styles = StyleSheet.create({
   disabled: {
     opacity: 0.5,
   },
+  content: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+  },
   label: {
     fontSize: typography.sizes.base,
     fontWeight: typography.weights.semibold,
-  },
-  labelOnPrimary: {
-    color: colors.white,
-  },
-  labelOnLight: {
-    color: colors.primary,
   },
 });
 
 const variantStyles: Record<ButtonVariant, ViewStyle> = StyleSheet.create({
   primary: {
-    backgroundColor: colors.primary,
+    backgroundColor: colors.forestAction,
   },
   secondary: {
-    backgroundColor: colors.primarySoft,
+    backgroundColor: colors.forestLightPill,
   },
   ghost: {
     backgroundColor: "transparent",
   },
+  gold: {
+    backgroundColor: colors.gold,
+  },
+  outline: {
+    backgroundColor: "transparent",
+    borderWidth: 1,
+    borderColor: colors.forestLine,
+  },
+  forest: {
+    backgroundColor: colors.forestAction,
+  },
+  outlineLight: {
+    backgroundColor: "transparent",
+    borderWidth: 1,
+    borderColor: colors.forestLightLine,
+  },
+  danger: {
+    backgroundColor: colors.danger,
+  },
 });
+
+/** Label (and spinner) colour for each variant. */
+const labelColors: Record<ButtonVariant, string> = {
+  primary: colors.white,
+  secondary: colors.forestAction,
+  ghost: colors.forestAction,
+  gold: colors.onGold,
+  outline: colors.onForest,
+  forest: colors.white,
+  outlineLight: colors.forestAction,
+  danger: colors.white,
+};

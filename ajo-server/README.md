@@ -26,14 +26,36 @@ npm install
 npm run start:dev
 ```
 
+> **`.env` is optional for local dev** — every variable in
+> `src/config/env.validation.ts` has a working development default (port
+> **5010**, the MongoDB URI, JWT secret, OTP length...) **except
+> `PAYSTACK_SECRET_KEY`**, which deliberately has none. The test key that
+> used to be committed here has been revoked by Paystack, so relying on it
+> only produced `Paystack error: Invalid key` on every payout/withdrawal.
+> Without a key the server still boots, but payment endpoints (wallet
+> funding, virtual accounts, savings withdrawals, group payouts) answer
+> **503** with *"Payments are not configured on this server:
+> PAYSTACK_SECRET_KEY is missing or invalid…"*. Paste a valid key
+> (Paystack Dashboard → Settings → **API Keys & Webhooks**) into `.env` and
+> restart the server. If you *do* copy `.env.example`, note that it ships
+> **placeholder** `JWT_ACCESS_SECRET` / `PAYSTACK_SECRET_KEY` values which
+> would override those defaults — put real ones in before starting, or the
+> app will authenticate differently and Paystack calls will 401.
+>
+> The API must be listening on **5010**: `ajo-mobile/.env` points at
+> `http://localhost:5010`. If it isn't running, every mobile request fails
+> immediately with a "can't reach the server" error (`ApiError` status 0).
+
 In development, generated OTP codes are also written to the server logs
 (`[DEV ONLY] OTP for +234...: 123456`) so you can test the flow without a
 live Termii account/credit.
 
 ### Scheduled jobs & Vercel Cron
 
-Four jobs run on a schedule (savings auto-debit, group auto-collect,
-contribution reminders, defaulter flagging). On an always-on host they run
+Two jobs run on a schedule (contribution reminders, defaulter flagging).
+Savings are no longer auto-collected — members pay each interval from their
+wallet themselves (see *Personal savings plans* below). On an always-on host
+the jobs run
 in-process via `@nestjs/schedule`. If you deploy the API to Vercel and drive
 the jobs with [Vercel Cron Jobs](https://vercel.com/docs/cron-jobs) instead,
 the crons in `vercel.json` hit the guarded `GET /cron/*` endpoints.
@@ -44,20 +66,19 @@ the crons in `vercel.json` hit the guarded `GET /cron/*` endpoints.
      `Authorization: Bearer <CRON_SECRET>` to every cron request), and
    - this server's environment (so the `/cron/*` endpoints can verify it).
 3. Where the server runs on Vercel, set `DISABLE_IN_PROCESS_CRONS=true` so the
-   in-process `@nestjs/schedule` jobs don't also fire (duplicate debits!).
+   in-process `@nestjs/schedule` jobs don't also fire (duplicate jobs!).
    Keep it `false` on an always-on host where the in-process scheduler is the
    only trigger.
 4. Deploy and confirm the jobs under Vercel → project → Settings → Cron Jobs.
 
-Mapped endpoints — `GET /cron/savings` (`*/10 * * * *`),
-`GET /cron/auto-collect` (`0 8 * * *`), `GET /cron/reminders` (`0 9 * * *`),
+Mapped endpoints — `GET /cron/reminders` (`0 9 * * *`),
 `GET /cron/defaulters` (`0 10 * * *`). Requests without a matching
 `Authorization: Bearer <CRON_SECRET>` header get `401`.
 
 Local smoke test:
 
 ```bash
-curl -i -H "Authorization: Bearer $CRON_SECRET" http://localhost:5010/cron/savings
+curl -i -H "Authorization: Bearer $CRON_SECRET" http://localhost:5010/cron/reminders
 ```
 
 ### Paystack webhook (required for Phase 4 to fully work)
@@ -212,8 +233,131 @@ current cycle's recipient.
 | POST   | `/groups/:id/activate`                              | Bearer JWT, group admin | — | Requires `Group.status === order_locked`. Creates Cycle 1, a `GroupWallet`, and a personal `Wallet` for every member who doesn't have one. Sets `status: active`. |
 | GET    | `/groups/:id/cycles`                                | Bearer JWT              | — | All cycles, oldest first, each with a `paidCount` |
 | GET    | `/groups/:id/cycles/current`                        | Bearer JWT              | — | Current open cycle + every member's contribution status |
-| POST   | `/groups/:id/cycles/:cycleId/collect-contributions` | Bearer JWT, group admin | — | Attempts to debit every member's wallet with a PENDING contribution, crediting the `GroupWallet` for each success. Members with insufficient balance are skipped (stay `pending`) — safe to call again after they top up. |
-| POST   | `/groups/:id/cycles/:cycleId/payout`                | Bearer JWT, group admin | — | Requires ALL contributions `paid`. Debits the `GroupWallet`, creates a `Payout`, and calls Paystack's Transfer API. If Paystack confirms synchronously, the rotation advances immediately; otherwise the webhook finalizes it. |
+| POST   | `/groups/:id/contributions/:contributionId/pay`            | Bearer JWT, member | — | Member pays their own contribution from their wallet: debits `amount` + the group's service fee, credits the `GroupWallet`, marks the contribution `paid` (`paymentMethod: wallet`). |
+| POST   | `/groups/:id/contributions/:contributionId/notify-transfer` | Bearer JWT, member | `{ claimedReference?: string }` | Member reports a bank transfer into the group's escrow DVA. Debits the service fee and moves the contribution to `awaiting_confirmation`; the group admin is notified. |
+| POST   | `/groups/:id/contributions/:contributionId/confirm`         | Bearer JWT, group admin | — | Verifies a claimed bank transfer: allocates the matching escrow deposit (or credits the `GroupWallet` if the money arrived out-of-band), credits the platform fee, marks the contribution `paid`. |
+| POST   | `/groups/:id/contributions/:contributionId/reject`          | Bearer JWT, group admin | `{ reason?: string }` | Rejects a claimed bank transfer: contribution returns to `pending`, the service fee is refunded to the member, and any pre-linked escrow deposit is released back to the reconciliation queue. |
+| GET    | `/groups/:id/escrow-account`                                | Bearer JWT, member | — | The group's escrow DVA (bank, account name/number, currency). `null` until provisioned. |
+| POST   | `/groups/:id/escrow-account/refresh`                        | Bearer JWT, group admin | — | Deactivates and re-provisions the group's escrow DVA (e.g. if Paystack invalidated the number). |
+| GET    | `/groups/:id/escrow-deposits`                               | Bearer JWT, group admin | — | The group's inbound escrow deposits (newest first) for reconciliation — sender, narration, amount, allocation state. |
+| POST   | `/groups/:id/cycles/:cycleId/payout`                | Bearer JWT, group admin | — | Requires ALL contributions `paid` (claimed transfers must be confirmed or rejected first). Debits the `GroupWallet`, creates a `Payout`, and calls Paystack's Transfer API. If Paystack confirms synchronously, the rotation advances immediately; otherwise the webhook finalizes it. |
+
+### Personal savings plans
+
+Each member can run their own savings plans alongside the group circles.
+A plan is defined by an amount, a frequency (daily / weekly / monthly) and a
+cycle length (`durationUnit` + `durationValue`, e.g. 20 days or 6 months);
+the number of intervals in a cycle is derived from those at creation.
+
+**Saving is member-initiated — there is no auto-debit.** After creating a
+plan the member presses "Pay" on the plan (mobile: Savings tab → plan) and
+one interval's `amount` moves from their wallet into the plan's
+`savingsBalance`:
+
+- The payment runs in one Mongo transaction: the plan-ledger entry
+  (`SavingTransaction`, unique `reference` =
+  `saving_<planId>_<cycle>_<interval>`) is written first, then the wallet is
+  debited (`WalletService.debitForSavings`, ledger type `savings_debit`), then
+  the plan advances (`collectedCount`, `savingsBalance`, `lifetimeSaved`,
+  `nextDueAt`).
+- The unique reference makes the endpoint idempotent: a double tap / retried
+  request hits the duplicate key, aborts the transaction, and returns the
+  current plan instead of charging twice.
+- An insufficient wallet balance rolls the whole transaction back and returns
+  `400` with a top-up message — nothing is recorded.
+- Paying the last interval flips the plan to `completed`, which unlocks the
+  withdrawal to the member's saved bank account (Paystack transfer). After a
+  successful withdrawal the member can continue (new cycle) or delete the
+  plan.
+
+`nextDueAt` is only a schedule label ("next payment due") — it never triggers
+a debit. The old `*/10 * * * *` savings auto-collect cron
+(`GET /cron/savings`) has been removed from both `vercel.json` and the
+in-process scheduler.
+
+| Method | Path                          | Auth       | Body | Notes |
+|--------|-------------------------------|------------|------|-------|
+| POST   | `/savings/plans`              | Bearer JWT | `{ name, amount, frequency, durationUnit, durationValue }` | Creates the plan. No money moves here — the first interval is due immediately. |
+| GET    | `/savings/plans`              | Bearer JWT | — | The member's plans (deleted ones excluded), newest first |
+| GET    | `/savings/plans/:id`          | Bearer JWT | Query: `page?`, `limit?` (default 10, max 50) | `{ plan, transactions, page, limit, total }` — the plan plus one page of its ledger, newest first. Out-of-range pages clamp to the last page. |
+| POST   | `/savings/plans/:id/pay`      | Bearer JWT | — | Pays one interval from the wallet. `400` when the plan isn't `active`, every interval is already paid, or the wallet balance is too low. Idempotent per interval. |
+| POST   | `/savings/plans/:id/withdraw` | Bearer JWT | — | Only when the plan is `completed`; pays `savingsBalance` to the member's bank account via Paystack |
+| POST   | `/savings/plans/:id/continue` | Bearer JWT | — | Starts a new cycle on a withdrawn plan (`collectedCount`/`savingsBalance` reset) |
+| DELETE | `/savings/plans/:id`          | Bearer JWT | — | Allowed after a withdrawal, or before any payment was made |
+
+### Pool collections (pool donations)
+
+A **pool collection** is a non-rotating donation pool: one member creates it,
+shares its short **Group ID**, and other members join and donate from their
+Ajo wallet. Donations accumulate in the pool's escrow and the pool admin pays
+the escrow out to a bank account whenever they like. Nothing is
+auto-debited — donors tap "Donate" themselves.
+
+A pool is defined by:
+
+- `amountType` — `fixed` (everyone gives `amount`) or `free_will` (the donor
+  chooses, minimum ₦100).
+- `schedule` — `one_time` (each member may donate once, ever) or `interval`
+  with a `frequency` of `daily` / `weekly` / `monthly` / `yearly`.
+
+**One donation per member per period** is enforced twice: a unique
+`{group, user, period}` index on `Donation`, and a deterministic wallet
+reference `don_<groupId>_<userId>_<period>`. Period keys are calendar-based
+(`2026-10-25`, `2026-W43` ISO week, `2026-10`, `2026`) or the literal `once`
+for one-time pools — see `src/donations/utils/donation-period.ts` and its
+spec.
+
+A donation runs in one Mongo transaction:
+
+1. the `Donation` row is written first (its unique index is the idempotency
+   guard, so a double tap aborts before money moves);
+2. the wallet is debited (`WalletService.debitForDonation`, ledger type
+   `donation_debit`);
+3. the member's totals advance (and the pool's `donorCount` on their first
+   donation);
+4. `escrowBalance` / `totalCollected` are incremented and a
+   `DonationEscrowTransaction` (`donation_credit`) records the movement.
+
+A duplicate request is treated as success and returns the current pool state.
+An insufficient wallet balance rolls everything back with a `400`.
+
+**Payouts** mirror the cycle payout flow: the amount is reserved inside a
+transaction (`escrowBalance` decremented with a `$gte` guard, PENDING
+`DonationPayout` + `payout_debit` ledger row), the Paystack transfer is
+initiated outside the transaction, test-mode OTPs are auto-resolved, and the
+`transfer.success` webhook finalizes the row when Paystack answers
+asynchronously. `totalPaidOut` only increases on success; a failed or reversed
+transfer credits escrow back (`payout_reversal_credit`) and rolls
+`totalPaidOut` back for a reversal. The destination defaults to the admin's
+own saved `User.bankAccount`; the admin may instead store a pool-level
+override (`payoutAccount`) resolved through Paystack.
+
+**Ending a pool** is a two-key operation. Members who have paid 100% of their
+contribution vote (`PUT /donations/groups/:id/termination-vote`); 2/3 of them
+must vote yes, and every naira donated must already have been paid out. Only
+the pool admin can press terminate (`POST /donations/groups/:id/terminate`),
+and the service re-checks both gates so a stale screen cannot end a pool early.
+Terminating **deletes** the pool and every record scoped to it — donations,
+memberships, payouts, escrow movements — in one Mongo transaction; donors'
+personal `WalletTransaction` history is kept. Nothing is left behind to show up
+in a list, so `DonationGroupStatus.TERMINATED` only survives on legacy rows,
+purged with `npm run seed:purge-terminated-pools` (dry run unless `--confirm`;
+a pool whose escrow still holds money is skipped and reported).
+
+| Method | Path                                    | Auth                    | Body | Notes |
+|--------|-----------------------------------------|-------------------------|------|-------|
+| POST   | `/donations/groups`                     | Bearer JWT              | `{ name, purpose, amountType, amount?, schedule, frequency? }` | Creates the pool + the admin's membership. `amount` is required for `fixed`; `frequency` for `interval`. |
+| GET    | `/donations/groups`                     | Bearer JWT              | — | `{ groups, stats }` — every pool the caller belongs to (with their own giving and current-window state) plus dashboard totals. |
+| POST   | `/donations/groups/join`                | Bearer JWT              | `{ groupId }` | Joins by the shareable Group ID (case/dashes normalised). Idempotent. |
+| GET    | `/donations/groups/:id`                 | Bearer JWT, member      | — | Pool detail: escrow totals, caller's giving, whether they can donate now and when the window reopens, recent donations, admin payout destination. |
+| GET    | `/donations/groups/:id/donations`       | Bearer JWT, member      | Query: `page?`, `limit?` (default 10, max 50) | Paginated donor history, newest first. Pages clamp to the last page. |
+| POST   | `/donations/groups/:id/donate`          | Bearer JWT, member      | `{ amount? }` | Donates for the current period. Fixed pools ignore/validate `amount`; free-will pools require it. One per period, idempotent. |
+| GET    | `/donations/groups/:id/payouts`         | Bearer JWT, pool admin  | Query: `page?`, `limit?` | Payout history + escrow balance + resolved destination. |
+| POST   | `/donations/groups/:id/payouts`         | Bearer JWT, pool admin  | `{ amount? }` | Pays escrow out; omit `amount` to withdraw it all. |
+| GET    | `/donations/groups/:id/payout-account`  | Bearer JWT, pool admin  | — | `{ poolAccount, adminAccount, destination }` |
+| PUT    | `/donations/groups/:id/payout-account`  | Bearer JWT, pool admin  | `{ bankName, bankCode, accountNumber }` or `{ useAdminAccount: true }` | Stores a pool-level override (NUBAN resolved + transfer recipient created) or clears it. |
+| PUT    | `/donations/groups/:id/termination-vote`| Bearer JWT, member      | `{ vote }` | Casts/withdraws the caller's vote to end the pool. Only members who paid 100% of their contribution may vote. |
+| POST   | `/donations/groups/:id/terminate`       | Bearer JWT, pool admin  | — | Deletes the pool once 2/3 of the fully paid members voted yes AND everything donated has been paid out. Removes donations, memberships, payouts and escrow movements in one transaction; answers `{ groupId, status: 'terminated' }`. |
 
 ### Webhook
 
@@ -259,8 +403,11 @@ inbox and a daily cron job for contribution due-date reminders.
 | `group_activated` | `POST /groups/:id/activate` | push + SMS (to every member) |
 | `contribution_due_reminder` | `ReminderScheduler`, T-3 days | push |
 | `contribution_due_urgent` | `ReminderScheduler`, T-1/T-0 | push + SMS |
-| `contribution_debited` | `POST .../collect-contributions` (success) | push |
-| `contribution_failed_insufficient` | `POST .../collect-contributions` (insufficient balance) | push + SMS |
+| `contribution_paid` | `POST .../contributions/:id/pay` | push + SMS (to the member) |
+| `contribution_awaiting_confirmation` | `POST .../contributions/:id/notify-transfer` | push + SMS (to the group admin) |
+| `contribution_confirmed` | `POST .../contributions/:id/confirm` | push + SMS (to the member) |
+| `contribution_rejected` | `POST .../contributions/:id/reject` | push + SMS (to the member) |
+| `escrow_deposit_received` | `charge.success` into a group's escrow DVA | push (to the group admin) |
 | `payout_initiated` | `POST .../payout` (transfer call made) | push + SMS |
 | `payout_success` | Transfer confirmed (sync or via webhook) | push + SMS |
 | `payout_failed` | Transfer failed (sync or via webhook) | push + SMS (to the group admin) |
@@ -271,7 +418,7 @@ inbox and a daily cron job for contribution due-date reminders.
 
 | Method | Path                              | Auth       | Body | Notes |
 |--------|-----------------------------------|------------|------|-------|
-| GET    | `/notifications`                  | Bearer JWT | Query: `limit?`, `skip?` | In-app inbox: `{ notifications, unreadCount }`, newest first |
+| GET    | `/notifications`                  | Bearer JWT | Query: `limit?`, `skip?` | In-app inbox: `{ notifications, unreadCount, total }`, newest first (`total` powers the `Page x of y` pager) |
 | PATCH  | `/notifications/read`             | Bearer JWT | `{ notificationIds: string[] }` | Marks specific notifications as read |
 | PATCH  | `/notifications/read-all`         | Bearer JWT | — | Marks all of the user's notifications as read |
 | POST   | `/notifications/device-token`     | Bearer JWT | `{ token, platform? }` | Registers/refreshes an FCM token. Call on app launch and whenever FCM issues a new token |
@@ -299,12 +446,11 @@ automatic penalties.
   `OPEN` cycle as `defaulted`, increments the member's `defaultCount`, and
   notifies both the member (a heads-up, not a penalty notice) and the
   group admin (a summary count).
-- `Group.autoCollectEnabled` — a **per-group toggle**, off by default.
-  When on, `AutoCollectScheduler` runs daily at 8 AM (before the reminder
-  and defaulter jobs) and automatically debits every member's wallet for
-  any cycle whose `dueDate` has arrived — the same logic as the admin's
-  manual `collect-contributions` button, just system-triggered. When off,
-  collection stays a manual admin action, exactly as it was in Phase 4.
+- `Group.autoCollectEnabled` — **deprecated**. Contributions are
+  member-initiated (wallet debit, or a bank transfer into the group's
+  escrow DVA which the group admin confirms), so nothing is bulk-debited
+  any more and the old 8 AM auto-collect job has been removed. The field
+  and its toggle endpoints are kept only for backwards compatibility.
 - `GroupDashboardService` / `GroupDashboardController` — read-only
   endpoints for a group's own admin: current defaulters, full member
   standings (position, payout status, default count, current-cycle
@@ -315,7 +461,7 @@ automatic penalties.
 
 | Method | Path                        | Auth                    | Body | Notes |
 |--------|-----------------------------|--------------------------|------|-------|
-| PATCH  | `/groups/:id/auto-collect`  | Bearer JWT, group admin | `{ enabled: boolean }` | Turns automatic daily contribution collection on/off for this group |
+| PATCH  | `/groups/:id/auto-collect`  | Bearer JWT, group admin | `{ enabled: boolean }` | **Deprecated** — sets the legacy `autoCollectEnabled` flag. Contributions are member-initiated now, so this has no effect. |
 
 ### Group admin dashboard
 
@@ -364,7 +510,7 @@ browse every group.
 |--------|----------------------|------------------------------|----------------|-------|
 | GET    | `/admin/groups`      | Bearer JWT, `platform_admin` | `search?` (name substring), `status?`, `page?` (default 1), `limit?` (default 20, max 100) | Paginated group list with settings and current cycle number, no member/cycle detail. |
 | GET    | `/admin/groups/:id`  | Bearer JWT, `platform_admin` | — | Full detail: settings, central wallet (`GroupWallet`) balance, the group admin, every member's standing, the full cycle history with a paid/defaulted/pending breakdown per cycle, and every payout attempt (including failed/reversed, with `failureReason`) — not just the current one. |
-| PATCH  | `/admin/groups/:id/auto-collect` | Bearer JWT, `platform_admin` | Body `{ enabled: boolean }` | Platform-admin override of the group's auto-collect setting (the same flag the group admin toggles from the mobile app). Enabling lets the scheduler auto-debit due contributions and proceed with payout automatically; disabling returns collection/withdrawal to a manual group-admin action. |
+| PATCH  | `/admin/groups/:id/auto-collect` | Bearer JWT, `platform_admin` | Body `{ enabled: boolean }` | **Deprecated** — platform-admin override of the legacy `autoCollectEnabled` flag. Nothing is auto-collected any more; kept for backwards compatibility. |
 
 Both routes are guarded the same way as the Sub-phase B endpoints.
 
@@ -394,10 +540,18 @@ rather than scoped to "your own" wallet or "your own" group):
 | GET    | `/admin/finance/wallet-transactions`   | Bearer JWT, `platform_admin` | `type?` (default `funding`), `status?`, `userId?`, `page?`, `limit?` | Each entry includes the user and, if set, the related group. |
 | GET    | `/admin/finance/payouts`               | Bearer JWT, `platform_admin` | `status?`, `groupId?`, `page?`, `limit?` | Each entry includes the group, recipient, the admin who initiated it, and `failureReason` if applicable. |
 | GET    | `/admin/finance/group-wallet-transactions` | Bearer JWT, `platform_admin` | `type?`, `groupId?`, `page?`, `limit?` | Each entry includes the group. |
+| GET    | `/admin/finance/service-charge-totals` | Bearer JWT, `platform_admin` | — | Service-charge balance: `totalCollected`, `totalReversed`, `netCollected`, `chargeCount`. Summed from the platform admin's `service_fee_credit` / `service_fee_debit` wallet entries; admin withdrawals are not netted off. |
 
-All three accept `groupId`/`userId` filters specifically so a future
-"view this user/group's transactions" link can reuse the same endpoint
-rather than needing a separate scoped route.
+The three list endpoints accept `groupId`/`userId` filters specifically so
+a future "view this user/group's transactions" link can reuse the same
+endpoint rather than needing a separate scoped route.
+
+`service-charge-totals` backs the admin console's **Service Charges**
+tab: every escrow-transfer fee and bank-payout fee is credited to the
+platform admin's wallet as a `service_fee_credit` WalletTransaction, and
+reversals (rejected bank-transfer contributions, reversed payouts) are
+written back as `service_fee_debit` — so credits minus debits is what the
+platform has actually collected.
 
 ## ajo-admin-web support — Admin Management (Sub-phase E)
 
@@ -483,12 +637,12 @@ once it naturally expires.
   even if a payout is confirmed a few days late. Cycle 1's `dueDate` is the
   one exception: it's `activatedAt + one interval`, since there's no prior
   due date to anchor to.
-- **Contributions are automatically debited from member wallets.**
-  `POST .../collect-contributions` attempts a wallet debit for every
-  `pending` contribution; members with insufficient balance are simply
-  skipped (no error) and remain `pending` until they top up and the admin
-  re-runs the endpoint. There's currently no auto-retry/auto-debit on a
-  schedule — the admin (or, later, a cron job) must trigger collection.
+- **Contributions are member-initiated.** A member pays from their own
+  wallet (`POST .../contributions/:id/pay`, debits the wallet plus the
+  service fee) or transfers into the group's escrow DVA and taps
+  `POST .../contributions/:id/notify-transfer`. Nothing is bulk-debited:
+  the old admin-triggered collection endpoint and the auto-collect cron
+  were removed.
 - **Payout requires full contribution.** `POST .../payout` checks that
   every Contribution for the current cycle is `paid` before allowing the
   recipient to be marked `collected` and the rotation to advance — there's
@@ -528,18 +682,15 @@ once it naturally expires.
   building Phase 6) was to keep the MVP's consequence model simple;
   fees/suspension/guarantors are an explicit non-goal for now and would
   need new schema (e.g. a `Penalty` collection) if revisited later.
-- **`collectContributions` was split into a public admin-checked method
-  and a private `collectContributionsCore`.** The core logic (debit loop,
-  notifications) is shared between the admin's manual button
-  (`POST .../collect-contributions`) and `AutoCollectScheduler`'s
-  unattended daily run (`collectContributionsSystem`) — the only
-  difference is whether `GroupAccessService.assertGroupAdmin` runs first.
-  This avoids duplicating the debit/notify logic across both call paths.
-- **Scheduler run order matters.** Auto-collect (8 AM) runs before the
-  reminder job (9 AM) and the defaulter sweep (10 AM) so that a group
-  with `autoCollectEnabled: true` gets a chance to actually collect
-  before its members are reminded about a contribution that may already
-  be paid, or flagged as a defaulter for one that was just collected.
+- **Payment reconciliation lives in two services.** `EscrowService` owns
+  the group's DVA and inbound deposits (webhook → `EscrowDeposit` → group
+  wallet credit, plus narration-based pre-matching), while `CyclesService`
+  owns every contribution state transition (pay / notify / confirm /
+  reject) so the contribution lifecycle has a single owner.
+- **Scheduler run order matters.** The reminder job (9 AM) runs before the
+  defaulter sweep (10 AM) so members are nudged before being flagged. The
+  auto-collect job that used to run at 8 AM has been removed along with
+  bulk collection.
 - **`defaultCount` is cumulative, not "current."** It only ever
   increments — a member who defaulted twice in the past but is current
   today still shows `defaultCount: 2`. This is deliberate: it's a track

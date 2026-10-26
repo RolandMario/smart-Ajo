@@ -34,6 +34,9 @@ let PlatformAdminFinanceController = class PlatformAdminFinanceController {
     listGroupWalletTransactions(query) {
         return this.financeService.listGroupWalletTransactions(query);
     }
+    getServiceChargeTotals() {
+        return this.financeService.getServiceChargeTotals();
+    }
 };
 exports.PlatformAdminFinanceController = PlatformAdminFinanceController;
 __decorate([
@@ -57,6 +60,12 @@ __decorate([
     __metadata("design:paramtypes", [list_group_wallet_transactions_query_dto_1.ListGroupWalletTransactionsQueryDto]),
     __metadata("design:returntype", void 0)
 ], PlatformAdminFinanceController.prototype, "listGroupWalletTransactions", null);
+__decorate([
+    (0, common_1.Get)('service-charge-totals'),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", void 0)
+], PlatformAdminFinanceController.prototype, "getServiceChargeTotals", null);
 exports.PlatformAdminFinanceController = PlatformAdminFinanceController = __decorate([
     (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard, platform_admin_guard_1.PlatformAdminGuard),
     (0, common_1.Controller)('admin/finance'),

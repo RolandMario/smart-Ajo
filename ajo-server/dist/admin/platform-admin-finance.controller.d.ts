@@ -8,4 +8,5 @@ export declare class PlatformAdminFinanceController {
     listWalletTransactions(query: ListWalletTransactionsQueryDto): Promise<import("./platform-admin-finance.service").PaginatedWalletTransactions>;
     listPayouts(query: ListPayoutsQueryDto): Promise<import("./platform-admin-finance.service").PaginatedPayouts>;
     listGroupWalletTransactions(query: ListGroupWalletTransactionsQueryDto): Promise<import("./platform-admin-finance.service").PaginatedGroupWalletTransactions>;
+    getServiceChargeTotals(): Promise<import("./platform-admin-finance.service").ServiceChargeTotals>;
 }

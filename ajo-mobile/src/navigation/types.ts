@@ -3,9 +3,15 @@ import type { WalletTransaction } from "../types/api";
 
 export type AuthStackParamList = {
   Splash: undefined;
+  Welcome: undefined;
   PhoneEntry: undefined;
   Register: undefined;
-  OtpVerification: { phone: string };
+  /**
+   * `fullName` is set only by the register flow — /auth/register takes no
+   * name, so it's carried here and written to the profile once a token
+   * exists (see OtpVerificationScreen). Undefined on the sign-in path.
+   */
+  OtpVerification: { phone: string; fullName?: string };
   ForgotPassword: undefined;
   ResetPassword: { phone: string };
 };
@@ -14,8 +20,8 @@ export type GroupsStackParamList = {
   GroupsList: undefined;
   CreateGroup: undefined;
   GroupDetail: { groupId: string };
-  GroupMembers: { groupId: string };
-  InviteMember: { groupId: string };
+  GroupMembers: { groupId: string; joinCode?: string };
+  JoinGroup: undefined;
   LockRotation: { groupId: string };
   ActivateGroup: { groupId: string };
   EditGroup: { groupId: string };
@@ -50,12 +56,42 @@ export type BillsStackParamList = {
   };
 };
 
+/**
+ * The tab bar carries only the five money surfaces. Profile and Alerts used
+ * to sit here too; they now open from the avatar chip in the top-right corner
+ * of every tab root (see `components/AccountMenu.tsx` → `AccountNavigator`).
+ */
 export type MainTabParamList = {
-  GroupsTab: NavigatorScreenParams<GroupsStackParamList>;
   Wallet: NavigatorScreenParams<WalletStackParamList>;
+  SavingsTab: NavigatorScreenParams<SavingsStackParamList>;
+  GroupsTab: NavigatorScreenParams<GroupsStackParamList>;
+  DonationsTab: NavigatorScreenParams<DonationsStackParamList>;
   Bills: NavigatorScreenParams<BillsStackParamList>;
-  Notifications: undefined;
-  Profile: undefined;
+};
+
+/**
+ * Personal savings live on their own tab (they used to be buried inside the
+ * Wallet/Profile stacks), so a plan can be funded straight from the tab:
+ * list -> create -> detail (where each interval is paid from the wallet).
+ */
+export type SavingsStackParamList = {
+  SavingsList: undefined;
+  CreateSavingsPlan: undefined;
+  SavingsPlanDetail: { planId: string };
+};
+
+/**
+ * Pool collections ("donation pools"). A member creates a pool, shares its
+ * Group ID, and everyone donates from their wallet into the pool's escrow;
+ * the pool admin pays the escrow out to a bank account.
+ */
+export type DonationsStackParamList = {
+  DonationsList: undefined;
+  CreateDonationGroup: undefined;
+  JoinDonationGroup: undefined;
+  DonationGroupDetail: { groupId: string };
+  DonationGroupDonations: { groupId: string; groupName?: string };
+  DonationPayout: { groupId: string; groupName?: string };
 };
 
 export type WalletStackParamList = {
@@ -63,34 +99,29 @@ export type WalletStackParamList = {
   FundWallet: undefined;
   BankAccount: undefined;
   SelectBank: undefined;
-  CreateSavingsPlan: undefined;
-  SavingsPlans: undefined;
-  SavingsPlanDetail: { planId: string };
   Transactions: undefined;
   TransactionReceipt: { transaction: WalletTransaction };
 };
 
 /**
- * Screens reachable from the Profile tab. Several wallet screens are
- * mounted here so profile users can reach them without tab-hopping.
+ * Profile + Alerts. Mounted once in the Root stack (a sibling of the tab
+ * navigator) so both open full-screen *above* the tab bar, and reached from
+ * the avatar chip on every tab root.
+ *
+ * Wallet screens are deliberately absent: the "Wallet" / "Bank account"
+ * shortcuts in Profile hop back to the Wallet tab (`Main` → `Wallet`) instead
+ * of mounting a second copy of that stack.
  */
-export type ProfileStackParamList = {
+export type AccountStackParamList = {
   ProfileMain: undefined;
   EditProfile: undefined;
-  WalletHome: undefined;
-  FundWallet: undefined;
-  BankAccount: undefined;
-  CreateSavingsPlan: undefined;
-  SavingsPlans: undefined;
-  SavingsPlanDetail: { planId: string };
-  Transactions: undefined;
-  TransactionReceipt: { transaction: WalletTransaction };
   Notifications: undefined;
 };
 
 export type RootStackParamList = {
   Auth: NavigatorScreenParams<AuthStackParamList>;
   Main: NavigatorScreenParams<MainTabParamList>;
+  Account: NavigatorScreenParams<AccountStackParamList>;
 };
 
 declare global {

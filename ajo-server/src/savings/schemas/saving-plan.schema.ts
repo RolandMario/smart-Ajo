@@ -9,13 +9,14 @@ import {
 export type SavingPlanDocument = SavingPlan & Document;
 
 /**
- * An individual savings plan. The system auto-debits the member's main
- * wallet at each interval (daily / weekly / monthly) into this plan's
+ * An individual savings plan. The member funds it from their main wallet —
+ * one interval at a time via the "Pay" action (`SavingsService.payInterval`);
+ * nothing is debited automatically. Each payment increases this plan's
  * `savingsBalance`. Once a full cycle (durationUnit + durationValue worth of
- * intervals, counted from the day the plan was created) has been collected
- * the plan completes and the user can withdraw the
- * accumulated amount to their saved bank account, then decide whether to
- * continue (start a new cycle) or delete the plan.
+ * intervals, counted from the day the plan was created) has been paid the plan
+ * completes and the user can withdraw the accumulated amount to their saved
+ * bank account, then decide whether to continue (start a new cycle) or delete
+ * the plan.
  */
 @Schema({ timestamps: true })
 export class SavingPlan {
@@ -28,7 +29,7 @@ export class SavingPlan {
   @Prop({ required: true, trim: true })
   name!: string;
 
-  /** Amount (naira) to auto-debit at each interval. */
+  /** Amount (naira) moved from the wallet at each interval. */
   @Prop({ required: true, min: 1 })
   amount!: number;
 
@@ -82,7 +83,8 @@ export class SavingPlan {
   })
   status!: SavingPlanStatus;
 
-  /** Next moment the scheduler should auto-debit. */
+  /** Next moment the plan's next interval falls due (informational: drives
+   * the "next payment due" label — payments are member-initiated). */
   @Prop({ required: true })
   nextDueAt!: Date;
 
@@ -118,8 +120,9 @@ export const SavingPlanSchema = SchemaFactory.createForClass(SavingPlan);
 /**
  * Legacy plans created before `durationUnit`/`durationValue` existed carry only
  * the nominal `durationMonths` (3/6/12). Those two fields are required on the
- * schema, so any `plan.save()` on a legacy document (scheduler auto-debits,
- * continue, withdraw, delete) would fail Mongoose's full-document validation.
+ * schema, so any `plan.save()` on a legacy document (a member paying an
+ * interval, continue, withdraw, delete) would fail Mongoose's full-document
+ * validation.
  * Normalise them here — just before validation — so those documents remain
  * usable without weakening the schema's guarantees for new plans.
  */

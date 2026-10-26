@@ -12,12 +12,14 @@ import { PlatformAdminManagementController } from './platform-admin-management.c
 import { PlatformAdminWalletService } from './platform-admin-wallet.service';
 import { PlatformAdminWalletController } from './platform-admin-wallet.controller';
 import { PlatformAdminBillsController } from './platform-admin-bills.controller';
+import { PlatformAdminSettingsController } from './platform-admin-settings.controller';
 import { GroupsModule } from '../groups/groups.module';
 import { CyclesModule } from '../cycles/cycles.module';
 import { UsersModule } from '../users/users.module';
 import { WalletModule } from '../wallet/wallet.module';
 import { PaymentsModule } from '../payments/payments.module';
 import { BillsModule } from '../bills/bills.module';
+import { PlatformSettingsModule } from '../platform-settings/platform-settings.module';
 
 /**
  * Five distinct audiences live in this module:
@@ -46,6 +48,7 @@ import { BillsModule } from '../bills/bills.module';
     WalletModule,
     PaymentsModule,
     BillsModule,
+    PlatformSettingsModule,
   ],
   controllers: [
     GroupDashboardController,
@@ -55,6 +58,7 @@ import { BillsModule } from '../bills/bills.module';
     PlatformAdminManagementController,
     PlatformAdminWalletController,
     PlatformAdminBillsController,
+    PlatformAdminSettingsController,
   ],
   providers: [
     GroupDashboardService,

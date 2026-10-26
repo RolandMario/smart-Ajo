@@ -5,14 +5,16 @@ import {
   Param,
   Patch,
   Post,
+  Query,
   UseGuards,
 } from '@nestjs/common';
 import { GroupsService } from './groups.service';
 import { CreateGroupDto } from './dto/create-group.dto';
 import { ContinueGroupDto } from './dto/continue-group.dto';
 import { InviteMemberDto } from './dto/invite-member.dto';
+import { JoinGroupDto } from './dto/join-group.dto';
 import { LockRotationDto } from './dto/lock-rotation.dto';
-import { SetAutoCollectDto } from './dto/set-auto-collect.dto';
+import { SearchGroupDto } from './dto/search-group.dto';
 import { UpdateGroupDto } from './dto/update-group.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
@@ -31,6 +33,21 @@ export class GroupsController {
   @Get()
   listMine(@CurrentUser() user: RequestUser) {
     return this.groupsService.listMyGroups(user.userId);
+  }
+
+  /**
+   * Look up a group by its shareable Group ID (joinCode). Must be declared
+   * before `@Get(':id')` so the literal "search" path wins over the `:id`
+   * param route.
+   */
+  @Get('search')
+  searchByCode(@CurrentUser() user: RequestUser, @Query() dto: SearchGroupDto) {
+    return this.groupsService.searchGroupByCode(user.userId, dto.code);
+  }
+
+  @Post('join')
+  join(@CurrentUser() user: RequestUser, @Body() dto: JoinGroupDto) {
+    return this.groupsService.joinGroupByCode(user.userId, dto.code);
   }
 
   @Get(':id')
@@ -61,20 +78,6 @@ export class GroupsController {
     return this.groupsService.lockRotation(user.userId, id, dto);
   }
 
-  /**
-   * Toggles automatic contribution collection for this group. When
-   * enabled, AutoCollectScheduler debits member wallets once the
-   * current cycle's dueDate arrives without admin intervention.
-   */
-  @Patch(':id/auto-collect')
-  setAutoCollect(
-    @CurrentUser() user: RequestUser,
-    @Param('id') id: string,
-    @Body() dto: SetAutoCollectDto,
-  ) {
-    return this.groupsService.setAutoCollect(user.userId, id, dto.enabled);
-  }
-
   @Patch(':id')
   update(
     @CurrentUser() user: RequestUser,
@@ -99,9 +102,10 @@ export class GroupsController {
   }
 
   /**
-   * Admin-only. Permanently terminates a completed group.
-   * The group is hidden from the mobile app and marked as TERMINATED
-   * in the admin web panel.
+   * Admin-only. Permanently terminates a completed group by deleting the
+   * group and all of its data (members, cycles, contributions, wallets,
+   * escrow deposits, payouts) from the database. The group disappears from
+   * the mobile app and the admin web panel; members are notified.
    */
   @Post(':id/terminate')
   terminate(@CurrentUser() user: RequestUser, @Param('id') id: string) {

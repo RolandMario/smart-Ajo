@@ -22,6 +22,7 @@ export declare class WalletService {
     private paystack;
     private notificationsService;
     constructor(walletModel: Model<WalletDocument>, walletTxModel: Model<WalletTransactionDocument>, connection: Connection, usersService: UsersService, paystack: PaystackService, notificationsService: NotificationsService);
+    private isDuplicateKeyError;
     getOrCreateWallet(userId: string): Promise<WalletDocument>;
     getWalletSummary(userId: string): Promise<{
         balance: number;
@@ -87,11 +88,35 @@ export declare class WalletService {
     debitForSavings(userId: Types.ObjectId, amountNaira: number, refs: {
         savingPlan: Types.ObjectId;
     }, reference: string, session: ClientSession): Promise<boolean>;
+    debitForDonation(userId: Types.ObjectId, amountNaira: number, refs: {
+        donationGroup: Types.ObjectId;
+    }, reference: string, session: ClientSession, serviceFee?: number): Promise<boolean>;
     creditServiceFee(adminUserId: string, amount: number, refs: {
+        group?: Types.ObjectId;
+        cycle?: Types.ObjectId;
+        contribution?: Types.ObjectId;
+    }, session: ClientSession, options?: {
+        reference?: string;
+        metadata?: Record<string, unknown>;
+    }): Promise<void>;
+    debitServiceFee(userId: Types.ObjectId, amount: number, refs: {
         group: Types.ObjectId;
         cycle: Types.ObjectId;
         contribution: Types.ObjectId;
     }, session: ClientSession): Promise<void>;
+    refundServiceFee(userId: Types.ObjectId, amount: number, refs: {
+        group: Types.ObjectId;
+        cycle: Types.ObjectId;
+        contribution: Types.ObjectId;
+    }, session: ClientSession): Promise<void>;
+    reverseServiceFeeCredit(adminUserId: string, amount: number, refs: {
+        group?: Types.ObjectId;
+        cycle?: Types.ObjectId;
+        contribution?: Types.ObjectId;
+    }, session: ClientSession, options?: {
+        reference?: string;
+        metadata?: Record<string, unknown>;
+    }): Promise<void>;
     creditBillCommission(adminUserId: string, commissionAmount: number, refs: {
         billReference: string;
         billType: string;

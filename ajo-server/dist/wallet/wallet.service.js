@@ -39,6 +39,12 @@ let WalletService = class WalletService {
         this.paystack = paystack;
         this.notificationsService = notificationsService;
     }
+    isDuplicateKeyError(err) {
+        const error = err;
+        const code = error?.code ?? error?.err?.code;
+        const message = String(error?.message ?? err);
+        return code === 11000 || code === '11000' || message.includes('E11000');
+    }
     async getOrCreateWallet(userId) {
         const userObjectId = new mongoose_2.Types.ObjectId(userId);
         let wallet = await this.walletModel.findOne({ user: userObjectId });
@@ -400,10 +406,7 @@ let WalletService = class WalletService {
             await this.walletTxModel.create(transactions, { session, ordered: true });
         }
         catch (err) {
-            const code = err?.code ?? err?.err?.code;
-            const message = String(err?.message ?? err);
-            const isDuplicateKey = code === 11000 || code === '11000' || message.includes('E11000');
-            if (isDuplicateKey) {
+            if (this.isDuplicateKeyError(err)) {
                 return true;
             }
             throw err;
@@ -452,17 +455,104 @@ let WalletService = class WalletService {
             ], { session, ordered: true });
         }
         catch (err) {
-            const code = err?.code ?? err?.err?.code;
-            const message = String(err?.message ?? err);
-            const isDuplicateKey = code === 11000 || code === '11000' || message.includes('E11000');
-            if (isDuplicateKey) {
+            if (this.isDuplicateKeyError(err)) {
                 return true;
             }
             throw err;
         }
         return true;
     }
-    async creditServiceFee(adminUserId, amount, refs, session) {
+    async debitForDonation(userId, amountNaira, refs, reference, session, serviceFee = 0) {
+        const successTx = await this.walletTxModel.findOne({
+            reference,
+            status: wallet_enum_1.WalletTransactionStatus.SUCCESS,
+        });
+        if (successTx) {
+            return true;
+        }
+        const fee = Math.max(serviceFee, 0);
+        const feeReference = `${reference}_fee`;
+        await this.walletTxModel.deleteOne({
+            reference: { $in: fee > 0 ? [reference, feeReference] : [reference] },
+            status: { $ne: wallet_enum_1.WalletTransactionStatus.SUCCESS },
+        });
+        const wallet = await this.walletModel
+            .findOne({ user: userId })
+            .session(session);
+        if (!wallet) {
+            return false;
+        }
+        const balance = wallet.balance ?? 0;
+        const total = amountNaira + fee;
+        if (balance < total) {
+            return false;
+        }
+        const balanceBefore = balance;
+        const afterDonation = balanceBefore - amountNaira;
+        const balanceAfter = afterDonation - fee;
+        wallet.balance = balanceAfter;
+        await wallet.save({ session });
+        const entries = [
+            {
+                wallet: wallet._id,
+                user: userId,
+                type: wallet_enum_1.WalletTransactionType.DONATION_DEBIT,
+                status: wallet_enum_1.WalletTransactionStatus.SUCCESS,
+                amount: amountNaira,
+                balanceBefore,
+                balanceAfter: afterDonation,
+                reference,
+                metadata: {
+                    donationGroup: refs.donationGroup.toString(),
+                    serviceFee: fee,
+                },
+            },
+        ];
+        if (fee > 0) {
+            entries.push({
+                wallet: wallet._id,
+                user: userId,
+                type: wallet_enum_1.WalletTransactionType.SERVICE_FEE_DEBIT,
+                status: wallet_enum_1.WalletTransactionStatus.SUCCESS,
+                amount: fee,
+                balanceBefore: afterDonation,
+                balanceAfter,
+                reference: feeReference,
+                metadata: {
+                    donationGroup: refs.donationGroup.toString(),
+                    source: 'donation_transfer_fee',
+                },
+            });
+        }
+        try {
+            await this.walletTxModel.create(entries, { session, ordered: true });
+        }
+        catch (err) {
+            if (this.isDuplicateKeyError(err)) {
+                return true;
+            }
+            throw err;
+        }
+        return true;
+    }
+    async creditServiceFee(adminUserId, amount, refs, session, options = {}) {
+        if (amount <= 0)
+            return;
+        const reference = options.reference ??
+            (refs.contribution
+                ? `sf_${refs.contribution.toString()}`
+                : `sf_${new mongoose_2.Types.ObjectId().toString()}`);
+        const successTx = await this.walletTxModel.findOne({
+            reference,
+            status: wallet_enum_1.WalletTransactionStatus.SUCCESS,
+        });
+        if (successTx) {
+            return;
+        }
+        await this.walletTxModel.deleteOne({
+            reference,
+            status: { $ne: wallet_enum_1.WalletTransactionStatus.SUCCESS },
+        });
         const wallet = await this.walletModel
             .findOne({ user: new mongoose_2.Types.ObjectId(adminUserId) })
             .session(session);
@@ -473,7 +563,6 @@ let WalletService = class WalletService {
         const balanceAfter = balanceBefore + amount;
         wallet.balance = balanceAfter;
         await wallet.save({ session });
-        const reference = `sf_${refs.contribution.toString()}`;
         await this.walletTxModel.create([
             {
                 wallet: wallet._id,
@@ -487,6 +576,134 @@ let WalletService = class WalletService {
                 group: refs.group,
                 cycle: refs.cycle,
                 contribution: refs.contribution,
+                metadata: options.metadata,
+            },
+        ], { session });
+    }
+    async debitServiceFee(userId, amount, refs, session) {
+        if (amount <= 0)
+            return;
+        const reference = `fee_${refs.contribution.toString()}`;
+        const successTx = await this.walletTxModel.findOne({
+            reference,
+            status: wallet_enum_1.WalletTransactionStatus.SUCCESS,
+        });
+        if (successTx) {
+            return;
+        }
+        await this.walletTxModel.deleteOne({
+            reference,
+            status: { $ne: wallet_enum_1.WalletTransactionStatus.SUCCESS },
+        });
+        const wallet = await this.walletModel
+            .findOne({ user: userId })
+            .session(session);
+        const balance = wallet?.balance ?? 0;
+        if (!wallet || balance < amount) {
+            throw new common_1.BadRequestException(`Your wallet balance (₦${balance.toLocaleString()}) can't cover the ₦${amount.toLocaleString()} service fee. Please fund your wallet and try again.`);
+        }
+        const balanceBefore = balance;
+        const balanceAfter = balanceBefore - amount;
+        wallet.balance = balanceAfter;
+        await wallet.save({ session });
+        await this.walletTxModel.create([
+            {
+                wallet: wallet._id,
+                user: userId,
+                type: wallet_enum_1.WalletTransactionType.SERVICE_FEE_DEBIT,
+                status: wallet_enum_1.WalletTransactionStatus.SUCCESS,
+                amount,
+                balanceBefore,
+                balanceAfter,
+                reference,
+                group: refs.group,
+                cycle: refs.cycle,
+                contribution: refs.contribution,
+            },
+        ], { session });
+    }
+    async refundServiceFee(userId, amount, refs, session) {
+        if (amount <= 0)
+            return;
+        const reference = `fee_refund_${refs.contribution.toString()}`;
+        const successTx = await this.walletTxModel.findOne({
+            reference,
+            status: wallet_enum_1.WalletTransactionStatus.SUCCESS,
+        });
+        if (successTx) {
+            return;
+        }
+        await this.walletTxModel.deleteOne({
+            reference,
+            status: { $ne: wallet_enum_1.WalletTransactionStatus.SUCCESS },
+        });
+        const wallet = await this.walletModel
+            .findOne({ user: userId })
+            .session(session);
+        if (!wallet)
+            return;
+        const balanceBefore = wallet.balance ?? 0;
+        const balanceAfter = balanceBefore + amount;
+        wallet.balance = balanceAfter;
+        await wallet.save({ session });
+        await this.walletTxModel.create([
+            {
+                wallet: wallet._id,
+                user: userId,
+                type: wallet_enum_1.WalletTransactionType.SERVICE_FEE_REFUND,
+                status: wallet_enum_1.WalletTransactionStatus.SUCCESS,
+                amount,
+                balanceBefore,
+                balanceAfter,
+                reference,
+                group: refs.group,
+                cycle: refs.cycle,
+                contribution: refs.contribution,
+            },
+        ], { session });
+    }
+    async reverseServiceFeeCredit(adminUserId, amount, refs, session, options = {}) {
+        if (amount <= 0)
+            return;
+        const reference = options.reference ??
+            (refs.contribution
+                ? `sf_reversal_${refs.contribution.toString()}`
+                : `sf_reversal_${new mongoose_2.Types.ObjectId().toString()}`);
+        const successTx = await this.walletTxModel.findOne({
+            reference,
+            status: wallet_enum_1.WalletTransactionStatus.SUCCESS,
+        });
+        if (successTx)
+            return;
+        await this.walletTxModel.deleteOne({
+            reference,
+            status: { $ne: wallet_enum_1.WalletTransactionStatus.SUCCESS },
+        });
+        const wallet = await this.walletModel
+            .findOne({ user: new mongoose_2.Types.ObjectId(adminUserId) })
+            .session(session);
+        const balance = wallet?.balance ?? 0;
+        if (!wallet || balance < amount) {
+            return;
+        }
+        const balanceBefore = balance;
+        const balanceAfter = balanceBefore - amount;
+        wallet.balance = balanceAfter;
+        await wallet.save({ session });
+        await this.walletTxModel.create([
+            {
+                wallet: wallet._id,
+                user: new mongoose_2.Types.ObjectId(adminUserId),
+                type: wallet_enum_1.WalletTransactionType.SERVICE_FEE_DEBIT,
+                status: wallet_enum_1.WalletTransactionStatus.SUCCESS,
+                amount,
+                balanceBefore,
+                balanceAfter,
+                reference,
+                group: refs.group,
+                cycle: refs.cycle,
+                contribution: refs.contribution,
+                metadata: options.metadata,
             },
         ], { session });
     }

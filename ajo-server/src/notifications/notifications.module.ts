@@ -12,7 +12,6 @@ import { FirebaseService } from './firebase.service';
 import { DeviceTokenService } from './device-token.service';
 import { ReminderScheduler } from './reminder.scheduler';
 import { DefaulterScheduler } from './defaulter.scheduler';
-import { AutoCollectScheduler } from './auto-collect.scheduler';
 import { OtpModule } from '../otp/otp.module';
 import { UsersModule } from '../users/users.module';
 import { GroupsModule } from '../groups/groups.module';
@@ -37,7 +36,6 @@ import { CronAuthGuard } from '../common/guards/cron-auth.guard';
     DeviceTokenService,
     ReminderScheduler,
     DefaulterScheduler,
-    AutoCollectScheduler,
     CronAuthGuard,
   ],
   exports: [NotificationsService],

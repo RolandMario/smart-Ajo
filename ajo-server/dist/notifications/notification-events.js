@@ -37,6 +37,15 @@ exports.NotificationEvents = {
             body: `${params.memberName} has declined your invite to "${params.groupName}".`,
         };
     },
+    groupMemberJoined(params) {
+        return {
+            ...params,
+            type: notification_enum_1.NotificationType.GROUP_MEMBER_JOINED,
+            title: 'New Group Member',
+            body: `${params.memberName} joined your "${params.groupName}" group.`,
+            smsEnabled: true,
+        };
+    },
     groupActivated(params) {
         const due = params.dueDate.toLocaleDateString('en-NG', {
             dateStyle: 'medium',
@@ -115,6 +124,54 @@ exports.NotificationEvents = {
             type: notification_enum_1.NotificationType.CONTRIBUTION_DEBITED,
             title: 'Contribution Paid',
             body: `₦${params.amount.toLocaleString()} has been deducted from your wallet for "${params.groupName}". New wallet balance: ₦${params.newBalance.toLocaleString()}.`,
+        };
+    },
+    contributionPaid(params) {
+        const feeLine = params.serviceFee && params.serviceFee > 0
+            ? ` (incl. ₦${params.serviceFee.toLocaleString()} service fee)`
+            : '';
+        return {
+            ...params,
+            type: notification_enum_1.NotificationType.CONTRIBUTION_PAID,
+            title: 'Contribution Paid ✅',
+            body: `₦${params.amount.toLocaleString()}${feeLine} has been deducted from your wallet for "${params.groupName}". New wallet balance: ₦${params.newBalance.toLocaleString()}.`,
+            smsEnabled: true,
+        };
+    },
+    contributionAwaitingConfirmation(params) {
+        const refLine = params.reference ? ` Reference: ${params.reference}.` : '';
+        return {
+            ...params,
+            type: notification_enum_1.NotificationType.CONTRIBUTION_AWAITING_CONFIRMATION,
+            title: 'Payment to Confirm',
+            body: `${params.memberName} says they've transferred ₦${params.amount.toLocaleString()} to the "${params.groupName}" escrow account.${refLine} Confirm it once verified.`,
+            smsEnabled: true,
+        };
+    },
+    contributionConfirmed(params) {
+        return {
+            ...params,
+            type: notification_enum_1.NotificationType.CONTRIBUTION_CONFIRMED,
+            title: 'Contribution Confirmed ✅',
+            body: `Your ₦${params.amount.toLocaleString()} contribution for "${params.groupName}" has been confirmed${params.roundLabel ? ` (${params.roundLabel})` : ''}.`,
+            smsEnabled: true,
+        };
+    },
+    contributionRejected(params) {
+        return {
+            ...params,
+            type: notification_enum_1.NotificationType.CONTRIBUTION_REJECTED,
+            title: 'Payment Not Confirmed',
+            body: `Your ₦${params.amount.toLocaleString()} bank transfer for "${params.groupName}" could not be confirmed${params.reason ? `: ${params.reason}` : ''}. Any service fee has been refunded to your wallet — please try again or contact your group admin.`,
+            smsEnabled: true,
+        };
+    },
+    escrowDepositReceived(params) {
+        return {
+            ...params,
+            type: notification_enum_1.NotificationType.ESCROW_DEPOSIT_RECEIVED,
+            title: 'Escrow Transfer Received',
+            body: `₦${params.amount.toLocaleString()} has landed in the "${params.groupName}" escrow account${params.senderName ? ` from ${params.senderName}` : ''}. Open the group to allocate it to a member's contribution.`,
         };
     },
     contributionFailedInsufficient(params) {
@@ -208,24 +265,15 @@ exports.NotificationEvents = {
             ...params,
             type: notification_enum_1.NotificationType.SAVING_CREATED,
             title: 'Savings Plan Started',
-            body: `Your "${params.planName}" savings plan is live. Ajo will auto-save ₦${params.amount.toLocaleString()} ${params.frequency}.`,
+            body: `Your "${params.planName}" savings plan is live. Pay ₦${params.amount.toLocaleString()} from your wallet whenever a ${params.frequency} interval is due.`,
         };
     },
     savingDebited(params) {
         return {
             ...params,
             type: notification_enum_1.NotificationType.SAVING_DEBITED,
-            title: 'Auto-Savings Collected',
-            body: `₦${params.amount.toLocaleString()} saved to "${params.planName}". Plan balance: ₦${params.newBalance.toLocaleString()}.`,
-        };
-    },
-    savingInsufficient(params) {
-        return {
-            ...params,
-            type: notification_enum_1.NotificationType.SAVING_INSUFFICIENT,
-            title: 'Top-Up Needed for Savings',
-            body: `Your wallet balance (₦${params.currentBalance.toLocaleString()}) is too low for the ₦${params.amount.toLocaleString()} "${params.planName}" auto-save. Please top up.`,
-            smsEnabled: true,
+            title: 'Savings Payment Received',
+            body: `₦${params.amount.toLocaleString()} paid from your wallet into "${params.planName}". Plan balance: ₦${params.newBalance.toLocaleString()}.`,
         };
     },
     savingCompleted(params) {
@@ -243,6 +291,72 @@ exports.NotificationEvents = {
             type: notification_enum_1.NotificationType.SAVING_WITHDRAWN,
             title: 'Savings Withdrawn',
             body: `₦${params.amount.toLocaleString()} from "${params.planName}" has been sent to your bank account.`,
+            smsEnabled: true,
+        };
+    },
+    donationMemberJoined(params) {
+        return {
+            ...params,
+            type: notification_enum_1.NotificationType.DONATION_MEMBER_JOINED,
+            title: 'New Pool Member',
+            body: `${params.memberName} joined your "${params.poolName}" pool.`,
+            smsEnabled: true,
+        };
+    },
+    donationReceived(params) {
+        return {
+            ...params,
+            type: notification_enum_1.NotificationType.DONATION_RECEIVED,
+            title: 'Donation Received',
+            body: `Thank you! ₦${params.amount.toLocaleString()} was added to "${params.poolName}" from your wallet. The pool now holds ₦${params.escrowBalance.toLocaleString()}.`,
+        };
+    },
+    donationReceivedAdmin(params) {
+        return {
+            ...params,
+            type: notification_enum_1.NotificationType.DONATION_RECEIVED_ADMIN,
+            title: 'New Pool Donation',
+            body: `${params.donorName} donated ₦${params.amount.toLocaleString()} to "${params.poolName}". Total collected: ₦${params.totalCollected.toLocaleString()}.`,
+            smsEnabled: true,
+        };
+    },
+    donationPayoutSuccess(params) {
+        const masked = `****${params.accountNumber.slice(-4)}`;
+        const feeNote = params.fee
+            ? ` (₦${params.fee.toLocaleString()} platform fee deducted)`
+            : '';
+        return {
+            ...params,
+            type: notification_enum_1.NotificationType.DONATION_PAYOUT_SUCCESS,
+            title: 'Pool Payout Successful',
+            body: `₦${params.amount.toLocaleString()} from "${params.poolName}" has been sent to your ${params.bankName} account ${masked}${feeNote}.`,
+            smsEnabled: true,
+        };
+    },
+    donationPayoutFailed(params) {
+        return {
+            ...params,
+            type: notification_enum_1.NotificationType.DONATION_PAYOUT_FAILED,
+            title: 'Pool Payout Failed',
+            body: `The ₦${params.amount.toLocaleString()} payout for "${params.poolName}" failed${params.reason ? ` (${params.reason})` : ''}. The money is back in the pool — please try again.`,
+            smsEnabled: true,
+        };
+    },
+    donationPayoutReversed(params) {
+        return {
+            ...params,
+            type: notification_enum_1.NotificationType.DONATION_PAYOUT_REVERSED,
+            title: 'Pool Payout Reversed',
+            body: `The ₦${params.amount.toLocaleString()} payout for "${params.poolName}" was reversed by the bank. The money is back in the pool — please contact support.`,
+            smsEnabled: true,
+        };
+    },
+    donationPoolTerminated(params) {
+        return {
+            ...params,
+            type: notification_enum_1.NotificationType.DONATION_POOL_TERMINATED,
+            title: 'Pool Terminated',
+            body: `"${params.poolName}" was terminated after more than two-thirds of its fully paid members voted to end it. Donations are closed; the admin can still pay out the pool balance.`,
             smsEnabled: true,
         };
     },

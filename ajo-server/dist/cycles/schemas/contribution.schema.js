@@ -22,7 +22,15 @@ let Contribution = class Contribution {
     amount;
     serviceFee;
     status;
+    paymentMethod;
+    paymentReference;
+    paymentNotifiedAt;
+    claimedTransferReference;
     paidAt;
+    confirmedBy;
+    confirmedAt;
+    lastRejectedAt;
+    lastRejectionReason;
     flaggedAt;
 };
 exports.Contribution = Contribution;
@@ -59,9 +67,41 @@ __decorate([
     __metadata("design:type", String)
 ], Contribution.prototype, "status", void 0);
 __decorate([
+    (0, mongoose_1.Prop)({ type: String, enum: cycle_enum_1.ContributionPaymentMethod }),
+    __metadata("design:type", String)
+], Contribution.prototype, "paymentMethod", void 0);
+__decorate([
+    (0, mongoose_1.Prop)({ index: true }),
+    __metadata("design:type", String)
+], Contribution.prototype, "paymentReference", void 0);
+__decorate([
+    (0, mongoose_1.Prop)(),
+    __metadata("design:type", Date)
+], Contribution.prototype, "paymentNotifiedAt", void 0);
+__decorate([
+    (0, mongoose_1.Prop)(),
+    __metadata("design:type", String)
+], Contribution.prototype, "claimedTransferReference", void 0);
+__decorate([
     (0, mongoose_1.Prop)(),
     __metadata("design:type", Date)
 ], Contribution.prototype, "paidAt", void 0);
+__decorate([
+    (0, mongoose_1.Prop)({ type: mongoose_2.Types.ObjectId, ref: 'User' }),
+    __metadata("design:type", mongoose_2.Types.ObjectId)
+], Contribution.prototype, "confirmedBy", void 0);
+__decorate([
+    (0, mongoose_1.Prop)(),
+    __metadata("design:type", Date)
+], Contribution.prototype, "confirmedAt", void 0);
+__decorate([
+    (0, mongoose_1.Prop)(),
+    __metadata("design:type", Date)
+], Contribution.prototype, "lastRejectedAt", void 0);
+__decorate([
+    (0, mongoose_1.Prop)(),
+    __metadata("design:type", String)
+], Contribution.prototype, "lastRejectionReason", void 0);
 __decorate([
     (0, mongoose_1.Prop)(),
     __metadata("design:type", Date)

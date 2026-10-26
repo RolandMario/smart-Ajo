@@ -18,6 +18,10 @@ export declare const NotificationEvents: {
         memberName: string;
         groupName: string;
     }): SendNotificationParams;
+    groupMemberJoined(params: EventParams & {
+        memberName: string;
+        groupName: string;
+    }): SendNotificationParams;
     groupActivated(params: EventParams & {
         groupName: string;
         contributionAmount: number;
@@ -56,6 +60,33 @@ export declare const NotificationEvents: {
         groupName: string;
         amount: number;
         newBalance: number;
+    }): SendNotificationParams;
+    contributionPaid(params: EventParams & {
+        groupName: string;
+        amount: number;
+        newBalance: number;
+        serviceFee?: number;
+    }): SendNotificationParams;
+    contributionAwaitingConfirmation(params: EventParams & {
+        memberName: string;
+        groupName: string;
+        amount: number;
+        reference?: string;
+    }): SendNotificationParams;
+    contributionConfirmed(params: EventParams & {
+        groupName: string;
+        amount: number;
+        roundLabel?: string;
+    }): SendNotificationParams;
+    contributionRejected(params: EventParams & {
+        groupName: string;
+        amount: number;
+        reason?: string;
+    }): SendNotificationParams;
+    escrowDepositReceived(params: EventParams & {
+        groupName: string;
+        amount: number;
+        senderName?: string;
     }): SendNotificationParams;
     contributionFailedInsufficient(params: EventParams & {
         groupName: string;
@@ -111,11 +142,6 @@ export declare const NotificationEvents: {
         amount: number;
         newBalance: number;
     }): SendNotificationParams;
-    savingInsufficient(params: EventParams & {
-        planName: string;
-        amount: number;
-        currentBalance: number;
-    }): SendNotificationParams;
     savingCompleted(params: EventParams & {
         planName: string;
         total: number;
@@ -123,6 +149,41 @@ export declare const NotificationEvents: {
     savingWithdrawn(params: EventParams & {
         planName: string;
         amount: number;
+    }): SendNotificationParams;
+    donationMemberJoined(params: EventParams & {
+        memberName: string;
+        poolName: string;
+    }): SendNotificationParams;
+    donationReceived(params: EventParams & {
+        poolName: string;
+        amount: number;
+        windowLabel: string;
+        escrowBalance: number;
+    }): SendNotificationParams;
+    donationReceivedAdmin(params: EventParams & {
+        donorName: string;
+        poolName: string;
+        amount: number;
+        totalCollected: number;
+    }): SendNotificationParams;
+    donationPayoutSuccess(params: EventParams & {
+        poolName: string;
+        amount: number;
+        fee?: number;
+        bankName: string;
+        accountNumber: string;
+    }): SendNotificationParams;
+    donationPayoutFailed(params: EventParams & {
+        poolName: string;
+        amount: number;
+        reason?: string;
+    }): SendNotificationParams;
+    donationPayoutReversed(params: EventParams & {
+        poolName: string;
+        amount: number;
+    }): SendNotificationParams;
+    donationPoolTerminated(params: EventParams & {
+        poolName: string;
     }): SendNotificationParams;
 };
 export {};

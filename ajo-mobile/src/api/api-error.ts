@@ -10,7 +10,13 @@ export class ApiError extends Error {
   readonly body?: ApiErrorBody;
 
   constructor(statusCode: number, body?: ApiErrorBody) {
-    const message = ApiError.extractMessage(body) ?? `Request failed (${statusCode})`;
+    // statusCode 0 is apiFetch's normalization of a request that never got a
+    // response (server down / wrong host / no connectivity). "Request failed
+    // (0)" is meaningless to a user, so it gets its own actionable message.
+    const message =
+      statusCode === 0
+        ? "Can't reach the server. Check your internet connection and try again."
+        : (ApiError.extractMessage(body) ?? `Request failed (${statusCode})`);
     super(message);
     this.name = "ApiError";
     this.statusCode = statusCode;

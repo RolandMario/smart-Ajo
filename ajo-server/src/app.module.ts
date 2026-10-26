@@ -18,6 +18,7 @@ import { NotificationsModule } from './notifications/notifications.module';
 import { AdminModule } from './admin/admin.module';
 import { BillsModule } from './bills/bills.module';
 import { SavingsModule } from './savings/savings.module';
+import { DonationsModule } from './donations/donations.module';
 
 @Module({
   imports: [
@@ -46,6 +47,7 @@ import { SavingsModule } from './savings/savings.module';
     AdminModule,
     BillsModule,
     SavingsModule,
+    DonationsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

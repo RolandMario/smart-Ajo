@@ -13,12 +13,19 @@ const payments_module_1 = require("../payments/payments.module");
 const wallet_module_1 = require("../wallet/wallet.module");
 const cycles_module_1 = require("../cycles/cycles.module");
 const savings_module_1 = require("../savings/savings.module");
+const donations_module_1 = require("../donations/donations.module");
 let WebhooksModule = class WebhooksModule {
 };
 exports.WebhooksModule = WebhooksModule;
 exports.WebhooksModule = WebhooksModule = __decorate([
     (0, common_1.Module)({
-        imports: [payments_module_1.PaymentsModule, wallet_module_1.WalletModule, cycles_module_1.CyclesModule, savings_module_1.SavingsModule],
+        imports: [
+            payments_module_1.PaymentsModule,
+            wallet_module_1.WalletModule,
+            cycles_module_1.CyclesModule,
+            savings_module_1.SavingsModule,
+            donations_module_1.DonationsModule,
+        ],
         controllers: [webhook_controller_1.WebhookController],
     })
 ], WebhooksModule);

@@ -14,6 +14,7 @@ export declare class NotificationsController {
             __v: number;
         })[];
         unreadCount: number;
+        total: number;
     }>;
     markRead(user: RequestUser, dto: MarkReadDto): Promise<void>;
     markAllRead(user: RequestUser): Promise<void>;

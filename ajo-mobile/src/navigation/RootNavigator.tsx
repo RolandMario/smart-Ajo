@@ -8,20 +8,22 @@ import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { useAuth } from "../auth/AuthContext";
 import { AuthNavigator } from "./AuthNavigator";
 import { MainNavigator } from "./MainNavigator";
+import { AccountNavigator } from "./AccountNavigator";
+import type { RootStackParamList } from "./types";
 import { LoadingScreen } from "../components/LoadingScreen";
 import { colors } from "../theme";
 
-const RootStack = createNativeStackNavigator();
+const RootStack = createNativeStackNavigator<RootStackParamList>();
 
 const navigationTheme: NavTheme = {
   ...DefaultTheme,
   colors: {
     ...DefaultTheme.colors,
-    background: colors.canvas,
-    card: colors.surface,
-    text: colors.ink,
-    border: colors.line,
-    primary: colors.primary,
+    background: colors.forestLightCanvas,
+    card: colors.white,
+    text: colors.forestLightInk,
+    border: colors.forestLightLine,
+    primary: colors.forestAction,
   },
 };
 
@@ -46,7 +48,16 @@ export function RootNavigator() {
     <NavigationContainer theme={navigationTheme}>
       <RootStack.Navigator screenOptions={{ headerShown: false }}>
         {status === "signedIn" ? (
-          <RootStack.Screen name="Main" component={MainNavigator} />
+          <RootStack.Group>
+            <RootStack.Screen name="Main" component={MainNavigator} />
+            {/* Profile + Alerts live here rather than in the tab bar, so they
+                open over the tabs from the top-right avatar chip. */}
+            <RootStack.Screen
+              name="Account"
+              component={AccountNavigator}
+              options={{ animation: "slide_from_right" }}
+            />
+          </RootStack.Group>
         ) : (
           <RootStack.Screen name="Auth" component={AuthNavigator} />
         )}

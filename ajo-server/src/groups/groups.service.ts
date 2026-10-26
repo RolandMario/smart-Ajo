@@ -47,6 +47,7 @@ import {
   RotationMethod,
 } from '../common/enums/group.enum';
 import { PopulatedGroupMember } from './interfaces/populated-group-member.interface';
+import { generateJoinCode, normalizeJoinCode } from './join-code';
 import { UsersService } from '../users/users.service';
 import { GroupAccessService } from './group-access.service';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -190,48 +191,71 @@ export class GroupsService {
   /**
    * Creates a group and an ACCEPTED, isGroupAdmin GroupMember for the
    * creator in a single transaction. The creator counts toward
-   * `totalSlots`.
+   * `totalSlots`. A unique, human-friendly `joinCode` (the shareable
+   * "Group ID") is generated and persisted with the group.
    */
   async createGroup(userId: string, dto: CreateGroupDto) {
     const session = await this.connection.startSession();
 
     try {
-      let group: GroupDocument;
-      let membership: GroupMemberDocument;
+      let group: GroupDocument | undefined;
+      let membership: GroupMemberDocument | undefined;
+      let lastError: unknown;
 
-      await session.withTransaction(async () => {
-        const [groupDoc] = await this.groupModel.create(
-          [
-            {
-              name: dto.name,
-              createdBy: new Types.ObjectId(userId),
-              contributionAmount: dto.contributionAmount,
-              frequency: dto.frequency ?? ContributionFrequency.MONTHLY,
-              totalSlots: dto.totalSlots,
-              rotationMethod: dto.rotationMethod,
-            },
-          ],
-          { session },
-        );
+      // joinCode is unique across all groups. On the astronomically
+      // unlikely collision, Mongo aborts the transaction with E11000 —
+      // retry the whole transaction with a freshly generated code.
+      for (let attempt = 0; attempt < 5; attempt++) {
+        try {
+          await session.withTransaction(async () => {
+            const [groupDoc] = await this.groupModel.create(
+              [
+                {
+                  name: dto.name,
+                  joinCode: generateJoinCode(),
+                  createdBy: new Types.ObjectId(userId),
+                  contributionAmount: dto.contributionAmount,
+                  frequency: dto.frequency ?? ContributionFrequency.MONTHLY,
+                  totalSlots: dto.totalSlots,
+                  rotationMethod: dto.rotationMethod,
+                },
+              ],
+              { session },
+            );
 
-        const [memberDoc] = await this.groupMemberModel.create(
-          [
-            {
-              group: groupDoc._id,
-              user: new Types.ObjectId(userId),
-              isGroupAdmin: true,
-              inviteStatus: InviteStatus.ACCEPTED,
-              respondedAt: new Date(),
-            },
-          ],
-          { session },
-        );
+            const [memberDoc] = await this.groupMemberModel.create(
+              [
+                {
+                  group: groupDoc._id,
+                  user: new Types.ObjectId(userId),
+                  isGroupAdmin: true,
+                  inviteStatus: InviteStatus.ACCEPTED,
+                  respondedAt: new Date(),
+                },
+              ],
+              { session },
+            );
 
-        group = groupDoc;
-        membership = memberDoc;
-      });
+            group = groupDoc;
+            membership = memberDoc;
+          });
+          break;
+        } catch (error) {
+          const isDuplicateCode =
+            typeof error === 'object' &&
+            error !== null &&
+            (error as { code?: number }).code === 11000;
+          if (!isDuplicateCode) throw error;
+          lastError = error;
+        }
+      }
 
-      return { group: group!, membership: membership! };
+      if (!group || !membership) {
+        if (lastError instanceof Error) throw lastError;
+        throw new ConflictException('Could not generate a unique group ID');
+      }
+
+      return { group, membership };
     } finally {
       await session.endSession();
     }
@@ -240,7 +264,9 @@ export class GroupsService {
   /**
    * Groups the current user is an ACCEPTED member of, along with their
    * own membership details (position, isGroupAdmin, payoutStatus).
-   * Excludes TERMINATED groups from the list.
+   * Terminated groups are deleted along with their memberships, so nothing
+   * to exclude for new terminations; legacy TERMINATED rows are filtered
+   * out for data written before that change.
    */
   async listMyGroups(userId: string) {
     const memberships = await this.groupMemberModel
@@ -313,6 +339,134 @@ export class GroupsService {
       .populate('user', MEMBER_USER_FIELDS)
       .sort({ position: 1, createdAt: 1 })
       .lean<PopulatedGroupMember[]>();
+  }
+
+  // ---- Group ID search & join -------------------------------------------
+
+  /**
+   * Resolves a user-supplied "Group ID" to the matching group, with the
+   * flags the Join Group screen needs to render its action (already a
+   * member? full? joinable?). Any authenticated user can search — knowing
+   * the code is the invite. Legacy TERMINATED rows (written before
+   * termination deleted groups) are hidden.
+   */
+  async searchGroupByCode(userId: string, code: string) {
+    const group = await this.findGroupByJoinCode(code);
+    if (!group || group.status === GroupStatus.TERMINATED) {
+      throw new NotFoundException(
+        'No group found with that Group ID. Check the ID and try again.',
+      );
+    }
+
+    const memberCount = await this.groupMemberModel.countDocuments({
+      group: group._id,
+      inviteStatus: InviteStatus.ACCEPTED,
+    });
+    const membership = await this.groupMemberModel.findOne({
+      group: group._id,
+      user: new Types.ObjectId(userId),
+    });
+
+    return {
+      group: group.toObject(),
+      memberCount,
+      isMember: membership?.inviteStatus === InviteStatus.ACCEPTED,
+      isAdmin: membership?.isGroupAdmin ?? false,
+      isFull: memberCount >= group.totalSlots,
+      joinable:
+        group.status === GroupStatus.OPEN_FOR_INVITES &&
+        memberCount < group.totalSlots &&
+        membership?.inviteStatus !== InviteStatus.ACCEPTED,
+    };
+  }
+
+  /**
+   * Joins a group by its "Group ID" (joinCode). Self-service: the user
+   * becomes an ACCEPTED member immediately — there is no separate accept
+   * step, the code itself is the invitation.
+   *
+   * A pre-existing GroupMember record is upgraded in place (a legacy
+   * PENDING invite becomes ACCEPTED; a previously DECLINED user can join
+   * again). The unique (group, user) index guarantees a single record.
+   */
+  async joinGroupByCode(userId: string, code: string) {
+    const group = await this.findGroupByJoinCode(code);
+    if (!group || group.status === GroupStatus.TERMINATED) {
+      throw new NotFoundException(
+        'No group found with that Group ID. Check the ID and try again.',
+      );
+    }
+
+    if (group.status !== GroupStatus.OPEN_FOR_INVITES) {
+      throw new BadRequestException(
+        'This group is no longer accepting new members',
+      );
+    }
+
+    if (group.createdBy.toString() === userId) {
+      throw new ConflictException('You are the admin of this group');
+    }
+
+    const existing = await this.groupMemberModel.findOne({
+      group: group._id,
+      user: new Types.ObjectId(userId),
+    });
+
+    if (existing && existing.inviteStatus === InviteStatus.ACCEPTED) {
+      throw new ConflictException('You are already a member of this group');
+    }
+
+    const acceptedCount = await this.groupMemberModel.countDocuments({
+      group: group._id,
+      inviteStatus: InviteStatus.ACCEPTED,
+    });
+    if (acceptedCount >= group.totalSlots) {
+      throw new BadRequestException('This group is full');
+    }
+
+    let membership: GroupMemberDocument;
+
+    if (existing) {
+      existing.inviteStatus = InviteStatus.ACCEPTED;
+      existing.respondedAt = new Date();
+      membership = await existing.save();
+    } else {
+      membership = await this.groupMemberModel.create({
+        group: group._id,
+        user: new Types.ObjectId(userId),
+        isGroupAdmin: false,
+        inviteStatus: InviteStatus.ACCEPTED,
+        respondedAt: new Date(),
+      });
+    }
+
+    // Notify the group admin that someone joined via the Group ID.
+    const adminMembership = await this.groupMemberModel.findOne({
+      group: group._id,
+      isGroupAdmin: true,
+    });
+
+    if (adminMembership) {
+      const joiningUser = await this.usersService.findById(userId);
+      const memberName = joiningUser?.name ?? joiningUser?.phone ?? 'A member';
+
+      void this.notificationsService.send(
+        NotificationEvents.groupMemberJoined({
+          userIds: [adminMembership.user.toString()],
+          memberName,
+          groupName: group.name,
+          data: { groupId: group._id.toString() },
+        }),
+      );
+    }
+
+    const populated = await this.populateMember(membership._id);
+
+    return { group: group.toObject(), membership: populated };
+  }
+
+  private async findGroupByJoinCode(code: string) {
+    return this.groupModel.findOne({ joinCode: normalizeJoinCode(code) });
   }
 
   // ---- Invites -------------------------------------------------------------
@@ -870,28 +1024,6 @@ export class GroupsService {
     }
 
     return { dryRun, scanned: terminatedGroups.length, purged, skipped };
-  }
-
-  // ---- Auto-collect toggle (Phase 6) -----------------------------------------
-
-  /**
-   * Admin-only. Switches automatic contribution collection on/off for
-   * this group. When ON, `AutoCollectScheduler` debits member wallets
-   * for the current cycle once its dueDate arrives, without the admin
-   * needing to trigger `POST .../collect-contributions` manually. When
-   * OFF (the default), collection stays a manual admin action.
-   */
-  async setAutoCollect(adminUserId: string, groupId: string, enabled: boolean) {
-    const group = await this.groupAccess.getGroupOrThrow(groupId);
-    await this.groupAccess.assertGroupAdmin(group._id, adminUserId);
-
-    group.autoCollectEnabled = enabled;
-    await group.save();
-
-    return {
-      groupId: group._id.toString(),
-      autoCollectEnabled: group.autoCollectEnabled,
-    };
   }
 
   async updateGroup(adminUserId: string, groupId: string, dto: UpdateGroupDto) {

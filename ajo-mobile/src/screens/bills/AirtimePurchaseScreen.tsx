@@ -85,11 +85,11 @@ export function AirtimePurchaseScreen({ navigation }: Props) {
 }
 
 const styles = StyleSheet.create({
-  title: { fontSize: typography.sizes.xxl, fontWeight: typography.weights.bold, color: colors.ink, marginBottom: spacing.lg },
-  label: { fontSize: typography.sizes.sm, fontWeight: typography.weights.medium, color: colors.inkSoft, marginBottom: spacing.xs },
+  title: { fontSize: typography.sizes.xxl, fontWeight: typography.weights.bold, color: colors.forestLightInk, marginBottom: spacing.lg },
+  label: { fontSize: typography.sizes.sm, fontWeight: typography.weights.medium, color: colors.forestLightInkSoft, marginBottom: spacing.xs },
   row: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm, marginBottom: spacing.lg },
-  chip: { paddingHorizontal: spacing.lg, paddingVertical: spacing.sm, borderRadius: radii.full, borderWidth: 1, borderColor: colors.line, backgroundColor: colors.surface },
-  chipActive: { backgroundColor: colors.primary, borderColor: colors.primary },
-  chipText: { fontSize: typography.sizes.sm, fontWeight: typography.weights.semibold, color: colors.ink },
+  chip: { paddingHorizontal: spacing.lg, paddingVertical: spacing.sm, borderRadius: radii.full, borderWidth: 1, borderColor: colors.forestLightLine, backgroundColor: colors.white },
+  chipActive: { backgroundColor: colors.forestAction, borderColor: colors.forestAction },
+  chipText: { fontSize: typography.sizes.sm, fontWeight: typography.weights.semibold, color: colors.forestLightInk },
   chipTextActive: { color: colors.white },
 });

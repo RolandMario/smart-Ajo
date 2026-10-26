@@ -6,10 +6,9 @@ import type {
   Group,
   CreateGroupPayload,
   CreateGroupResponse,
-  MyInviteListItem,
-  InviteResponseAction,
+  GroupSearchResult,
+  JoinGroupResponse,
   LockRotationPayload,
-  SetAutoCollectPayload,
   ContributionFrequency,
 } from "../types/api";
 
@@ -43,10 +42,18 @@ export async function createGroup(dto: CreateGroupPayload): Promise<CreateGroupR
   });
 }
 
-export async function inviteMember(groupId: string, phone: string): Promise<GroupMember> {
-  return authedFetch<GroupMember>(`/groups/${groupId}/invites`, {
+export async function searchGroupByCode(code: string): Promise<GroupSearchResult> {
+  return authedFetch<GroupSearchResult>(
+    `/groups/search?code=${encodeURIComponent(code)}`,
+  );
+}
+
+export async function joinGroupByCode(
+  code: string,
+): Promise<JoinGroupResponse> {
+  return authedFetch<JoinGroupResponse>("/groups/join", {
     method: "POST",
-    body: { phone },
+    body: { code },
   });
 }
 
@@ -57,33 +64,6 @@ export async function lockRotation(
   return authedFetch<GroupMember[]>(`/groups/${groupId}/rotation/lock`, {
     method: "POST",
     body: dto,
-  });
-}
-
-export async function setAutoCollect(
-  groupId: string,
-  dto: SetAutoCollectPayload,
-): Promise<{ groupId: string; autoCollectEnabled: boolean }> {
-  return authedFetch<{ groupId: string; autoCollectEnabled: boolean }>(
-    `/groups/${groupId}/auto-collect`,
-    {
-      method: "PATCH",
-      body: dto,
-    },
-  );
-}
-
-export async function listMyInvites(): Promise<MyInviteListItem[]> {
-  return authedFetch<MyInviteListItem[]>("/invites/me");
-}
-
-export async function respondToInvite(
-  inviteId: string,
-  action: InviteResponseAction,
-): Promise<GroupMember> {
-  return authedFetch<GroupMember>(`/invites/${inviteId}/respond`, {
-    method: "PATCH",
-    body: { action },
   });
 }
 

@@ -64,13 +64,13 @@ let PlatformAdminGroupsService = class PlatformAdminGroupsService {
         return {
             groups: groups.map((g) => ({
                 id: g._id.toString(),
+                joinCode: g.joinCode ?? '',
                 name: g.name,
                 status: g.status,
                 contributionAmount: g.contributionAmount,
                 frequency: g.frequency,
                 totalSlots: g.totalSlots,
                 rotationMethod: g.rotationMethod,
-                autoCollectEnabled: g.autoCollectEnabled,
                 currentCycleNumber: g.currentCycleNumber ?? null,
                 createdAt: g.createdAt,
             })),
@@ -137,6 +137,7 @@ let PlatformAdminGroupsService = class PlatformAdminGroupsService {
                     paid: 0,
                     pending: 0,
                     defaulted: 0,
+                    awaitingConfirmation: 0,
                 });
             }
             for (const contribution of contributions) {
@@ -147,6 +148,8 @@ let PlatformAdminGroupsService = class PlatformAdminGroupsService {
                     counts.paid += 1;
                 else if (contribution.status === cycle_enum_1.ContributionStatus.DEFAULTED)
                     counts.defaulted += 1;
+                else if (contribution.status === cycle_enum_1.ContributionStatus.AWAITING_CONFIRMATION)
+                    counts.awaitingConfirmation += 1;
                 else
                     counts.pending += 1;
             }
@@ -162,6 +165,7 @@ let PlatformAdminGroupsService = class PlatformAdminGroupsService {
                     paidCount: counts.paid,
                     defaultedCount: counts.defaulted,
                     pendingCount: counts.pending,
+                    awaitingConfirmationCount: counts.awaitingConfirmation,
                     completedAt: cycle.completedAt,
                 };
             });
@@ -186,17 +190,28 @@ let PlatformAdminGroupsService = class PlatformAdminGroupsService {
         });
         return {
             id: group._id.toString(),
+            joinCode: group.joinCode ?? '',
             name: group.name,
             status: group.status,
             contributionAmount: group.contributionAmount,
             frequency: group.frequency,
             totalSlots: group.totalSlots,
             rotationMethod: group.rotationMethod,
-            autoCollectEnabled: group.autoCollectEnabled,
             currentCycleNumber: group.currentCycleNumber ?? null,
             orderLockedAt: group.orderLockedAt,
             startDate: group.startDate,
             centralWalletBalance: wallet?.balance ?? 0,
+            serviceFee: group.serviceFee ?? 0,
+            escrowAccount: group.escrowAccount?.accountNumber
+                ? {
+                    bankName: group.escrowAccount.bankName ?? '',
+                    accountName: group.escrowAccount.accountName ?? '',
+                    accountNumber: group.escrowAccount.accountNumber ?? '',
+                    provider: group.escrowAccount.provider,
+                    currency: group.escrowAccount.currency,
+                    active: group.escrowAccount.active,
+                }
+                : undefined,
             admin: adminUser
                 ? {
                     id: adminUser._id.toString(),
@@ -223,18 +238,6 @@ let PlatformAdminGroupsService = class PlatformAdminGroupsService {
             group.serviceFee = serviceFee;
             await group.save();
         }
-        return this.getGroupDetail(groupId);
-    }
-    async setAutoCollect(groupId, enabled) {
-        if (!mongoose_2.Types.ObjectId.isValid(groupId)) {
-            throw new common_1.NotFoundException('Group not found');
-        }
-        const group = await this.groupModel.findById(groupId);
-        if (!group) {
-            throw new common_1.NotFoundException('Group not found');
-        }
-        group.autoCollectEnabled = enabled;
-        await group.save();
         return this.getGroupDetail(groupId);
     }
 };

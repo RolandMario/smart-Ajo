@@ -32,4 +32,13 @@ export class PlatformAdminFinanceController {
   ) {
     return this.financeService.listGroupWalletTransactions(query);
   }
+
+  /**
+   * Service-charge totals (collected, reversed, net) for the admin
+   * console's Financial Oversight → Service Charges tab.
+   */
+  @Get('service-charge-totals')
+  getServiceChargeTotals() {
+    return this.financeService.getServiceChargeTotals();
+  }
 }

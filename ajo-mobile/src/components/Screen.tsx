@@ -15,9 +15,20 @@ interface ScreenProps {
   /** Wrap content in a ScrollView — turn off for screens with their own scrollable list (e.g. FlatList). */
   scrollable?: boolean;
   style?: ViewStyle;
+  /**
+   * Page background, including the safe areas. Defaults to the pale
+   * forest canvas (`colors.forestLightCanvas`); pass an explicit token
+   * for the full-bleed dark `colors.forest` hero surfaces.
+   */
+  backgroundColor?: string;
 }
 
-export function Screen({ children, scrollable = true, style }: ScreenProps) {
+export function Screen({
+  children,
+  scrollable = true,
+  style,
+  backgroundColor = colors.forestLightCanvas,
+}: ScreenProps) {
   const content = scrollable ? (
     <ScrollView
       contentContainerStyle={[styles.scrollContent, style]}
@@ -30,7 +41,7 @@ export function Screen({ children, scrollable = true, style }: ScreenProps) {
   );
 
   return (
-    <SafeAreaView style={styles.safeArea} edges={["top", "left", "right"]}>
+    <SafeAreaView style={[styles.safeArea, { backgroundColor }]} edges={["top", "left", "right"]}>
       <KeyboardAvoidingView
         style={styles.flex}
         behavior={Platform.OS === "ios" ? "padding" : undefined}
@@ -44,7 +55,7 @@ export function Screen({ children, scrollable = true, style }: ScreenProps) {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: colors.canvas,
+    backgroundColor: colors.forestLightCanvas,
   },
   flex: {
     flex: 1,

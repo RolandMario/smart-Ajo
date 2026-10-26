@@ -8,6 +8,8 @@ import type {
   WalletTransactionStatus,
   TransferStatus,
   GroupWalletTransactionType,
+  ServiceCharges,
+  ServiceChargeTotals,
 } from "@/lib/types/api";
 
 export interface ListWalletTransactionsParams {
@@ -172,3 +174,34 @@ export async function setAdminBankAccount(dto: {
 export async function listAdminBanks(): Promise<Array<{ name: string; code: string }>> {
   return authedFetch<Array<{ name: string; code: string }>>("/admin/wallet/banks");
 }
+
+// ---- Platform service charges (configurable platform fees) ------------------
+
+export type { ServiceCharges, ServiceChargeTotals } from "@/lib/types/api";
+
+export async function getServiceCharges(): Promise<ServiceCharges> {
+  return authedFetch<ServiceCharges>("/admin/settings/service-charges");
+}
+
+/**
+ * Service-charge totals collected by the platform (transfer fees + payout
+ * fees, net of reversals) — shown on the Service Charges tab.
+ */
+export async function getServiceChargeTotals(): Promise<ServiceChargeTotals> {
+  return authedFetch<ServiceChargeTotals>("/admin/finance/service-charge-totals");
+}
+
+/**
+ * Updates one or both service-charge rates. Fields left out keep their
+ * current value, so a form can save a single rate without resending the other.
+ */
+export async function updateServiceCharges(dto: {
+  escrowTransferFeePercent?: number;
+  payoutFeePercent?: number;
+}): Promise<ServiceCharges> {
+  return authedFetch<ServiceCharges>("/admin/settings/service-charges", {
+    method: "PATCH",
+    body: dto,
+  });
+}
+

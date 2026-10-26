@@ -5,8 +5,7 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Stat } from "@/components/ui/stat";
 import { ServiceFeeEditor } from "@/components/service-fee-editor";
-import { AutoCollectToggle } from "@/components/auto-collect-toggle";
-import { getGroupDetail, updateGroupAutoCollect, updateServiceFee } from "@/lib/data/groups";
+import { getGroupDetail, updateServiceFee } from "@/lib/data/groups";
 import type { PlatformGroupDetail } from "@/lib/types/api";
 import { ApiError } from "@/lib/api/api-error";
 import { formatCurrency, formatDate } from "@/lib/format";
@@ -34,11 +33,6 @@ export default async function GroupDetailPage({ params }: GroupDetailPageProps) 
       notFound();
     }
     throw error;
-  }
-
-  async function handleToggleAutoCollect(enabled: boolean) {
-    "use server";
-    await updateGroupAutoCollect(group.id, enabled);
   }
 
   async function handleUpdateServiceFee(updateGroupId: string, fee: number) {
@@ -73,16 +67,23 @@ export default async function GroupDetailPage({ params }: GroupDetailPageProps) 
             <Stat label="Frequency" value={<span className="capitalize">{group.frequency}</span>} />
             <Stat label="Total slots" value={group.totalSlots} />
             <Stat
+              label="Group ID"
+              value={<span className="font-mono">{group.joinCode || "—"}</span>}
+            />
+            <Stat
               label="Rotation method"
               value={<span className="capitalize">{group.rotationMethod}</span>}
             />
             <Stat
-              label="Auto-collect"
+              label="Escrow account"
               value={
-                <AutoCollectToggle
-                  enabled={group.autoCollectEnabled}
-                  onToggle={handleToggleAutoCollect}
-                />
+                group.escrowAccount ? (
+                  <span className="font-mono text-sm">
+                    {group.escrowAccount.accountNumber}
+                  </span>
+                ) : (
+                  "Not provisioned"
+                )
               }
             />
             <Stat label="Current cycle" value={group.currentCycleNumber ?? "—"} />
@@ -190,7 +191,7 @@ export default async function GroupDetailPage({ params }: GroupDetailPageProps) 
 
           {group.cycles.length === 0 ? (
             <p className="text-sm text-ink-soft">
-              This group hasn't been activated yet — no cycles exist.
+              This group hasn&apos;t been activated yet — no cycles exist.
             </p>
           ) : (
             <div className="-mx-6 -mb-6 overflow-hidden border-t border-line">
@@ -201,6 +202,7 @@ export default async function GroupDetailPage({ params }: GroupDetailPageProps) 
                     <th className="px-6 py-3 font-medium">Status</th>
                     <th className="px-6 py-3 font-medium">Due date</th>
                     <th className="px-6 py-3 font-medium">Paid</th>
+                    <th className="px-6 py-3 font-medium">To confirm</th>
                     <th className="px-6 py-3 font-medium">Defaulted</th>
                     <th className="px-6 py-3 font-medium">Pending</th>
                   </tr>
@@ -215,6 +217,15 @@ export default async function GroupDetailPage({ params }: GroupDetailPageProps) 
                       <td className="px-6 py-3 text-ink-soft">{formatDate(c.dueDate)}</td>
                       <td className="px-6 py-3 text-success font-medium">
                         {c.paidCount}/{c.totalSlots}
+                      </td>
+                      <td className="px-6 py-3">
+                        {c.awaitingConfirmationCount > 0 ? (
+                          <span className="text-accent font-medium">
+                            {c.awaitingConfirmationCount}
+                          </span>
+                        ) : (
+                          <span className="text-ink-soft">0</span>
+                        )}
                       </td>
                       <td className="px-6 py-3">
                         {c.defaultedCount > 0 ? (

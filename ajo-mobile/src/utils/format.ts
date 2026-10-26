@@ -6,6 +6,61 @@ export function formatNaira(amount: number): string {
 }
 
 /**
+ * Format a donation amount: fixed pools show the naira amount, free-will
+ * pools read "Any amount".
+ */
+export function formatDonationAmount(
+  amountType: string,
+  amount?: number,
+): string {
+  if (amountType === "free_will") return "Any amount";
+  return formatNaira(amount ?? 0);
+}
+
+/** "One-time" / "Daily" / ... — the cadence chip on a pool card. */
+export function formatDonationCadence(
+  schedule: string,
+  frequency?: string | null,
+): string {
+  if (schedule !== "interval" || !frequency) return "One-time";
+  const labels: Record<string, string> = {
+    daily: "Daily",
+    weekly: "Weekly",
+    monthly: "Monthly",
+    yearly: "Yearly",
+  };
+  return labels[frequency] ?? frequency;
+}
+
+/**
+ * Human label for a donation period key: `once` -> "One-time",
+ * `2026-W43` -> "Week 43, 2026", `2026-10` -> "October 2026",
+ * `2026-10-25` -> "25 Oct 2026", `2026` -> "2026".
+ */
+export function formatDonationPeriod(period: string): string {
+  if (period === "once") return "One-time";
+
+  const week = /^(\d{4})-W(\d{2})$/.exec(period);
+  if (week) return `Week ${Number(week[2])}, ${week[1]}`;
+
+  const day = /^(\d{4})-(\d{2})-(\d{2})$/.exec(period);
+  if (day) return formatDate(`${period}T12:00:00`);
+
+  const month = /^(\d{4})-(\d{2})$/.exec(period);
+  if (month) {
+    return new Date(`${period}-01T12:00:00`).toLocaleDateString("en-NG", {
+      month: "long",
+      year: "numeric",
+    });
+  }
+
+  const year = /^\d{4}$/.test(period);
+  if (year) return period;
+
+  return period;
+}
+
+/**
  * Format a date string to a readable format.
  */
 export function formatDate(dateStr: string): string {
@@ -28,6 +83,31 @@ export function formatDateTime(dateStr: string): string {
     year: "numeric",
     hour: "2-digit",
     minute: "2-digit",
+  });
+}
+
+/**
+ * "2026-09-28T…" → "28 Sept" — the compact due-date chip used on the cycle
+ * ring cards and cycle list rows.
+ */
+export function formatDayMonth(dateStr: string): string {
+  const date = new Date(dateStr);
+  return date.toLocaleDateString("en-NG", {
+    day: "numeric",
+    month: "short",
+  });
+}
+
+/**
+ * "2026-09-28T…" → "Sunday, 28 Sept" — the full due-date read-out on the
+ * cycle round/detail cards.
+ */
+export function formatWeekdayDayMonth(dateStr: string): string {
+  const date = new Date(dateStr);
+  return date.toLocaleDateString("en-NG", {
+    weekday: "long",
+    day: "numeric",
+    month: "short",
   });
 }
 

@@ -100,22 +100,20 @@ Implements the Groups directory and detail screens against
 as Sub-phase B:
 - `app/(dashboard)/groups/page.tsx` — paginated, searchable table of
   every group (name, status, contribution amount, frequency, slots,
-  current cycle, auto-collect toggle state, created date), plus a row of
+  current cycle, created date), plus a row of
   status-filter pills (`open_for_invites` / `order_locked` / `active` /
   `completed`) that write to the `status` URL param.
 - `app/(dashboard)/groups/[id]/page.tsx` — full detail view: settings,
   central wallet (`GroupWallet`) balance, the group admin (linking to
   their `/users/:id` page), every member's standing, the full cycle
-  history with a paid/defaulted/pending breakdown per cycle, and the
+  history with a paid/to-confirm/defaulted/pending breakdown per cycle,
+  and the group's escrow DVA, and the
   complete payout history — including failed and reversed transfers with
   their `failureReason`, not just successful ones, matching the backend's
-  deliberate "show the failures too" design. The **Auto-collect** setting
-  is an interactive switch (`components/auto-collect-toggle.tsx`) so
-  platform staff can override the flag the group admin controls from the
-  mobile app.
+  deliberate "show the failures too" design.
 - `lib/data/groups.ts` — typed data-access functions (`listGroups`,
-  `getGroupDetail`, `updateServiceFee`, `updateGroupAutoCollect`), same
-  shape as `lib/data/users.ts`.
+  `getGroupDetail`, `updateServiceFee`), same shape as
+  `lib/data/users.ts`.
 - `lib/status-display.ts` gained `cycleStatusTone` and
   `transferStatusTone` alongside the existing group/invite/payout
   helpers.
@@ -149,6 +147,14 @@ Implements the Financial Oversight screen against `ajo-server`'s new
   same shape as the Sub-phase B/C data-access files.
 - `lib/status-display.ts` gained `walletTxStatusTone`,
   `walletTxTypeLabel`, `groupWalletTxTypeLabel`, and `groupWalletTxTone`.
+- **Service Charges** tab (added later) — `./service-charges-form.tsx`
+  edits the platform's escrow-transfer and payout fee percentages, with a
+  live preview. Above the form it leads with a **Service Charge Balance**
+  card fed by `getServiceChargeTotals()`
+  (`GET /admin/finance/service-charge-totals`): the net service charges
+  the platform has collected (transfer fees + payout fees, less fees
+  refunded on reversals), plus the gross collected / refunded amounts and
+  how many charges that covers.
 - The Overview page's "Coming up next" placeholder (which referenced
   Users/Groups as not-yet-built) was replaced with real quick-link cards
   to Users, Groups, and Finance — it had gone stale once those screens

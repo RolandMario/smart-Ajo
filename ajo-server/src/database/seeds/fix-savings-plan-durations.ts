@@ -1,10 +1,10 @@
 /**
  * One-off script to backfill the required `durationUnit` / `durationValue`
  * fields on savings plans created before those fields existed (legacy plans
- * only carry the nominal `durationMonths`). Without this, the auto-collect
- * scheduler's `plan.save()` fails validation for those documents ("Path
- * `durationValue` is required" / "Path `durationUnit` is required") and the
- * plan never progresses.
+ * only carry the nominal `durationMonths`). Without this, any later
+ * `plan.save()` (e.g. a member paying an interval) fails validation for those
+ * documents ("Path `durationValue` is required" / "Path `durationUnit` is
+ * required") and the plan never progresses.
  *
  * Run with:
  *

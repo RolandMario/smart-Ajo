@@ -2,8 +2,9 @@ import { GroupsService } from './groups.service';
 import { CreateGroupDto } from './dto/create-group.dto';
 import { ContinueGroupDto } from './dto/continue-group.dto';
 import { InviteMemberDto } from './dto/invite-member.dto';
+import { JoinGroupDto } from './dto/join-group.dto';
 import { LockRotationDto } from './dto/lock-rotation.dto';
-import { SetAutoCollectDto } from './dto/set-auto-collect.dto';
+import { SearchGroupDto } from './dto/search-group.dto';
 import { UpdateGroupDto } from './dto/update-group.dto';
 import type { RequestUser } from '../common/decorators/current-user.decorator';
 export declare class GroupsController {
@@ -26,6 +27,26 @@ export declare class GroupsController {
             payoutStatus: import("../common/enums/group.enum").PayoutStatus;
         };
     }[]>;
+    searchByCode(user: RequestUser, dto: SearchGroupDto): Promise<{
+        group: import("./schemas/group.schema").Group & import("mongoose").Document<import("mongoose").Types.ObjectId, any, any, Record<string, any>, {}> & Required<{
+            _id: import("mongoose").Types.ObjectId;
+        }> & {
+            __v: number;
+        };
+        memberCount: number;
+        isMember: boolean;
+        isAdmin: boolean;
+        isFull: boolean;
+        joinable: boolean;
+    }>;
+    join(user: RequestUser, dto: JoinGroupDto): Promise<{
+        group: import("./schemas/group.schema").Group & import("mongoose").Document<import("mongoose").Types.ObjectId, any, any, Record<string, any>, {}> & Required<{
+            _id: import("mongoose").Types.ObjectId;
+        }> & {
+            __v: number;
+        };
+        membership: import("./interfaces/populated-group-member.interface").PopulatedGroupMember;
+    }>;
     getDetail(user: RequestUser, id: string): Promise<{
         group: import("./schemas/group.schema").GroupDocument;
         members: import("./interfaces/populated-group-member.interface").PopulatedGroupMember[];
@@ -33,10 +54,6 @@ export declare class GroupsController {
     getMembers(user: RequestUser, id: string): Promise<import("./interfaces/populated-group-member.interface").PopulatedGroupMember[]>;
     invite(user: RequestUser, id: string, dto: InviteMemberDto): Promise<import("./interfaces/populated-group-member.interface").PopulatedGroupMember>;
     lockRotation(user: RequestUser, id: string, dto: LockRotationDto): Promise<import("./interfaces/populated-group-member.interface").PopulatedGroupMember[]>;
-    setAutoCollect(user: RequestUser, id: string, dto: SetAutoCollectDto): Promise<{
-        groupId: string;
-        autoCollectEnabled: boolean;
-    }>;
     update(user: RequestUser, id: string, dto: UpdateGroupDto): Promise<{
         group: (import("./schemas/group.schema").Group & import("mongoose").Document<import("mongoose").Types.ObjectId, any, any, Record<string, any>, {}> & Required<{
             _id: import("mongoose").Types.ObjectId;
@@ -57,6 +74,6 @@ export declare class GroupsController {
     }>;
     terminate(user: RequestUser, id: string): Promise<{
         groupId: string;
-        status: import("../common/enums/group.enum").GroupStatus.TERMINATED;
+        status: import("../common/enums/group.enum").GroupStatus;
     }>;
 }

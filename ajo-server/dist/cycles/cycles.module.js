@@ -14,13 +14,16 @@ const contribution_schema_1 = require("./schemas/contribution.schema");
 const group_wallet_schema_1 = require("./schemas/group-wallet.schema");
 const group_wallet_transaction_schema_1 = require("./schemas/group-wallet-transaction.schema");
 const payout_schema_1 = require("./schemas/payout.schema");
+const escrow_deposit_schema_1 = require("./schemas/escrow-deposit.schema");
 const cycles_service_1 = require("./cycles.service");
+const escrow_service_1 = require("./escrow.service");
 const cycles_controller_1 = require("./cycles.controller");
 const groups_module_1 = require("../groups/groups.module");
 const wallet_module_1 = require("../wallet/wallet.module");
 const payments_module_1 = require("../payments/payments.module");
 const users_module_1 = require("../users/users.module");
 const notifications_module_1 = require("../notifications/notifications.module");
+const platform_settings_module_1 = require("../platform-settings/platform-settings.module");
 let CyclesModule = class CyclesModule {
 };
 exports.CyclesModule = CyclesModule;
@@ -36,16 +39,18 @@ exports.CyclesModule = CyclesModule = __decorate([
                     schema: group_wallet_transaction_schema_1.GroupWalletTransactionSchema,
                 },
                 { name: payout_schema_1.Payout.name, schema: payout_schema_1.PayoutSchema },
+                { name: escrow_deposit_schema_1.EscrowDeposit.name, schema: escrow_deposit_schema_1.EscrowDepositSchema },
             ]),
             (0, common_1.forwardRef)(() => groups_module_1.GroupsModule),
             wallet_module_1.WalletModule,
             payments_module_1.PaymentsModule,
             users_module_1.UsersModule,
             (0, common_1.forwardRef)(() => notifications_module_1.NotificationsModule),
+            platform_settings_module_1.PlatformSettingsModule,
         ],
         controllers: [cycles_controller_1.CyclesController],
-        providers: [cycles_service_1.CyclesService],
-        exports: [cycles_service_1.CyclesService, mongoose_1.MongooseModule],
+        providers: [cycles_service_1.CyclesService, escrow_service_1.EscrowService],
+        exports: [cycles_service_1.CyclesService, escrow_service_1.EscrowService, mongoose_1.MongooseModule],
     })
 ], CyclesModule);
 //# sourceMappingURL=cycles.module.js.map

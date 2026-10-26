@@ -3,6 +3,7 @@ import {
   Injectable,
   InternalServerErrorException,
   Logger,
+  ServiceUnavailableException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import axios, { AxiosInstance } from 'axios';
@@ -62,6 +63,25 @@ export interface InitiateTransferResult {
 }
 
 /**
+ * Returned to clients whenever a payment operation is attempted while the
+ * server has no usable Paystack secret key.
+ *
+ * Why this exists: `PAYSTACK_SECRET_KEY` used to default to a committed
+ * (and long-since revoked) test key, so Paystack answered every request
+ * with 401 `Invalid key`. Payouts and withdrawals then surfaced that raw
+ * string ("Paystack error: Invalid key"), which reads like an app bug
+ * instead of a deployment/configuration problem. Everything that talks to
+ * Paystack now fails with this actionable message instead.
+ */
+export const PAYSTACK_NOT_CONFIGURED_MESSAGE =
+  'Payments are not configured on this server: PAYSTACK_SECRET_KEY is missing or invalid. ' +
+  'Set it to a valid Paystack secret key (sk_test_… for test mode, sk_live_… for live) and restart the server.';
+
+/** Values that look like a secret key but are placeholders/examples. */
+const PAYSTACK_PLACEHOLDER_PATTERN =
+  /your[-_ ]?paystack|placeholder|changeme|replace[-_ ]?me|undefined|null|xxx+/i;
+
+/**
  * Thin wrapper around the Paystack API.
  *
  * All amounts in this service's PUBLIC method signatures are in NAIRA
@@ -90,8 +110,15 @@ export class PaystackService {
   ] as const;
 
   constructor(private configService: ConfigService) {
-    this.secretKey = this.configService.get<string>('PAYSTACK_SECRET_KEY')!;
-    const baseURL = this.configService.get<string>('PAYSTACK_BASE_URL')!;
+    // Secrets copied into env files/dashboards frequently pick up wrapping
+    // quotes or surrounding whitespace; both make Paystack reject the key
+    // with the opaque "Invalid key". Normalize once, here.
+    this.secretKey = this.normalizeSecret(
+      this.configService.get<string>('PAYSTACK_SECRET_KEY'),
+    );
+    const baseURL =
+      this.configService.get<string>('PAYSTACK_BASE_URL')?.trim() ||
+      'https://api.paystack.co';
 
     this.client = axios.create({
       baseURL,
@@ -100,6 +127,62 @@ export class PaystackService {
         'Content-Type': 'application/json',
       },
     });
+
+    if (!this.isConfigured()) {
+      this.logger.warn(
+        'PAYSTACK_SECRET_KEY is missing or a placeholder — wallet funding, ' +
+          'virtual accounts, savings withdrawals and group payouts will fail ' +
+          'with a 503 until a valid key is configured (see PAYSTACK_NOT_CONFIGURED_MESSAGE).',
+      );
+    }
+  }
+
+  /** Strips surrounding whitespace/quotes from a configured secret. */
+  private normalizeSecret(value: string | undefined | null): string {
+    if (!value) return '';
+
+    return value
+      .trim()
+      .replace(/^["'`]+/, '')
+      .replace(/["'`]+$/, '')
+      .trim();
+  }
+
+  /**
+   * `true` when the configured secret key looks like a real Paystack key.
+   * This is a cheap sanity check (shape only) — Paystack remains the
+   * authority on whether the key is still valid. It exists so we can fail
+   * fast, with an actionable message, before money-mutating work happens.
+   */
+  isConfigured(): boolean {
+    if (!this.secretKey.startsWith('sk_')) return false;
+    if (this.secretKey.length < 20) return false;
+
+    return !PAYSTACK_PLACEHOLDER_PATTERN.test(this.secretKey);
+  }
+
+  /** Throws a 503 with an actionable message when payments are unusable. */
+  assertConfigured(): void {
+    if (this.isConfigured()) return;
+
+    throw new ServiceUnavailableException(PAYSTACK_NOT_CONFIGURED_MESSAGE);
+  }
+
+  /**
+   * Paystack answered 401 `Invalid key` — the configured secret is revoked,
+   * truncated, or belongs to a different Paystack account. Retrying cannot
+   * help, so callers get the configuration message instead of a raw 401.
+   */
+  private isInvalidKeyError(error: unknown): boolean {
+    if (!axios.isAxiosError(error)) return false;
+    if (error.response?.status !== 401) return false;
+
+    const data = error.response.data as
+      | { message?: string; code?: string }
+      | undefined;
+    const message = (data?.message ?? '').toLowerCase();
+
+    return data?.code === 'invalid_Key' || message.includes('invalid key');
   }
 
   private handleError(action: string, error: unknown): never {
@@ -108,6 +191,11 @@ export class PaystackService {
         (error.response?.data as { message?: string } | undefined)?.message ??
         error.message;
       this.logger.error(`Paystack ${action} failed: ${message}`);
+
+      if (this.isInvalidKeyError(error)) {
+        this.logger.error(PAYSTACK_NOT_CONFIGURED_MESSAGE);
+        throw new ServiceUnavailableException(PAYSTACK_NOT_CONFIGURED_MESSAGE);
+      }
 
       if (
         error.response &&
@@ -317,7 +405,10 @@ export class PaystackService {
    */
   dvaBankCandidates(): string[] {
     const preferred = this.dvaPreferredBank().trim().toLowerCase();
-    return [preferred, ...this.DVA_BANK_POOL.filter((bank) => bank !== preferred)];
+    return [
+      preferred,
+      ...this.DVA_BANK_POOL.filter((bank) => bank !== preferred),
+    ];
   }
 
   /**
@@ -355,7 +446,10 @@ export class PaystackService {
 
     for (const bank of banks) {
       try {
-        return await this.requestDedicatedAccount({ ...params, preferredBank: bank });
+        return await this.requestDedicatedAccount({
+          ...params,
+          preferredBank: bank,
+        });
       } catch (err) {
         lastError = err;
 
@@ -516,6 +610,12 @@ export class PaystackService {
     reason: string;
     reference: string;
   }): Promise<InitiateTransferResult> {
+    // Defence in depth: every money-out path (group payouts, savings
+    // withdrawals, donation payouts) funnels through here, so an
+    // unconfigured deployment can never create a Paystack transfer — or
+    // leave a payout/withdrawal record claiming one was attempted.
+    this.assertConfigured();
+
     try {
       const response = await this.client.post<
         PaystackResponse<{ transfer_code: string; status: string }>

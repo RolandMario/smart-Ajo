@@ -110,7 +110,7 @@ let NotificationsService = NotificationsService_1 = class NotificationsService {
     }
     async listForUser(userId, opts = {}) {
         const { limit = 20, skip = 0 } = opts;
-        const [notifications, unreadCount] = await Promise.all([
+        const [notifications, unreadCount, total] = await Promise.all([
             this.notificationModel
                 .find({
                 user: new mongoose_2.Types.ObjectId(userId),
@@ -125,8 +125,12 @@ let NotificationsService = NotificationsService_1 = class NotificationsService {
                 channel: notification_enum_1.NotificationChannel.PUSH,
                 isRead: false,
             }),
+            this.notificationModel.countDocuments({
+                user: new mongoose_2.Types.ObjectId(userId),
+                channel: notification_enum_1.NotificationChannel.PUSH,
+            }),
         ]);
-        return { notifications, unreadCount };
+        return { notifications, unreadCount, total };
     }
     async markRead(userId, notificationIds) {
         await this.notificationModel.updateMany({

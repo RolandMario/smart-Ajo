@@ -1,45 +1,106 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   AppState,
-  ScrollView,
+  Pressable,
   StyleSheet,
   Text,
   View,
 } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
+import { StatusBar } from "expo-status-bar";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useFocusEffect } from "@react-navigation/native";
 import type { GroupsStackParamList } from "../../navigation/types";
 import { Screen } from "../../components/Screen";
 import { Button } from "../../components/Button";
+import { Avatar } from "../../components/Avatar";
 import { ErrorBanner } from "../../components/ErrorBanner";
 import { LoadingScreen } from "../../components/LoadingScreen";
+import {
+  MemberRing,
+  buildRingNodes,
+  MAX_RING_MEMBERS,
+} from "../../components/MemberRing";
+import { SubpageHeader } from "../../components/SubpageHeader";
 import { ApiError } from "../../api/api-error";
-import { getCurrentCycle, collectContributions, initiatePayout } from "../../api/cycles";
-import type { CurrentCycleResponse } from "../../types/api";
+import { getGroupDetail } from "../../api/groups";
+import {
+  getCurrentCycle,
+  payContributionFromWallet,
+  notifyBankTransferPayment,
+  confirmContribution,
+  rejectContribution,
+  initiatePayout,
+} from "../../api/cycles";
+import type { CurrentCycleResponse, Group, GroupMember } from "../../types/api";
 import { useAuth } from "../../auth/AuthContext";
 import { colors, radii, spacing, typography } from "../../theme";
-import { formatNaira, formatDate, statusLabel } from "../../utils/format";
+import {
+  formatNaira,
+  formatDayMonth,
+  formatWeekdayDayMonth,
+  pluralize,
+  statusLabel,
+} from "../../utils/format";
+import { cyclePot } from "../../utils/cycles";
+import { displayName } from "../../utils/names";
 import { useCycleRefresh } from "../../notifications/CycleRefreshContext";
 
 type Props = NativeStackScreenProps<GroupsStackParamList, "CurrentCycle">;
 
+/**
+ * Current cycle — redesigned to the Kolo cycle mock on the light forest
+ * canvas: a circle header (back chip, serif group name, and a Manage chip
+ * through to the group detail), the rotation ring with one node per
+ * contributor and the pot total in the centre, a "round" card naming the
+ * recipient, and a "Your contribution" card with the live collected count.
+ * It is the primary destination when tapping a group in the group list.
+ * All the original behaviour is preserved: refresh on
+ * focus/foreground and on the cycle-advanced push, paying a contribution
+ * from the wallet or by bank transfer into the escrow account, the admin
+ * verification/initiate-payout actions, and the post-payout poll that
+ * swaps in the next cycle as it appears.
+ *
+ * A group that hasn't been activated yet resolves through the group API but
+ * 400s on the current-cycle endpoint — that's rendered as a friendly
+ * "not started" state rather than an error.
+ */
 export function CurrentCycleScreen({ navigation, route }: Props) {
   const { groupId } = route.params;
   const { user } = useAuth();
+  const userId = user?.id;
+
+  const [group, setGroup] = useState<Group | null>(null);
+  const [members, setMembers] = useState<GroupMember[]>([]);
   const [data, setData] = useState<CurrentCycleResponse | null>(null);
   const [loading, setLoading] = useState(true);
-  const [collecting, setCollecting] = useState(false);
+  const [payingWallet, setPayingWallet] = useState(false);
+  const [notifyingTransfer, setNotifyingTransfer] = useState(false);
+  const [verifyingContributionId, setVerifyingContributionId] = useState<
+    string | null
+  >(null);
   const [paying, setPaying] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
-  const [payoutResult, setPayoutResult] = useState<boolean>(false);
+  const [payoutResult, setPayoutResult] = useState(false);
   const hasDataRef = useRef(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   async function fetchData() {
     try {
-      const result = await getCurrentCycle(groupId);
-      setData(result);
+      // The group header + roster always resolve; the current-cycle endpoint
+      // 400s "not activated yet" before the first cycle is created, which we
+      // treat as a valid "not started" state, not an error.
+      const [detail, current] = await Promise.all([
+        getGroupDetail(groupId),
+        getCurrentCycle(groupId).catch((err: unknown) => {
+          if (err instanceof ApiError && err.statusCode === 400) return null;
+          throw err;
+        }),
+      ]);
+      setGroup(detail.group);
+      setMembers(detail.members);
+      setData(current);
       setError(null);
     } catch (err) {
       if (err instanceof ApiError) {
@@ -47,6 +108,7 @@ export function CurrentCycleScreen({ navigation, route }: Props) {
       } else {
         setError("Failed to load current cycle");
       }
+      setData(null);
     } finally {
       setLoading(false);
     }
@@ -101,24 +163,81 @@ export function CurrentCycleScreen({ navigation, route }: Props) {
     };
   }, []);
 
-  async function handleCollect() {
-    if (!data) return;
-    setCollecting(true);
+  async function handlePayFromWallet(contributionId: string) {
+    setPayingWallet(true);
     setError(null);
     setSuccess(null);
     try {
-      const result = await collectContributions(groupId, data.cycle._id);
+      const result = await payContributionFromWallet(groupId, contributionId);
       setData(result);
-      const paid = result.results.filter((r) => r.success).length;
-      setSuccess(`Collected from ${paid} member${paid !== 1 ? "s" : ""}.`);
+      setSuccess("Contribution paid from your wallet.");
     } catch (err) {
       if (err instanceof ApiError) {
         setError(err.message);
       } else {
-        setError("Failed to collect contributions");
+        setError("Failed to pay from your wallet");
       }
     } finally {
-      setCollecting(false);
+      setPayingWallet(false);
+    }
+  }
+
+  async function handleNotifyTransfer(contributionId: string) {
+    setNotifyingTransfer(true);
+    setError(null);
+    setSuccess(null);
+    try {
+      const result = await notifyBankTransferPayment(groupId, contributionId);
+      setData(result);
+      setSuccess(
+        "Your group admin has been notified — they'll confirm the transfer shortly.",
+      );
+    } catch (err) {
+      if (err instanceof ApiError) {
+        setError(err.message);
+      } else {
+        setError("Failed to notify your group admin");
+      }
+    } finally {
+      setNotifyingTransfer(false);
+    }
+  }
+
+  async function handleConfirm(contributionId: string) {
+    setVerifyingContributionId(contributionId);
+    setError(null);
+    setSuccess(null);
+    try {
+      const result = await confirmContribution(groupId, contributionId);
+      setData(result);
+      setSuccess("Payment confirmed.");
+    } catch (err) {
+      if (err instanceof ApiError) {
+        setError(err.message);
+      } else {
+        setError("Failed to confirm the payment");
+      }
+    } finally {
+      setVerifyingContributionId(null);
+    }
+  }
+
+  async function handleReject(contributionId: string) {
+    setVerifyingContributionId(contributionId);
+    setError(null);
+    setSuccess(null);
+    try {
+      const result = await rejectContribution(groupId, contributionId);
+      setData(result);
+      setSuccess("Payment rejected — the member's service fee was refunded.");
+    } catch (err) {
+      if (err instanceof ApiError) {
+        setError(err.message);
+      } else {
+        setError("Failed to reject the payment");
+      }
+    } finally {
+      setVerifyingContributionId(null);
     }
   }
 
@@ -128,10 +247,27 @@ export function CurrentCycleScreen({ navigation, route }: Props) {
     setError(null);
     setSuccess(null);
     try {
-      await initiatePayout(groupId, data.cycle._id);
-      setSuccess("Payout initiated successfully!");
+      const payout = await initiatePayout(groupId, data.cycle._id);
+
+      if (payout.status === "failed") {
+        // Defensive: older server builds returned a FAILED payout with a 200
+        // instead of throwing. Never announce a transfer that never happened.
+        setError(
+          payout.failureReason
+            ? `Payout failed: ${payout.failureReason}. Your group wallet has been refunded — please try again.`
+            : "Payout failed. Your group wallet has been refunded — please try again.",
+        );
+        await fetchData();
+        return;
+      }
+
+      setSuccess(
+        payout.status === "pending"
+          ? "Payout sent — waiting for Paystack to confirm the transfer."
+          : "Payout initiated successfully!",
+      );
       setPayoutResult(true);
-      
+
       // Poll for the next cycle to appear (Paystack may take time to process).
       // The primary mechanism is the FCM push notification — this polling is
       // a fallback in case the notification is delayed or not delivered.
@@ -180,181 +316,499 @@ export function CurrentCycleScreen({ navigation, route }: Props) {
   }
 
   if (loading) return <LoadingScreen />;
-  if (!data) {
-    return (
-      <Screen>
-        <Text style={styles.title}>Current Cycle</Text>
-        {error && <ErrorBanner message={error} />}
-        {!error && <Text style={styles.emptyText}>No active cycle found.</Text>}
-      </Screen>
-    );
-  }
 
-  const { cycle, contributions, isAdmin } = data;
-  const paidContributions = contributions.filter((c) => c.status === "paid");
-  const allPaid = paidContributions.length === contributions.length;
+  const recipientPosition: number | null = data
+    ? (data.cycle.recipientMember.position ?? data.cycle.cycleNumber)
+    : null;
+  const recipientIsMe =
+    data != null &&
+    userId != null &&
+    data.cycle.recipientMember.user._id === userId;
+  const nodeCount = data?.contributions.length ?? 0;
+  const paidCount =
+    (data?.contributions ?? []).filter((c) => c.status === "paid").length;
+  const allPaid = data != null && nodeCount > 0 && paidCount === nodeCount;
+  const pot = data ? cyclePot(data.cycle) : 0;
+  const percent = nodeCount > 0 ? Math.round((paidCount / nodeCount) * 100) : 0;
+  const nodes = data
+    ? buildRingNodes({
+        contributions: data.contributions,
+        members,
+        recipientPosition,
+        currentUserId: userId,
+      })
+    : [];
+  const myPosition = members.find((m) => m.user._id === userId)?.position;
+  const myPill = recipientIsMe
+    ? "Collecting now"
+    : `#${myPosition ?? "—"} of ${data?.cycle.totalSlots ?? "?"}`;
+
+  /** This member's own contribution for the cycle, if they have one. */
+  const myContribution = data?.contributions.find(
+    (c) => c.user._id === userId,
+  );
+  const myContributionUnpaid =
+    myContribution != null &&
+    (myContribution.status === "pending" ||
+      myContribution.status === "defaulted");
+  const awaitingConfirmations =
+    data?.contributions.filter((c) => c.status === "awaiting_confirmation") ??
+    [];
 
   return (
-    <Screen>
-      <ScrollView>
-        <Text style={styles.title}>Current Cycle</Text>
+    <Screen backgroundColor={colors.forestLightCanvas}>
+      <StatusBar style="dark" />
 
-        {error && <ErrorBanner message={error} />}
-        {success && (
-          <View style={styles.successBanner}>
-            <Text style={styles.successText}>{success}</Text>
-          </View>
-        )}
+      <SubpageHeader
+        title={group?.name ?? "Circle"}
+        subtitle={
+          !group
+            ? undefined
+            : data
+              ? `Round ${data.cycle.round} · Cycle ${data.cycle.cycleNumber} of ${data.cycle.totalSlots}`
+              : statusLabel(group.status)
+        }
+        onBack={() => navigation.goBack()}
+        right={
+          group ? (
+            <Pressable
+              onPress={() => navigation.navigate("GroupDetail", { groupId })}
+              accessibilityRole="button"
+              accessibilityLabel="Manage group"
+              hitSlop={8}
+              style={({ pressed }) => [
+                styles.manageButton,
+                pressed && styles.manageButtonPressed,
+              ]}
+            >
+              <Text style={styles.manageText}>Manage</Text>
+            </Pressable>
+          ) : undefined
+        }
+      />
 
-        <View style={styles.infoCard}>
-          <InfoRow label="Cycle" value={`#${cycle.cycleNumber}`} />
-          <InfoRow
-            label="Recipient"
-            value={cycle.recipientMember.user.name ?? cycle.recipientMember.user.phone}
-          />
-          <InfoRow
-            label="Contribution"
-            value={formatNaira(cycle.contributionAmount)}
-          />
-          <InfoRow
-            label="Due Date"
-            value={formatDate(cycle.dueDate)}
-          />
-          <InfoRow
-            label="Progress"
-            value={`${paidContributions.length}/${contributions.length} paid`}
-            isLast
-          />
+      {error && <ErrorBanner message={error} />}
+      {success && (
+        <View style={styles.successBanner}>
+          <Text style={styles.successText}>{success}</Text>
         </View>
+      )}
 
-        {/* Progress bar */}
-        <View style={styles.progressBar}>
-          <View
-            style={[
-              styles.progressFill,
-              {
-                width: `${contributions.length > 0 ? (paidContributions.length / contributions.length) * 100 : 0}%`,
-                backgroundColor:
-                  allPaid
-                    ? colors.success
-                    : paidContributions.length > 0
-                    ? colors.primary
-                    : colors.line,
-              },
-            ]}
-          />
-        </View>
-
-        {/* Contributions */}
-        <Text style={styles.sectionTitle}>
-          Contributions ({paidContributions.length}/{contributions.length} paid)
-        </Text>
-
-        {contributions.map((c) => {
-          const isMe = c.user._id === user?.id;
-          return (
-            <View key={c._id} style={styles.contributionRow}>
-              <View style={styles.contributionInfo}>
-                <Text style={styles.memberName}>
-                  {isMe ? "You" : (c.user.name ?? c.user.phone)}
+      {!group ? null : data ? (
+        <>
+          {/* ---- Rotation ring ---- */}
+          <View style={styles.ringCard}>
+            <View style={styles.ringCardHeader}>
+              <Text style={styles.ringCardTitle}>The rotation</Text>
+              <View
+                style={[
+                  styles.statusPill,
+                  data.cycle.status === "completed" && styles.statusPillDone,
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.statusPillText,
+                    data.cycle.status === "completed" &&
+                      styles.statusPillTextDone,
+                  ]}
+                >
+                  {statusLabel(data.cycle.status)}
                 </Text>
-                <Text style={styles.contributionAmount}>
-                  {formatNaira(c.amount)}
+              </View>
+            </View>
+
+            <MemberRing
+              nodes={nodes}
+              center={
+                <View>
+                  <Text style={styles.potAmount}>{formatNaira(pot)}</Text>
+                  <Text style={styles.potSubline}>
+                    pot · {pluralize(nodeCount, "member")}
+                  </Text>
+                </View>
+              }
+            />
+
+            {nodes.length > MAX_RING_MEMBERS ? (
+              <Text style={styles.ringFallbackNote}>
+                {pluralize(nodes.length, "member")} in this rotation — chips
+                show the same paid / pending / defaulted state.
+              </Text>
+            ) : (
+              <View style={styles.legend}>
+                <LegendDot color={colors.gold} label="receiving this cycle" />
+                <LegendDot color={colors.success} label="paid" />
+                <LegendDot color={colors.forestLightInkFaint} label="pending" />
+              </View>
+            )}
+          </View>
+
+          <View style={styles.roundCard}>
+            <View style={styles.roundHeader}>
+              <Avatar
+                name={data.cycle.recipientMember.user.name}
+                tone={recipientIsMe ? "gold" : "green"}
+                size={44}
+              />
+              <View style={styles.roundIdentity}>
+                <Text style={styles.roundTitle}>
+                  {recipientIsMe
+                    ? "You're collecting this cycle"
+                    : "Collecting this cycle"}
+                </Text>
+                <Text style={styles.roundSub} numberOfLines={1}>
+                  {displayName(data.cycle.recipientMember.user.name)} ·{" "}
+                  Position {recipientPosition} of {data.cycle.totalSlots}
+                </Text>
+              </View>
+            </View>
+
+            <View style={styles.cardDivider} />
+
+            <View style={styles.statRow}>
+              <StatCell
+                label="Due"
+                value={formatWeekdayDayMonth(data.cycle.dueDate)}
+              />
+              <StatCell
+                label="Contribution"
+                value={formatNaira(data.cycle.contributionAmount)}
+              />
+            </View>
+          </View>
+
+          {/* ---- Your contribution + collected count --------------- */}
+          <View style={styles.myCard}>
+            <View style={styles.myCardHeader}>
+              <View style={styles.myIdentity}>
+                <Text style={styles.myLabel}>Your contribution</Text>
+                <Text style={styles.myAmount}>
+                  {formatNaira(data.cycle.contributionAmount)}
                 </Text>
               </View>
               <View
                 style={[
-                  styles.statusBadge,
+                  styles.pill,
                   {
-                    backgroundColor:
-                      c.status === "paid"
-                        ? colors.successSoft
-                        : c.status === "defaulted"
-                        ? colors.dangerSoft
-                        : colors.warningSoft,
+                    backgroundColor: recipientIsMe
+                      ? colors.goldSoft
+                      : colors.forestLightPill,
                   },
                 ]}
               >
                 <Text
                   style={[
-                    styles.statusText,
+                    styles.pillText,
                     {
-                      color:
-                        c.status === "paid"
-                          ? colors.success
-                          : c.status === "defaulted"
-                          ? colors.danger
-                          : colors.warning,
+                      color: recipientIsMe ? colors.gold : colors.forestAction,
                     },
                   ]}
                 >
-                  {statusLabel(c.status)}
+                  {myPill}
                 </Text>
               </View>
             </View>
-          );
-        })}
 
-        {/* Admin actions — only group admin can collect or payout */}
-        {isAdmin && !allPaid && (
-          <Button
-            title="Collect Contributions"
-            onPress={handleCollect}
-            loading={collecting}
-            style={styles.actionButton}
-          />
-        )}
+            <View style={styles.collectedRow}>
+              <Text style={styles.collectedText}>
+                {paidCount} of {nodeCount} collected · {percent}%
+              </Text>
+              <Text style={styles.collectedDue}>
+                due {formatDayMonth(data.cycle.dueDate)}
+              </Text>
+            </View>
 
-        {isAdmin && allPaid && cycle.status === "open" && !payoutResult && (
-          <Button
-            title="Initiate Payout"
-            onPress={handlePayout}
-            loading={paying}
-            style={styles.actionButton}
-          />
-        )}
-
-        {payoutResult && (
-          <View style={styles.payoutResult}>
-            <Text style={styles.payoutResultTitle}>Payout Status</Text>
-            <Text style={styles.payoutResultText}>
-              Payout initiated successfully. The recipient will be notified.
-            </Text>
+            <View style={styles.progressTrack}>
+              <View
+                style={[
+                  styles.progressFill,
+                  {
+                    width: `${percent}%`,
+                    backgroundColor: allPaid
+                      ? colors.success
+                      : recipientIsMe
+                        ? colors.gold
+                        : colors.forestAction,
+                  },
+                ]}
+              />
+            </View>
           </View>
-        )}
-      </ScrollView>
+
+          {/* ---- Paying: wallet, or bank transfer into the escrow DVA ---- */}
+          {myContributionUnpaid && (
+            <View style={styles.payCard}>
+              <Text style={styles.payCardTitle}>Pay your contribution</Text>
+              <Text style={styles.payCardText}>
+                Pay instantly from your wallet, or transfer into the group’s
+                escrow account and have your group admin confirm it.
+              </Text>
+
+              <Button
+                title={`Pay ${formatNaira(myContribution.amount)} from wallet`}
+                onPress={() => handlePayFromWallet(myContribution._id)}
+                loading={payingWallet}
+                variant="forest"
+                style={styles.actionButton}
+              />
+
+              {data.escrowAccount ? (
+                <>
+                  <View style={styles.escrowDetails}>
+                    <EscrowRow
+                      label="Bank"
+                      value={data.escrowAccount.bankName}
+                    />
+                    <EscrowRow
+                      label="Account number"
+                      value={data.escrowAccount.accountNumber}
+                    />
+                    <EscrowRow
+                      label="Account name"
+                      value={data.escrowAccount.accountName}
+                    />
+                    {myContribution.paymentReference ? (
+                      <EscrowRow
+                        label="Narration / ref"
+                        value={myContribution.paymentReference}
+                        highlight
+                      />
+                    ) : null}
+                  </View>
+
+                  <Button
+                    title="I've sent a bank transfer"
+                    onPress={() => handleNotifyTransfer(myContribution._id)}
+                    loading={notifyingTransfer}
+                    variant="outlineLight"
+                    style={styles.actionButton}
+                  />
+                </>
+              ) : (
+                <Text style={styles.payCardHint}>
+                  The group’s escrow account is still being set up — pay from
+                  your wallet for now.
+                </Text>
+              )}
+            </View>
+          )}
+
+          {myContribution?.status === "awaiting_confirmation" && (
+            <View style={styles.awaitingCard}>
+              <Ionicons name="time-outline" size={18} color={colors.gold} />
+              <Text style={styles.awaitingText}>
+                Your transfer is with your group admin for confirmation.
+              </Text>
+            </View>
+          )}
+
+          {/*
+            A member on the roster but without a contribution row for this
+            cycle (e.g. added after activation) used to see no pay card at
+            all and no explanation. Say so instead of showing nothing.
+          */}
+          {!myContribution && data.cycle.status === "open" && (
+            <View style={styles.payCard}>
+              <Text style={styles.payCardTitle}>
+                No contribution for you in this cycle
+              </Text>
+              <Text style={styles.payCardText}>
+                This cycle has nothing assigned to you, so there's nothing to
+                pay. Ask your group admin to check the member list.
+              </Text>
+            </View>
+          )}
+
+          {/* ---- Admin: verify claimed bank transfers ---- */}
+          {data.isAdmin && awaitingConfirmations.length > 0 && (
+            <View style={styles.verifyCard}>
+              <Text style={styles.verifyTitle}>Payments to verify</Text>
+
+              {awaitingConfirmations.map((contribution) => {
+                const busy = verifyingContributionId === contribution._id;
+
+                return (
+                  <View key={contribution._id} style={styles.verifyRow}>
+                    <View style={styles.verifyIdentity}>
+                      <Text style={styles.verifyName} numberOfLines={1}>
+                        {displayName(contribution.user.name)}
+                      </Text>
+                      <Text style={styles.verifyMeta}>
+                        {formatNaira(contribution.amount)}
+                        {contribution.claimedTransferReference
+                          ? ` · ref ${contribution.claimedTransferReference}`
+                          : contribution.paymentReference
+                            ? ` · ${contribution.paymentReference}`
+                            : ""}
+                      </Text>
+                    </View>
+
+                    <View style={styles.verifyActions}>
+                      <Pressable
+                        accessibilityRole="button"
+                        accessibilityLabel={`Confirm ${displayName(contribution.user.name)}'s payment`}
+                        disabled={busy}
+                        onPress={() => handleConfirm(contribution._id)}
+                        style={({ pressed }) => [
+                          styles.verifyButton,
+                          styles.verifyConfirm,
+                          pressed && styles.verifyButtonPressed,
+                        ]}
+                      >
+                        <Text style={styles.verifyConfirmText}>Confirm</Text>
+                      </Pressable>
+
+                      <Pressable
+                        accessibilityRole="button"
+                        accessibilityLabel={`Reject ${displayName(contribution.user.name)}'s payment`}
+                        disabled={busy}
+                        onPress={() => handleReject(contribution._id)}
+                        style={({ pressed }) => [
+                          styles.verifyButton,
+                          styles.verifyReject,
+                          pressed && styles.verifyButtonPressed,
+                        ]}
+                      >
+                        <Text style={styles.verifyRejectText}>Reject</Text>
+                      </Pressable>
+                    </View>
+                  </View>
+                );
+              })}
+            </View>
+          )}
+
+          {/* ---- Admin: what's still standing between this cycle and its payout ---- */}
+          {data.isAdmin && data.cycle.status === "open" && !allPaid && nodeCount > 0 && (
+            <View style={styles.payoutNoteCard}>
+              <Ionicons
+                name="lock-closed-outline"
+                size={16}
+                color={colors.forestLightInkSoft}
+              />
+              <Text style={styles.payoutNoteText}>
+                Payout unlocks once every contribution is confirmed —{" "}
+                {paidCount} of {nodeCount} in
+                {awaitingConfirmations.length > 0
+                  ? `, ${awaitingConfirmations.length} waiting for your confirmation`
+                  : ""}
+                .
+              </Text>
+            </View>
+          )}
+
+          {data.isAdmin &&
+            data.cycle.status === "open" &&
+            allPaid &&
+            data.recipientPayoutReady === false && (
+              <View style={styles.payoutNoteCard}>
+                <Ionicons
+                  name="alert-circle-outline"
+                  size={18}
+                  color={colors.gold}
+                />
+                <Text style={styles.payoutNoteText}>
+                  {displayName(data.cycle.recipientMember.user.name)} hasn't
+                  added a payout bank account yet. They need to add one from
+                  Wallet before this payout can go through.
+                </Text>
+              </View>
+            )}
+
+          {data.isAdmin &&
+            allPaid &&
+            data.cycle.status === "open" &&
+            !payoutResult && (
+              <Button
+                title="Initiate payout"
+                onPress={handlePayout}
+                loading={paying}
+                variant="gold"
+                style={styles.actionButton}
+              />
+            )}
+
+          {payoutResult && (
+            <View style={styles.payoutResult}>
+              <Text style={styles.payoutResultTitle}>Payout Status</Text>
+              <Text style={styles.payoutResultText}>
+                Payout initiated successfully. The recipient will be notified.
+              </Text>
+            </View>
+          )}
+        </>
+      ) : (
+        renderNotStarted(group)
+      )}
     </Screen>
   );
 }
 
-function InfoRow({
+function renderNotStarted(group: Group) {
+  return (
+    <View style={styles.notStartedCard}>
+      <View style={styles.notStartedIcon}>
+        <Ionicons name="time-outline" size={22} color={colors.forestAction} />
+      </View>
+      <Text style={styles.notStartedTitle}>
+        {group.status === "completed"
+          ? "This circle's rounds are complete"
+          : "This circle hasn't started its first cycle yet"}
+      </Text>
+      <Text style={styles.notStartedText}>
+        The current cycle and its pot will appear here once the rotation is
+        locked and the group is activated.
+      </Text>
+    </View>
+  );
+}
+
+function StatCell({ label, value }: { label: string; value: string }) {
+  return (
+    <View style={styles.statCell}>
+      <Text style={styles.statValue} numberOfLines={1}>
+        {value}
+      </Text>
+      <Text style={styles.statLabel}>{label}</Text>
+    </View>
+  );
+}
+
+function LegendDot({ color, label }: { color: string; label: string }) {
+  return (
+    <View style={styles.legendItem}>
+      <View style={[styles.legendDot, { backgroundColor: color }]} />
+      <Text style={styles.legendText}>{label}</Text>
+    </View>
+  );
+}
+
+/** One "label — value" line in the escrow transfer-instructions card. */
+function EscrowRow({
   label,
   value,
-  isLast,
+  highlight = false,
 }: {
   label: string;
   value: string;
-  isLast?: boolean;
+  highlight?: boolean;
 }) {
   return (
-    <View style={[styles.infoRow, !isLast && styles.infoRowBorder]}>
-      <Text style={styles.infoLabel}>{label}</Text>
-      <Text style={styles.infoValue}>{value}</Text>
+    <View style={styles.escrowRow}>
+      <Text style={styles.escrowLabel}>{label}</Text>
+      <Text
+        style={[styles.escrowValue, highlight && styles.escrowValueHighlight]}
+        numberOfLines={1}
+        adjustsFontSizeToFit
+      >
+        {value}
+      </Text>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  title: {
-    fontSize: typography.sizes.xxl,
-    fontWeight: typography.weights.bold,
-    color: colors.ink,
-    marginBottom: spacing.lg,
-  },
-  emptyText: {
-    fontSize: typography.sizes.base,
-    color: colors.inkSoft,
-  },
   successBanner: {
     backgroundColor: colors.successSoft,
     borderRadius: radii.md,
@@ -366,90 +820,197 @@ const styles = StyleSheet.create({
     fontWeight: typography.weights.medium,
     color: colors.success,
   },
-  infoCard: {
-    backgroundColor: colors.surface,
+  ringCard: {
+    backgroundColor: colors.white,
+    borderRadius: radii.xl,
+    borderWidth: 1,
+    borderColor: colors.forestLightLine,
+    alignItems: "center",
+    marginBottom: spacing.lg,
+  },
+  ringCardHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    alignSelf: "stretch",
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.md,
+  },
+  ringCardTitle: {
+    fontSize: typography.sizes.lg,
+    fontWeight: typography.weights.semibold,
+    color: colors.forestLightInk,
+  },
+  statusPill: {
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    borderRadius: radii.full,
+  },
+  statusPillText: {
+    fontSize: typography.sizes.xs,
+    fontWeight: typography.weights.medium,
+    color: colors.forestAction,
+  },
+  statusPillDone: {
+    backgroundColor: colors.successSoft,
+  },
+  statusPillTextDone: {
+    color: colors.success,
+  },
+  potAmount: {
+    fontFamily: typography.fontFamilies.serif,
+    fontSize: typography.sizes.xxxl,
+    fontWeight: typography.weights.bold,
+    color: colors.forestLightInk,
+  },
+  potSubline: {
+    fontSize: typography.sizes.sm,
+    color: colors.forestLightInkSoft,
+    marginTop: spacing.xs,
+  },
+  ringFallbackNote: {
+    fontSize: typography.sizes.sm,
+    color: colors.forestLightInkSoft,
+    textAlign: "center",
+    paddingHorizontal: spacing.lg,
+    marginTop: spacing.md,
+  },
+  legend: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.md,
+    marginTop: spacing.sm,
+  },
+  legendItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.xs,
+  },
+  legendDot: {
+    width: 8,
+    height: 8,
+    borderRadius: radii.full,
+  },
+  legendText: {
+    fontSize: typography.sizes.xs,
+    color: colors.forestLightInkSoft,
+  },
+  roundCard: {
+    backgroundColor: colors.white,
     borderRadius: radii.lg,
     borderWidth: 1,
-    borderColor: colors.line,
+    borderColor: colors.forestLightLine,
+    padding: spacing.lg,
     marginBottom: spacing.lg,
   },
-  infoRow: {
+  roundHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.md,
+  },
+  roundIdentity: {
+    flex: 1,
+    minWidth: 0,
+  },
+  roundTitle: {
+    fontSize: typography.sizes.base,
+    fontWeight: typography.weights.semibold,
+    color: colors.forestLightInk,
+  },
+  roundSub: {
+    fontSize: typography.sizes.sm,
+    color: colors.forestLightInkSoft,
+    marginTop: 2,
+  },
+  cardDivider: {
+    height: 1,
+    backgroundColor: colors.forestLightLine,
+    marginVertical: spacing.lg,
+  },
+  statRow: {
+    flexDirection: "row",
+    gap: spacing.lg,
+  },
+  statCell: {
+    flex: 1,
+    minWidth: 0,
+  },
+  statValue: {
+    fontSize: typography.sizes.base,
+    fontWeight: typography.weights.semibold,
+    color: colors.forestLightInk,
+  },
+  statLabel: {
+    fontSize: typography.sizes.xs,
+    color: colors.forestLightInkSoft,
+    marginTop: spacing.xs,
+  },
+  myCard: {
+    backgroundColor: colors.forestLightCard,
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    borderColor: colors.forestLightLine,
+    padding: spacing.lg,
+    marginBottom: spacing.lg,
+  },
+  myCardHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  myIdentity: {
+    flex: 1,
+    minWidth: 0,
+  },
+  myLabel: {
+    fontSize: typography.sizes.sm,
+    color: colors.forestLightInkSoft,
+  },
+  myAmount: {
+    fontFamily: typography.fontFamilies.serif,
+    fontSize: typography.sizes.xl,
+    fontWeight: typography.weights.bold,
+    color: colors.forestLightInk,
+    marginTop: 2,
+  },
+  pill: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: radii.full,
+  },
+  pillText: {
+    fontSize: typography.sizes.sm,
+    fontWeight: typography.weights.semibold,
+  },
+  collectedRow: {
     flexDirection: "row",
     justifyContent: "space-between",
-    alignItems: "center",
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
+    marginTop: spacing.md,
   },
-  infoRowBorder: {
-    borderBottomWidth: 1,
-    borderBottomColor: colors.line,
-  },
-  infoLabel: {
+  collectedText: {
     fontSize: typography.sizes.sm,
-    color: colors.inkSoft,
+    color: colors.forestLightInkSoft,
   },
-  infoValue: {
-    fontSize: typography.sizes.base,
-    fontWeight: typography.weights.medium,
-    color: colors.ink,
+  collectedDue: {
+    fontSize: typography.sizes.sm,
+    color: colors.forestLightInkSoft,
   },
-  progressBar: {
+  progressTrack: {
     height: 8,
-    borderRadius: 4,
-    backgroundColor: colors.line,
-    marginBottom: spacing.lg,
+    borderRadius: radii.sm,
+    backgroundColor: colors.forestTrack,
     overflow: "hidden",
+    marginTop: spacing.xs,
   },
   progressFill: {
     height: 8,
-    borderRadius: 4,
-  },
-  sectionTitle: {
-    fontSize: typography.sizes.lg,
-    fontWeight: typography.weights.semibold,
-    color: colors.ink,
-    marginBottom: spacing.md,
-  },
-  contributionRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    backgroundColor: colors.surface,
-    borderRadius: radii.md,
-    borderWidth: 1,
-    borderColor: colors.line,
-    padding: spacing.md,
-    marginBottom: spacing.sm,
-  },
-  contributionInfo: {
-    flex: 1,
-    marginRight: spacing.sm,
-  },
-  memberName: {
-    fontSize: typography.sizes.base,
-    fontWeight: typography.weights.medium,
-    color: colors.ink,
-  },
-  contributionAmount: {
-    fontSize: typography.sizes.xs,
-    color: colors.inkSoft,
-    marginTop: spacing.xs,
-  },
-  statusBadge: {
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.xs,
     borderRadius: radii.sm,
   },
-  statusText: {
-    fontSize: typography.sizes.xs,
-    fontWeight: typography.weights.medium,
-  },
   actionButton: {
-    marginTop: spacing.lg,
-    marginBottom: spacing.sm,
+    marginTop: spacing.sm,
   },
   payoutResult: {
-    backgroundColor: colors.surface,
+    backgroundColor: colors.white,
     borderRadius: radii.lg,
     borderWidth: 1,
     borderColor: colors.success,
@@ -464,6 +1025,194 @@ const styles = StyleSheet.create({
   },
   payoutResultText: {
     fontSize: typography.sizes.sm,
-    color: colors.inkSoft,
+    color: colors.forestLightInkSoft,
+  },
+  manageButton: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: radii.full,
+    backgroundColor: colors.forestLightPill,
+  },
+  manageButtonPressed: {
+    opacity: 0.7,
+  },
+  manageText: {
+    fontSize: typography.sizes.sm,
+    fontWeight: typography.weights.semibold,
+    color: colors.forestLightInk,
+  },
+  notStartedCard: {
+    backgroundColor: colors.white,
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    borderColor: colors.forestLightLine,
+    padding: spacing.xl,
+    alignItems: "center",
+    marginTop: spacing.lg,
+  },
+  notStartedIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: radii.full,
+    backgroundColor: colors.forestLightPill,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: spacing.md,
+  },
+  notStartedTitle: {
+    fontSize: typography.sizes.base,
+    fontWeight: typography.weights.semibold,
+    color: colors.forestLightInk,
+    textAlign: "center",
+  },
+  notStartedText: {
+    fontSize: typography.sizes.sm,
+    color: colors.forestLightInkSoft,
+    textAlign: "center",
+    marginTop: spacing.sm,
+  },
+  payCard: {
+    backgroundColor: colors.white,
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    borderColor: colors.forestLightLine,
+    padding: spacing.lg,
+    marginBottom: spacing.lg,
+  },
+  payCardTitle: {
+    fontSize: typography.sizes.base,
+    fontWeight: typography.weights.semibold,
+    color: colors.forestLightInk,
+  },
+  payCardText: {
+    fontSize: typography.sizes.sm,
+    color: colors.forestLightInkSoft,
+    marginTop: spacing.xs,
+  },
+  payCardHint: {
+    fontSize: typography.sizes.xs,
+    color: colors.forestLightInkSoft,
+    marginTop: spacing.sm,
+  },
+  escrowDetails: {
+    marginTop: spacing.md,
+    paddingTop: spacing.md,
+    borderTopWidth: 1,
+    borderTopColor: colors.forestLightLine,
+    gap: spacing.sm,
+  },
+  escrowRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: spacing.md,
+  },
+  escrowLabel: {
+    fontSize: typography.sizes.xs,
+    color: colors.forestLightInkSoft,
+  },
+  escrowValue: {
+    flexShrink: 1,
+    fontSize: typography.sizes.sm,
+    fontWeight: typography.weights.semibold,
+    color: colors.forestLightInk,
+    textAlign: "right",
+  },
+  escrowValueHighlight: {
+    color: colors.gold,
+    letterSpacing: 0.5,
+  },
+  awaitingCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    backgroundColor: colors.goldSoft,
+    borderRadius: radii.md,
+    padding: spacing.md,
+    marginBottom: spacing.lg,
+  },
+  awaitingText: {
+    flex: 1,
+    fontSize: typography.sizes.sm,
+    fontWeight: typography.weights.medium,
+    color: colors.forestLightInk,
+  },
+  payoutNoteCard: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: spacing.sm,
+    backgroundColor: colors.forestLightCard,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    borderColor: colors.forestLightLine,
+    padding: spacing.md,
+    marginBottom: spacing.lg,
+  },
+  payoutNoteText: {
+    flex: 1,
+    fontSize: typography.sizes.sm,
+    color: colors.forestLightInkSoft,
+  },
+  verifyCard: {
+    backgroundColor: colors.forestLightCard,
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    borderColor: colors.forestLightLine,
+    padding: spacing.lg,
+    marginBottom: spacing.lg,
+    gap: spacing.md,
+  },
+  verifyTitle: {
+    fontSize: typography.sizes.base,
+    fontWeight: typography.weights.semibold,
+    color: colors.forestLightInk,
+  },
+  verifyRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: spacing.md,
+  },
+  verifyIdentity: {
+    flex: 1,
+    minWidth: 0,
+  },
+  verifyName: {
+    fontSize: typography.sizes.sm,
+    fontWeight: typography.weights.semibold,
+    color: colors.forestLightInk,
+  },
+  verifyMeta: {
+    fontSize: typography.sizes.xs,
+    color: colors.forestLightInkSoft,
+    marginTop: 2,
+  },
+  verifyActions: {
+    flexDirection: "row",
+    gap: spacing.xs,
+  },
+  verifyButton: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: radii.full,
+  },
+  verifyButtonPressed: {
+    opacity: 0.8,
+  },
+  verifyConfirm: {
+    backgroundColor: colors.successSoft,
+  },
+  verifyConfirmText: {
+    fontSize: typography.sizes.xs,
+    fontWeight: typography.weights.semibold,
+    color: colors.success,
+  },
+  verifyReject: {
+    backgroundColor: colors.dangerSoft,
+  },
+  verifyRejectText: {
+    fontSize: typography.sizes.xs,
+    fontWeight: typography.weights.semibold,
+    color: colors.danger,
   },
 });

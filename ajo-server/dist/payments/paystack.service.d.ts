@@ -37,6 +37,7 @@ export interface InitiateTransferResult {
     transferCode: string;
     status: string;
 }
+export declare const PAYSTACK_NOT_CONFIGURED_MESSAGE: string;
 export declare class PaystackService {
     private configService;
     private readonly logger;
@@ -44,6 +45,10 @@ export declare class PaystackService {
     private readonly secretKey;
     private readonly DVA_BANK_POOL;
     constructor(configService: ConfigService);
+    private normalizeSecret;
+    isConfigured(): boolean;
+    assertConfigured(): void;
+    private isInvalidKeyError;
     private handleError;
     initializeTransaction(email: string, amountNaira: number, reference: string): Promise<InitializeTransactionResult>;
     verifyTransaction(reference: string): Promise<VerifyTransactionResult>;

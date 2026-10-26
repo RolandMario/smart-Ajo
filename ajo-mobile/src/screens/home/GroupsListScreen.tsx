@@ -10,12 +10,13 @@ import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useFocusEffect } from "@react-navigation/native";
 import type { GroupsStackParamList } from "../../navigation/types";
 import { Screen } from "../../components/Screen";
+import { AccountMenu } from "../../components/AccountMenu";
 import { Button } from "../../components/Button";
 import { ErrorBanner } from "../../components/ErrorBanner";
 import { LoadingScreen } from "../../components/LoadingScreen";
 import { ApiError } from "../../api/api-error";
-import { listMyGroups , listMyInvites } from "../../api/groups";
-import type { MyGroupListItem, MyInviteListItem } from "../../types/api";
+import { listMyGroups } from "../../api/groups";
+import type { MyGroupListItem } from "../../types/api";
 import { useAuth } from "../../auth/AuthContext";
 import { colors, radii, spacing, typography } from "../../theme";
 import { formatNaira, statusLabel, formatDate } from "../../utils/format";
@@ -25,19 +26,14 @@ type Props = NativeStackScreenProps<GroupsStackParamList, "GroupsList">;
 export function GroupsListScreen({ navigation }: Props) {
   const { user } = useAuth();
   const [groups, setGroups] = useState<MyGroupListItem[]>([]);
-  const [invites, setInvites] = useState<MyInviteListItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
 
   async function fetchData() {
     try {
-      const [groupData, inviteData] = await Promise.all([
-        listMyGroups(),
-        listMyInvites(),
-      ]);
+      const groupData = await listMyGroups();
       setGroups(groupData);
-      setInvites(inviteData);
       setError(null);
     } catch (err) {
       if (err instanceof ApiError) {
@@ -67,29 +63,19 @@ export function GroupsListScreen({ navigation }: Props) {
     return <LoadingScreen />;
   }
 
-  const pendingInvites = invites.length;
-
   return (
     <Screen scrollable={false}>
       <View style={styles.header}>
-        <Text style={styles.title}>My Groups</Text>
-        <Text style={styles.subtitle}>
-          Welcome, {user?.name ?? user?.phone}
-        </Text>
+        <View style={styles.headerText}>
+          <Text style={styles.title}>My Groups</Text>
+          <Text style={styles.subtitle}>
+            Welcome, {user?.name ?? user?.phone}
+          </Text>
+        </View>
+        <AccountMenu />
       </View>
 
       {error && <ErrorBanner message={error} />}
-
-      {pendingInvites > 0 && (
-        <Pressable
-          style={styles.inviteBanner}
-          onPress={() => navigation.navigate("GroupDetail", { groupId: "invites" })}
-        >
-          <Text style={styles.inviteBannerText}>
-            {pendingInvites} pending invite{pendingInvites !== 1 ? "s" : ""} — tap to view
-          </Text>
-        </Pressable>
-      )}
 
       <FlatList
         data={groups}
@@ -111,7 +97,7 @@ export function GroupsListScreen({ navigation }: Props) {
             <Pressable
               style={styles.groupCard}
               onPress={() =>
-                navigation.navigate("GroupDetail", { groupId: item.group._id })
+                navigation.navigate("CurrentCycle", { groupId: item.group._id })
               }
             >
               <View style={styles.groupHeader}>
@@ -124,10 +110,10 @@ export function GroupsListScreen({ navigation }: Props) {
                         item.group.status === "active"
                           ? colors.successSoft
                           : item.group.status === "completed"
-                          ? colors.accentSoft
+                          ? colors.goldSoft
                           : item.group.status === "order_locked"
                           ? colors.warningSoft
-                          : colors.primarySoft,
+                          : colors.forestLightPill,
                     },
                   ]}
                 >
@@ -139,10 +125,10 @@ export function GroupsListScreen({ navigation }: Props) {
                           item.group.status === "active"
                             ? colors.success
                             : item.group.status === "completed"
-                            ? colors.accent
+                            ? colors.gold
                             : item.group.status === "order_locked"
                             ? colors.warning
-                            : colors.primary,
+                            : colors.forestAction,
                       },
                     ]}
                   >
@@ -172,6 +158,13 @@ export function GroupsListScreen({ navigation }: Props) {
           title="Create Group"
           onPress={() => navigation.navigate("CreateGroup")}
         />
+        <Button
+          title="Join with Group ID"
+          variant="secondary"
+          icon="search"
+          onPress={() => navigation.navigate("JoinGroup")}
+          style={styles.joinButton}
+        />
       </View>
     </Screen>
   );
@@ -179,32 +172,29 @@ export function GroupsListScreen({ navigation }: Props) {
 
 const styles = StyleSheet.create({
   header: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    gap: spacing.md,
     marginBottom: spacing.lg,
+  },
+  headerText: {
+    flex: 1,
+    minWidth: 0,
   },
   title: {
     fontSize: typography.sizes.xxl,
     fontWeight: typography.weights.bold,
-    color: colors.ink,
+    color: colors.forestLightInk,
   },
   subtitle: {
     fontSize: typography.sizes.sm,
-    color: colors.inkSoft,
+    color: colors.forestLightInkSoft,
     marginTop: spacing.xs,
-  },
-  inviteBanner: {
-    backgroundColor: colors.accentSoft,
-    borderRadius: radii.md,
-    padding: spacing.md,
-    marginBottom: spacing.md,
-  },
-  inviteBannerText: {
-    fontSize: typography.sizes.sm,
-    fontWeight: typography.weights.medium,
-    color: colors.accent,
   },
   list: {
     flexGrow: 1,
-    paddingBottom: 80,
+    paddingBottom: 120,
   },
   empty: {
     flex: 1,
@@ -215,19 +205,19 @@ const styles = StyleSheet.create({
   emptyTitle: {
     fontSize: typography.sizes.lg,
     fontWeight: typography.weights.semibold,
-    color: colors.ink,
+    color: colors.forestLightInk,
     marginBottom: spacing.sm,
   },
   emptySubtitle: {
     fontSize: typography.sizes.base,
-    color: colors.inkSoft,
+    color: colors.forestLightInkSoft,
     textAlign: "center",
   },
   groupCard: {
-    backgroundColor: colors.surface,
+    backgroundColor: colors.white,
     borderRadius: radii.lg,
     borderWidth: 1,
-    borderColor: colors.line,
+    borderColor: colors.forestLightLine,
     padding: spacing.lg,
     marginBottom: spacing.md,
   },
@@ -240,7 +230,7 @@ const styles = StyleSheet.create({
   groupName: {
     fontSize: typography.sizes.lg,
     fontWeight: typography.weights.semibold,
-    color: colors.ink,
+    color: colors.forestLightInk,
     flex: 1,
     marginRight: spacing.sm,
   },
@@ -260,14 +250,17 @@ const styles = StyleSheet.create({
   },
   detailText: {
     fontSize: typography.sizes.sm,
-    color: colors.inkSoft,
+    color: colors.forestLightInkSoft,
   },
   metaText: {
     fontSize: typography.sizes.xs,
-    color: colors.inkFaint,
+    color: colors.forestLightInkFaint,
   },
   fabContainer: {
     paddingVertical: spacing.md,
     paddingHorizontal: spacing.xl,
+  },
+  joinButton: {
+    marginTop: spacing.sm,
   },
 });

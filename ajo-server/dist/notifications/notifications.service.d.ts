@@ -33,6 +33,7 @@ export declare class NotificationsService {
             __v: number;
         })[];
         unreadCount: number;
+        total: number;
     }>;
     markRead(userId: string, notificationIds: string[]): Promise<void>;
     markAllRead(userId: string): Promise<void>;

@@ -306,18 +306,18 @@ const styles = StyleSheet.create({
   title: {
     fontSize: typography.sizes.xxl,
     fontWeight: typography.weights.bold,
-    color: colors.ink,
+    color: colors.forestLightInk,
     marginBottom: spacing.xs,
   },
   subtitle: {
     fontSize: typography.sizes.base,
-    color: colors.inkSoft,
+    color: colors.forestLightInkSoft,
     marginBottom: spacing.xl,
     lineHeight: 22,
   },
   helperText: {
     fontSize: typography.sizes.sm,
-    color: colors.inkFaint,
+    color: colors.forestLightInkFaint,
     textAlign: "center",
     marginVertical: spacing.md,
     fontStyle: "italic",
@@ -334,14 +334,14 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   dvaCard: {
-    backgroundColor: colors.primarySoft,
+    backgroundColor: colors.forestLightPill,
     borderRadius: radii.md,
     padding: spacing.lg,
     marginBottom: spacing.lg,
   },
   dvaLabel: {
     fontSize: typography.sizes.xs,
-    color: colors.inkFaint,
+    color: colors.forestLightInkFaint,
     textTransform: "uppercase",
     letterSpacing: 0.5,
     marginBottom: spacing.xs,
@@ -349,19 +349,19 @@ const styles = StyleSheet.create({
   dvaBankName: {
     fontSize: typography.sizes.base,
     fontWeight: typography.weights.semibold,
-    color: colors.ink,
+    color: colors.forestLightInk,
     marginBottom: spacing.md,
   },
   dvaNumber: {
     fontSize: typography.sizes.xl,
     fontWeight: typography.weights.bold,
-    color: colors.ink,
+    color: colors.forestLightInk,
     letterSpacing: 2,
     marginBottom: spacing.md,
   },
   dvaAccountName: {
     fontSize: typography.sizes.sm,
-    color: colors.inkSoft,
+    color: colors.forestLightInkSoft,
     marginBottom: spacing.md,
   },
   successContainer: {
@@ -378,7 +378,7 @@ const styles = StyleSheet.create({
   },
   successText: {
     fontSize: typography.sizes.base,
-    color: colors.inkSoft,
+    color: colors.forestLightInkSoft,
     textAlign: "center",
     marginBottom: spacing.xl,
   },

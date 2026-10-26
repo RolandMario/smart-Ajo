@@ -8,11 +8,13 @@ var WalletTransactionType;
     WalletTransactionType["CONTRIBUTION_REFUND"] = "contribution_refund";
     WalletTransactionType["BILL_PAYMENT"] = "bill_payment";
     WalletTransactionType["SERVICE_FEE_DEBIT"] = "service_fee_debit";
+    WalletTransactionType["SERVICE_FEE_REFUND"] = "service_fee_refund";
     WalletTransactionType["SERVICE_FEE_CREDIT"] = "service_fee_credit";
     WalletTransactionType["BILL_COMMISSION_CREDIT"] = "bill_commission_credit";
     WalletTransactionType["ADMIN_CREDIT"] = "admin_credit";
     WalletTransactionType["ADMIN_WITHDRAWAL"] = "admin_withdrawal";
     WalletTransactionType["SAVINGS_DEBIT"] = "savings_debit";
+    WalletTransactionType["DONATION_DEBIT"] = "donation_debit";
 })(WalletTransactionType || (exports.WalletTransactionType = WalletTransactionType = {}));
 var WalletTransactionStatus;
 (function (WalletTransactionStatus) {
@@ -23,6 +25,7 @@ var WalletTransactionStatus;
 var GroupWalletTransactionType;
 (function (GroupWalletTransactionType) {
     GroupWalletTransactionType["CONTRIBUTION_CREDIT"] = "contribution_credit";
+    GroupWalletTransactionType["ESCROW_DEPOSIT_CREDIT"] = "escrow_deposit_credit";
     GroupWalletTransactionType["PAYOUT_DEBIT"] = "payout_debit";
     GroupWalletTransactionType["PAYOUT_REVERSAL_CREDIT"] = "payout_reversal_credit";
     GroupWalletTransactionType["SERVICE_FEE_CREDIT"] = "service_fee_credit";

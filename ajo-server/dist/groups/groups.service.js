@@ -20,11 +20,15 @@ const crypto_1 = require("crypto");
 const cycle_schema_1 = require("../cycles/schemas/cycle.schema");
 const contribution_schema_1 = require("../cycles/schemas/contribution.schema");
 const group_wallet_schema_1 = require("../cycles/schemas/group-wallet.schema");
+const group_wallet_transaction_schema_1 = require("../cycles/schemas/group-wallet-transaction.schema");
+const escrow_deposit_schema_1 = require("../cycles/schemas/escrow-deposit.schema");
+const payout_schema_1 = require("../cycles/schemas/payout.schema");
 const group_schema_1 = require("./schemas/group.schema");
 const group_member_schema_1 = require("./schemas/group-member.schema");
 const respond_to_invite_dto_1 = require("./dto/respond-to-invite.dto");
 const cycle_enum_1 = require("../common/enums/cycle.enum");
 const group_enum_1 = require("../common/enums/group.enum");
+const join_code_1 = require("./join-code");
 const users_service_1 = require("../users/users.service");
 const group_access_service_1 = require("./group-access.service");
 const notifications_service_1 = require("../notifications/notifications.service");
@@ -36,16 +40,22 @@ let GroupsService = class GroupsService {
     cycleModel;
     contributionModel;
     groupWalletModel;
+    groupWalletTxModel;
+    escrowDepositModel;
+    payoutModel;
     connection;
     usersService;
     groupAccess;
     notificationsService;
-    constructor(groupModel, groupMemberModel, cycleModel, contributionModel, groupWalletModel, connection, usersService, groupAccess, notificationsService) {
+    constructor(groupModel, groupMemberModel, cycleModel, contributionModel, groupWalletModel, groupWalletTxModel, escrowDepositModel, payoutModel, connection, usersService, groupAccess, notificationsService) {
         this.groupModel = groupModel;
         this.groupMemberModel = groupMemberModel;
         this.cycleModel = cycleModel;
         this.contributionModel = contributionModel;
         this.groupWalletModel = groupWalletModel;
+        this.groupWalletTxModel = groupWalletTxModel;
+        this.escrowDepositModel = escrowDepositModel;
+        this.payoutModel = payoutModel;
         this.connection = connection;
         this.usersService = usersService;
         this.groupAccess = groupAccess;
@@ -113,30 +123,50 @@ let GroupsService = class GroupsService {
         try {
             let group;
             let membership;
-            await session.withTransaction(async () => {
-                const [groupDoc] = await this.groupModel.create([
-                    {
-                        name: dto.name,
-                        createdBy: new mongoose_2.Types.ObjectId(userId),
-                        contributionAmount: dto.contributionAmount,
-                        frequency: dto.frequency ?? group_enum_1.ContributionFrequency.MONTHLY,
-                        totalSlots: dto.totalSlots,
-                        rotationMethod: dto.rotationMethod,
-                    },
-                ], { session });
-                const [memberDoc] = await this.groupMemberModel.create([
-                    {
-                        group: groupDoc._id,
-                        user: new mongoose_2.Types.ObjectId(userId),
-                        isGroupAdmin: true,
-                        inviteStatus: group_enum_1.InviteStatus.ACCEPTED,
-                        respondedAt: new Date(),
-                    },
-                ], { session });
-                group = groupDoc;
-                membership = memberDoc;
-            });
-            return { group: group, membership: membership };
+            let lastError;
+            for (let attempt = 0; attempt < 5; attempt++) {
+                try {
+                    await session.withTransaction(async () => {
+                        const [groupDoc] = await this.groupModel.create([
+                            {
+                                name: dto.name,
+                                joinCode: (0, join_code_1.generateJoinCode)(),
+                                createdBy: new mongoose_2.Types.ObjectId(userId),
+                                contributionAmount: dto.contributionAmount,
+                                frequency: dto.frequency ?? group_enum_1.ContributionFrequency.MONTHLY,
+                                totalSlots: dto.totalSlots,
+                                rotationMethod: dto.rotationMethod,
+                            },
+                        ], { session });
+                        const [memberDoc] = await this.groupMemberModel.create([
+                            {
+                                group: groupDoc._id,
+                                user: new mongoose_2.Types.ObjectId(userId),
+                                isGroupAdmin: true,
+                                inviteStatus: group_enum_1.InviteStatus.ACCEPTED,
+                                respondedAt: new Date(),
+                            },
+                        ], { session });
+                        group = groupDoc;
+                        membership = memberDoc;
+                    });
+                    break;
+                }
+                catch (error) {
+                    const isDuplicateCode = typeof error === 'object' &&
+                        error !== null &&
+                        error.code === 11000;
+                    if (!isDuplicateCode)
+                        throw error;
+                    lastError = error;
+                }
+            }
+            if (!group || !membership) {
+                if (lastError instanceof Error)
+                    throw lastError;
+                throw new common_1.ConflictException('Could not generate a unique group ID');
+            }
+            return { group, membership };
         }
         finally {
             await session.endSession();
@@ -187,6 +217,90 @@ let GroupsService = class GroupsService {
             .populate('user', MEMBER_USER_FIELDS)
             .sort({ position: 1, createdAt: 1 })
             .lean();
+    }
+    async searchGroupByCode(userId, code) {
+        const group = await this.findGroupByJoinCode(code);
+        if (!group || group.status === group_enum_1.GroupStatus.TERMINATED) {
+            throw new common_1.NotFoundException('No group found with that Group ID. Check the ID and try again.');
+        }
+        const memberCount = await this.groupMemberModel.countDocuments({
+            group: group._id,
+            inviteStatus: group_enum_1.InviteStatus.ACCEPTED,
+        });
+        const membership = await this.groupMemberModel.findOne({
+            group: group._id,
+            user: new mongoose_2.Types.ObjectId(userId),
+        });
+        return {
+            group: group.toObject(),
+            memberCount,
+            isMember: membership?.inviteStatus === group_enum_1.InviteStatus.ACCEPTED,
+            isAdmin: membership?.isGroupAdmin ?? false,
+            isFull: memberCount >= group.totalSlots,
+            joinable: group.status === group_enum_1.GroupStatus.OPEN_FOR_INVITES &&
+                memberCount < group.totalSlots &&
+                membership?.inviteStatus !== group_enum_1.InviteStatus.ACCEPTED,
+        };
+    }
+    async joinGroupByCode(userId, code) {
+        const group = await this.findGroupByJoinCode(code);
+        if (!group || group.status === group_enum_1.GroupStatus.TERMINATED) {
+            throw new common_1.NotFoundException('No group found with that Group ID. Check the ID and try again.');
+        }
+        if (group.status !== group_enum_1.GroupStatus.OPEN_FOR_INVITES) {
+            throw new common_1.BadRequestException('This group is no longer accepting new members');
+        }
+        if (group.createdBy.toString() === userId) {
+            throw new common_1.ConflictException('You are the admin of this group');
+        }
+        const existing = await this.groupMemberModel.findOne({
+            group: group._id,
+            user: new mongoose_2.Types.ObjectId(userId),
+        });
+        if (existing && existing.inviteStatus === group_enum_1.InviteStatus.ACCEPTED) {
+            throw new common_1.ConflictException('You are already a member of this group');
+        }
+        const acceptedCount = await this.groupMemberModel.countDocuments({
+            group: group._id,
+            inviteStatus: group_enum_1.InviteStatus.ACCEPTED,
+        });
+        if (acceptedCount >= group.totalSlots) {
+            throw new common_1.BadRequestException('This group is full');
+        }
+        let membership;
+        if (existing) {
+            existing.inviteStatus = group_enum_1.InviteStatus.ACCEPTED;
+            existing.respondedAt = new Date();
+            membership = await existing.save();
+        }
+        else {
+            membership = await this.groupMemberModel.create({
+                group: group._id,
+                user: new mongoose_2.Types.ObjectId(userId),
+                isGroupAdmin: false,
+                inviteStatus: group_enum_1.InviteStatus.ACCEPTED,
+                respondedAt: new Date(),
+            });
+        }
+        const adminMembership = await this.groupMemberModel.findOne({
+            group: group._id,
+            isGroupAdmin: true,
+        });
+        if (adminMembership) {
+            const joiningUser = await this.usersService.findById(userId);
+            const memberName = joiningUser?.name ?? joiningUser?.phone ?? 'A member';
+            void this.notificationsService.send(notification_events_1.NotificationEvents.groupMemberJoined({
+                userIds: [adminMembership.user.toString()],
+                memberName,
+                groupName: group.name,
+                data: { groupId: group._id.toString() },
+            }));
+        }
+        const populated = await this.populateMember(membership._id);
+        return { group: group.toObject(), membership: populated };
+    }
+    async findGroupByJoinCode(code) {
+        return this.groupModel.findOne({ joinCode: (0, join_code_1.normalizeJoinCode)(code) });
     }
     async inviteMember(adminUserId, groupId, phone) {
         const group = await this.groupAccess.getGroupOrThrow(groupId);
@@ -437,30 +551,74 @@ let GroupsService = class GroupsService {
         if (group.status !== group_enum_1.GroupStatus.COMPLETED) {
             throw new common_1.BadRequestException('Only completed groups can be terminated');
         }
-        group.autoCollectEnabled = false;
-        group.status = group_enum_1.GroupStatus.TERMINATED;
-        await group.save();
+        const groupWallet = await this.groupWalletModel.findOne({
+            group: group._id,
+        });
+        if (groupWallet && groupWallet.balance > 0) {
+            throw new common_1.BadRequestException(`The group account still holds ₦${groupWallet.balance.toLocaleString()}. ` +
+                'Pay it out before terminating the group.');
+        }
         const members = await this.groupMemberModel.find({
             group: group._id,
             inviteStatus: group_enum_1.InviteStatus.ACCEPTED,
         });
         const memberIds = members.map((m) => m.user.toString());
+        const groupObjectId = group._id;
+        const groupName = group.name;
+        await this.purgeGroup(groupObjectId);
         void this.notificationsService.send(notification_events_1.NotificationEvents.groupTerminated({
             userIds: memberIds,
-            groupName: group.name,
-            data: { groupId: group._id.toString() },
+            groupName,
+            data: { groupId: groupObjectId.toString() },
         }));
-        return { groupId: group._id.toString(), status: group.status };
-    }
-    async setAutoCollect(adminUserId, groupId, enabled) {
-        const group = await this.groupAccess.getGroupOrThrow(groupId);
-        await this.groupAccess.assertGroupAdmin(group._id, adminUserId);
-        group.autoCollectEnabled = enabled;
-        await group.save();
         return {
-            groupId: group._id.toString(),
-            autoCollectEnabled: group.autoCollectEnabled,
+            groupId: groupObjectId.toString(),
+            status: group_enum_1.GroupStatus.TERMINATED,
         };
+    }
+    async purgeGroup(groupId) {
+        const session = await this.connection.startSession();
+        try {
+            await session.withTransaction(async () => {
+                await this.groupWalletTxModel.deleteMany({ group: groupId }, { session });
+                await this.escrowDepositModel.deleteMany({ group: groupId }, { session });
+                await this.payoutModel.deleteMany({ group: groupId }, { session });
+                await this.contributionModel.deleteMany({ group: groupId }, { session });
+                await this.cycleModel.deleteMany({ group: groupId }, { session });
+                await this.groupWalletModel.deleteMany({ group: groupId }, { session });
+                await this.groupMemberModel.deleteMany({ group: groupId }, { session });
+                await this.groupModel.deleteOne({ _id: groupId }, { session });
+            });
+        }
+        finally {
+            await session.endSession();
+        }
+    }
+    async purgeTerminatedGroups(options = {}) {
+        const dryRun = options.dryRun ?? false;
+        const terminatedGroups = await this.groupModel
+            .find({ status: group_enum_1.GroupStatus.TERMINATED })
+            .select('name');
+        const purged = [];
+        const skipped = [];
+        for (const group of terminatedGroups) {
+            const groupWallet = await this.groupWalletModel
+                .findOne({ group: group._id })
+                .select('balance');
+            if (groupWallet && groupWallet.balance > 0) {
+                skipped.push({
+                    id: group._id.toString(),
+                    name: group.name,
+                    balance: groupWallet.balance,
+                });
+                continue;
+            }
+            if (!dryRun) {
+                await this.purgeGroup(group._id);
+            }
+            purged.push({ id: group._id.toString(), name: group.name });
+        }
+        return { dryRun, scanned: terminatedGroups.length, purged, skipped };
     }
     async updateGroup(adminUserId, groupId, dto) {
         const group = await this.groupAccess.getGroupOrThrow(groupId);
@@ -507,9 +665,15 @@ exports.GroupsService = GroupsService = __decorate([
     __param(2, (0, mongoose_1.InjectModel)(cycle_schema_1.Cycle.name)),
     __param(3, (0, mongoose_1.InjectModel)(contribution_schema_1.Contribution.name)),
     __param(4, (0, mongoose_1.InjectModel)(group_wallet_schema_1.GroupWallet.name)),
-    __param(5, (0, mongoose_1.InjectConnection)()),
-    __param(8, (0, common_1.Inject)((0, common_1.forwardRef)(() => notifications_service_1.NotificationsService))),
+    __param(5, (0, mongoose_1.InjectModel)(group_wallet_transaction_schema_1.GroupWalletTransaction.name)),
+    __param(6, (0, mongoose_1.InjectModel)(escrow_deposit_schema_1.EscrowDeposit.name)),
+    __param(7, (0, mongoose_1.InjectModel)(payout_schema_1.Payout.name)),
+    __param(8, (0, mongoose_1.InjectConnection)()),
+    __param(11, (0, common_1.Inject)((0, common_1.forwardRef)(() => notifications_service_1.NotificationsService))),
     __metadata("design:paramtypes", [mongoose_2.Model,
+        mongoose_2.Model,
+        mongoose_2.Model,
+        mongoose_2.Model,
         mongoose_2.Model,
         mongoose_2.Model,
         mongoose_2.Model,

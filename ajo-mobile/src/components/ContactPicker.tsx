@@ -136,7 +136,7 @@ export function ContactPicker({ visible, onSelect, onClose }: ContactPickerProps
         <TextInput
           style={styles.search}
           placeholder="Search name or number"
-          placeholderTextColor={colors.inkFaint}
+          placeholderTextColor={colors.forestLightInkFaint}
           value={search}
           onChangeText={setSearch}
           accessibilityLabel="Search contacts"
@@ -202,7 +202,7 @@ export function ContactPicker({ visible, onSelect, onClose }: ContactPickerProps
 const styles = StyleSheet.create({
   backdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.4)" },
   sheet: {
-    backgroundColor: colors.surface,
+    backgroundColor: colors.white,
     borderTopLeftRadius: radii.lg,
     borderTopRightRadius: radii.lg,
     maxHeight: "80%",
@@ -214,19 +214,19 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     padding: spacing.lg,
     borderBottomWidth: 1,
-    borderBottomColor: colors.line,
+    borderBottomColor: colors.forestLightLine,
   },
-  title: { fontSize: typography.sizes.lg, fontWeight: typography.weights.semibold, color: colors.ink },
-  close: { fontSize: typography.sizes.lg, color: colors.inkSoft, paddingHorizontal: spacing.sm },
+  title: { fontSize: typography.sizes.lg, fontWeight: typography.weights.semibold, color: colors.forestLightInk },
+  close: { fontSize: typography.sizes.lg, color: colors.forestLightInkSoft, paddingHorizontal: spacing.sm },
   search: {
     minHeight: 48,
     borderRadius: radii.md,
     borderWidth: 1,
-    borderColor: colors.line,
-    backgroundColor: colors.surfaceSunken,
+    borderColor: colors.forestLightLine,
+    backgroundColor: colors.forestLightField,
     paddingHorizontal: spacing.lg,
     fontSize: typography.sizes.base,
-    color: colors.ink,
+    color: colors.forestLightInk,
     marginHorizontal: spacing.lg,
     marginBottom: spacing.md,
   },
@@ -237,22 +237,22 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.md,
     borderBottomWidth: 1,
-    borderBottomColor: colors.line,
+    borderBottomColor: colors.forestLightLine,
     gap: spacing.md,
   },
   avatar: {
     width: 40,
     height: 40,
     borderRadius: radii.full,
-    backgroundColor: colors.primarySoft,
+    backgroundColor: colors.forestLightPill,
     alignItems: "center",
     justifyContent: "center",
   },
-  avatarText: { fontSize: typography.sizes.sm, fontWeight: typography.weights.semibold, color: colors.primary },
+  avatarText: { fontSize: typography.sizes.sm, fontWeight: typography.weights.semibold, color: colors.forestAction },
   rowBody: { flex: 1 },
-  rowName: { fontSize: typography.sizes.base, color: colors.ink, fontWeight: typography.weights.medium },
-  rowPhone: { fontSize: typography.sizes.sm, color: colors.inkSoft },
-  stateText: { fontSize: typography.sizes.sm, color: colors.inkSoft, marginHorizontal: spacing.lg, marginTop: spacing.md },
+  rowName: { fontSize: typography.sizes.base, color: colors.forestLightInk, fontWeight: typography.weights.medium },
+  rowPhone: { fontSize: typography.sizes.sm, color: colors.forestLightInkSoft },
+  stateText: { fontSize: typography.sizes.sm, color: colors.forestLightInkSoft, marginHorizontal: spacing.lg, marginTop: spacing.md },
   stateTextCenter: { alignSelf: "center" },
   stateRow: {
     flexDirection: "row",
@@ -266,8 +266,8 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.xs,
     borderRadius: radii.full,
     borderWidth: 1,
-    borderColor: colors.line,
-    backgroundColor: colors.surface,
+    borderColor: colors.forestLightLine,
+    backgroundColor: colors.white,
   },
-  retryText: { fontSize: typography.sizes.sm, fontWeight: typography.weights.semibold, color: colors.primary },
+  retryText: { fontSize: typography.sizes.sm, fontWeight: typography.weights.semibold, color: colors.forestAction },
 });

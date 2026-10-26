@@ -7,7 +7,7 @@ import { Tabs } from "@/components/ui/tabs";
 import { Pagination } from "@/components/ui/pagination";
 import { Stat } from "@/components/ui/stat";
 import { Button } from "@/components/ui/button";
-import { listWalletTransactions, listPayouts, listGroupWalletTransactions, listServiceFeeTransactions, getAdminWallet, listAdminBanks } from "@/lib/data/finance";
+import { listWalletTransactions, listPayouts, listGroupWalletTransactions, listServiceFeeTransactions, getAdminWallet, listAdminBanks, getServiceCharges, getServiceChargeTotals } from "@/lib/data/finance";
 import { formatCurrency, formatDate } from "@/lib/format";
 import {
   walletTxStatusTone,
@@ -18,12 +18,14 @@ import {
 } from "@/lib/status-display";
 import type { GroupWalletTransactionType } from "@/lib/types/api";
 import { AdminWalletForms, BillCommissionCreditsTable } from "./admin-wallet-form";
+import { ServiceChargesForm } from "./service-charges-form";
 
 const TABS = [
   { value: "fundings", label: "Wallet Fundings" },
   { value: "payouts", label: "Payouts" },
   { value: "ledger", label: "Group Wallet Ledger" },
   { value: "service-fees", label: "Service Fees" },
+  { value: "charges", label: "Service Charges" },
   { value: "admin-wallet", label: "Admin Wallet" },
 ];
 
@@ -65,6 +67,7 @@ export default async function FinancePage({ searchParams }: FinancePageProps) {
         {tab === "service-fees" && (
           <ServiceFeesTab page={page} buildHref={buildPageHref} />
         )}
+        {tab === "charges" && <ServiceChargesTab />}
         {tab === "admin-wallet" && <AdminWalletTab />}
       </div>
     </>
@@ -353,6 +356,62 @@ async function LedgerTab({
       </Card>
       <Pagination page={page} totalPages={totalPages} total={total} buildHref={buildHref} />
     </>
+  );
+}
+
+async function ServiceChargesTab() {
+  const [charges, totals] = await Promise.all([
+    getServiceCharges(),
+    getServiceChargeTotals(),
+  ]);
+
+  return (
+    <div className="space-y-6">
+      {/* Service-charge balance — every fee the platform has kept so far. */}
+      <Card className="p-5">
+        <p className="text-xs uppercase tracking-wide text-ink-soft mb-1">
+          Service Charge Balance
+        </p>
+        <p className="text-2xl font-bold text-ink">
+          {formatCurrency(totals.netCollected)}
+        </p>
+        <p className="text-xs text-ink-soft mt-2 max-w-2xl">
+          Total service charges collected across the platform — the escrow
+          transfer fee on wallet → escrow transfers plus the fee deducted from
+          bank payouts, less any fee refunded when a contribution or payout was
+          reversed. Admin-wallet withdrawals are not deducted here.
+        </p>
+
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-5 pt-5 border-t border-line">
+          <Stat
+            label="Fees collected"
+            value={
+              <span className="font-mono">
+                {formatCurrency(totals.totalCollected)}
+              </span>
+            }
+          />
+          <Stat
+            label="Fees refunded"
+            value={
+              <span className="font-mono">
+                {formatCurrency(totals.totalReversed)}
+              </span>
+            }
+          />
+          <Stat
+            label="Charges recorded"
+            value={
+              <span className="font-mono">
+                {totals.chargeCount.toLocaleString("en-NG")}
+              </span>
+            }
+          />
+        </div>
+      </Card>
+
+      <ServiceChargesForm charges={charges} />
+    </div>
   );
 }
 

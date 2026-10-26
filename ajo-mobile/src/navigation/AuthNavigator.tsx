@@ -6,6 +6,7 @@ import { RegisterScreen } from "../screens/auth/RegisterScreen";
 import { OtpVerificationScreen } from "../screens/auth/OtpVerificationScreen";
 import { ForgotPasswordScreen } from "../screens/auth/ForgotPasswordScreen";
 import { ResetPasswordScreen } from "../screens/auth/ResetPasswordScreen";
+import { WelcomeScreen } from "../screens/auth/WelcomeScreen";
 import { SplashScreen } from "../components/SplashScreen";
 import { colors } from "../theme";
 
@@ -16,10 +17,11 @@ export function AuthNavigator() {
     <Stack.Navigator
       screenOptions={{
         headerShown: false,
-        contentStyle: { backgroundColor: colors.canvas },
+        contentStyle: { backgroundColor: colors.forest },
       }}
     >
       <Stack.Screen name="Splash" component={SplashScreen} />
+      <Stack.Screen name="Welcome" component={WelcomeScreen} />
       <Stack.Screen name="PhoneEntry" component={PhoneEntryScreen} />
       <Stack.Screen name="Register" component={RegisterScreen} />
       <Stack.Screen name="OtpVerification" component={OtpVerificationScreen} />

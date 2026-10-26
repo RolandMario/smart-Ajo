@@ -21,12 +21,14 @@ const platform_admin_management_controller_1 = require("./platform-admin-managem
 const platform_admin_wallet_service_1 = require("./platform-admin-wallet.service");
 const platform_admin_wallet_controller_1 = require("./platform-admin-wallet.controller");
 const platform_admin_bills_controller_1 = require("./platform-admin-bills.controller");
+const platform_admin_settings_controller_1 = require("./platform-admin-settings.controller");
 const groups_module_1 = require("../groups/groups.module");
 const cycles_module_1 = require("../cycles/cycles.module");
 const users_module_1 = require("../users/users.module");
 const wallet_module_1 = require("../wallet/wallet.module");
 const payments_module_1 = require("../payments/payments.module");
 const bills_module_1 = require("../bills/bills.module");
+const platform_settings_module_1 = require("../platform-settings/platform-settings.module");
 let AdminModule = class AdminModule {
 };
 exports.AdminModule = AdminModule;
@@ -39,6 +41,7 @@ exports.AdminModule = AdminModule = __decorate([
             wallet_module_1.WalletModule,
             payments_module_1.PaymentsModule,
             bills_module_1.BillsModule,
+            platform_settings_module_1.PlatformSettingsModule,
         ],
         controllers: [
             group_dashboard_controller_1.GroupDashboardController,
@@ -48,6 +51,7 @@ exports.AdminModule = AdminModule = __decorate([
             platform_admin_management_controller_1.PlatformAdminManagementController,
             platform_admin_wallet_controller_1.PlatformAdminWalletController,
             platform_admin_bills_controller_1.PlatformAdminBillsController,
+            platform_admin_settings_controller_1.PlatformAdminSettingsController,
         ],
         providers: [
             group_dashboard_service_1.GroupDashboardService,

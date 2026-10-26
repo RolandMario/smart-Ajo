@@ -23,13 +23,13 @@ import { ContributionStatus } from '../common/enums/cycle.enum';
 export interface PaginatedGroups {
   groups: Array<{
     id: string;
+    joinCode: string;
     name: string;
     status: string;
     contributionAmount: number;
     frequency: string;
     totalSlots: number;
     rotationMethod: string;
-    autoCollectEnabled: boolean;
     currentCycleNumber: number | null;
     createdAt: Date;
   }>;
@@ -59,6 +59,8 @@ export interface GroupCycleSummary {
   paidCount: number;
   defaultedCount: number;
   pendingCount: number;
+  /** Members who reported a bank transfer the group admin hasn't verified. */
+  awaitingConfirmationCount: number;
   completedAt?: Date;
 }
 
@@ -75,17 +77,28 @@ export interface GroupPayoutSummary {
 
 export interface GroupDetail {
   id: string;
+  joinCode: string;
   name: string;
   status: string;
   contributionAmount: number;
   frequency: string;
   totalSlots: number;
   rotationMethod: string;
-  autoCollectEnabled: boolean;
   currentCycleNumber: number | null;
   orderLockedAt?: Date;
   startDate?: Date;
   centralWalletBalance: number;
+  /** Platform service fee per contribution (smallest currency unit). */
+  serviceFee: number;
+  /** The group's escrow DVA (bank-transfer destination), once provisioned. */
+  escrowAccount?: {
+    bankName: string;
+    accountName: string;
+    accountNumber: string;
+    provider: string;
+    currency: string;
+    active: boolean;
+  };
   admin?: { id: string; name?: string; phone: string };
   members: GroupMemberStanding[];
   cycles: GroupCycleSummary[];
@@ -150,13 +163,13 @@ export class PlatformAdminGroupsService {
     return {
       groups: groups.map((g) => ({
         id: g._id.toString(),
+        joinCode: g.joinCode ?? '',
         name: g.name,
         status: g.status,
         contributionAmount: g.contributionAmount,
         frequency: g.frequency,
         totalSlots: g.totalSlots,
         rotationMethod: g.rotationMethod,
-        autoCollectEnabled: g.autoCollectEnabled,
         currentCycleNumber: g.currentCycleNumber ?? null,
         createdAt: (g as unknown as { createdAt: Date }).createdAt,
       })),
@@ -244,7 +257,12 @@ export class PlatformAdminGroupsService {
 
       const countsByCycle = new Map<
         string,
-        { paid: number; pending: number; defaulted: number }
+        {
+          paid: number;
+          pending: number;
+          defaulted: number;
+          awaitingConfirmation: number;
+        }
       >();
 
       for (const cycle of cycles) {
@@ -252,6 +270,7 @@ export class PlatformAdminGroupsService {
           paid: 0,
           pending: 0,
           defaulted: 0,
+          awaitingConfirmation: 0,
         });
       }
 
@@ -262,6 +281,10 @@ export class PlatformAdminGroupsService {
         if (contribution.status === ContributionStatus.PAID) counts.paid += 1;
         else if (contribution.status === ContributionStatus.DEFAULTED)
           counts.defaulted += 1;
+        else if (
+          contribution.status === ContributionStatus.AWAITING_CONFIRMATION
+        )
+          counts.awaitingConfirmation += 1;
         else counts.pending += 1;
       }
 
@@ -277,6 +300,7 @@ export class PlatformAdminGroupsService {
           paidCount: counts.paid,
           defaultedCount: counts.defaulted,
           pendingCount: counts.pending,
+          awaitingConfirmationCount: counts.awaitingConfirmation,
           completedAt: cycle.completedAt,
         };
       });
@@ -311,17 +335,28 @@ export class PlatformAdminGroupsService {
 
     return {
       id: group._id.toString(),
+      joinCode: group.joinCode ?? '',
       name: group.name,
       status: group.status,
       contributionAmount: group.contributionAmount,
       frequency: group.frequency,
       totalSlots: group.totalSlots,
       rotationMethod: group.rotationMethod,
-      autoCollectEnabled: group.autoCollectEnabled,
       currentCycleNumber: group.currentCycleNumber ?? null,
       orderLockedAt: group.orderLockedAt,
       startDate: group.startDate,
       centralWalletBalance: wallet?.balance ?? 0,
+      serviceFee: group.serviceFee ?? 0,
+      escrowAccount: group.escrowAccount?.accountNumber
+        ? {
+            bankName: group.escrowAccount.bankName ?? '',
+            accountName: group.escrowAccount.accountName ?? '',
+            accountNumber: group.escrowAccount.accountNumber ?? '',
+            provider: group.escrowAccount.provider,
+            currency: group.escrowAccount.currency,
+            active: group.escrowAccount.active,
+          }
+        : undefined,
       admin: adminUser
         ? {
             id: adminUser._id.toString(),
@@ -358,37 +393,6 @@ export class PlatformAdminGroupsService {
       group.serviceFee = serviceFee;
       await group.save();
     }
-
-    return this.getGroupDetail(groupId);
-  }
-
-  /**
-   * Overrides the group's auto-collect setting on behalf of a platform
-   * admin. This writes the same `autoCollectEnabled` flag the group's own
-   * admin controls from the mobile app, so a platform toggle here can
-   * override (and be overridden by) the group admin — whichever was set
-   * last wins.
-   *
-   * When enabled (true), the AutoCollectScheduler auto-debits member
-   * wallets for due cycles and the payout proceeds automatically. When
-   * disabled (false), collection/withdrawal stays a manual group-admin
-   * action.
-   */
-  async setAutoCollect(
-    groupId: string,
-    enabled: boolean,
-  ): Promise<GroupDetail> {
-    if (!Types.ObjectId.isValid(groupId)) {
-      throw new NotFoundException('Group not found');
-    }
-
-    const group = await this.groupModel.findById(groupId);
-    if (!group) {
-      throw new NotFoundException('Group not found');
-    }
-
-    group.autoCollectEnabled = enabled;
-    await group.save();
 
     return this.getGroupDetail(groupId);
   }

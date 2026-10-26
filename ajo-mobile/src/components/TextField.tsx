@@ -14,10 +14,19 @@ import { colors, radii, spacing, typography } from "../theme";
 /** The exact literal-union of valid Ionicon glyph names. */
 type IoniconName = ComponentProps<typeof Ionicons>["name"];
 
+type TextFieldVariant = "default" | "light";
+
 interface TextFieldProps extends TextInputProps {
   label?: string;
   error?: string;
   helperText?: string;
+  /**
+   * Surface the field sits on. `default` is the standard field on the
+   * pale forest canvas; `light` is the taller sign-in treatment with a
+   * green-wash fill and a "Show"/"Hide" text toggle in place of the eye
+   * glyph.
+   */
+  variant?: TextFieldVariant;
   /** Show a show/hide toggle on the right side of a secure (password) field. */
   secureToggle?: boolean;
   /**
@@ -33,18 +42,34 @@ interface TextFieldProps extends TextInputProps {
 }
 
 export const TextField = forwardRef<TextInput, TextFieldProps>(
-  ({ label, error, helperText, secureTextEntry, secureToggle = false, action, style, ...props }, ref) => {
+  (
+    {
+      label,
+      error,
+      helperText,
+      variant = "default",
+      secureTextEntry,
+      secureToggle = false,
+      action,
+      style,
+      ...props
+    },
+    ref,
+  ) => {
     const [revealed, setRevealed] = useState(false);
     const showToggle = Boolean(secureTextEntry && secureToggle);
+    const isLight = variant === "light";
 
     return (
-      <View style={styles.container}>
-        {label && <Text style={styles.label}>{label}</Text>}
-        <View style={[styles.inputWrap, error && styles.inputError]}>
+      <View style={[styles.container, isLight && styles.containerLight]}>
+        {label && <Text style={[styles.label, isLight && styles.labelLight]}>{label}</Text>}
+        <View
+          style={[styles.inputWrap, isLight && styles.inputWrapLight, error && styles.inputError]}
+        >
           <TextInput
             ref={ref}
-            style={[styles.input, style]}
-            placeholderTextColor={colors.inkFaint}
+            style={[styles.input, isLight && styles.inputLight, style]}
+            placeholderTextColor={isLight ? colors.forestLightInkFaint : colors.forestLightInkFaint}
             secureTextEntry={secureTextEntry && !revealed}
             {...props}
           />
@@ -55,7 +80,7 @@ export const TextField = forwardRef<TextInput, TextFieldProps>(
               onPress={action.onPress}
               style={({ pressed }) => [styles.actionButton, pressed && { opacity: 0.8 }]}
             >
-              <Ionicons name={action.icon} size={20} color={colors.primary} />
+              <Ionicons name={action.icon} size={20} color={colors.forestAction} />
             </Pressable>
           ) : null}
           {showToggle ? (
@@ -63,20 +88,24 @@ export const TextField = forwardRef<TextInput, TextFieldProps>(
               onPress={() => setRevealed((v) => !v)}
               accessibilityRole="button"
               accessibilityLabel={revealed ? "Hide password" : "Show password"}
-              style={styles.toggleButton}
+              style={isLight ? styles.toggleLabelButton : styles.toggleButton}
             >
-              <Ionicons
-                name={revealed ? "eye-off" : "eye"}
-                size={20}
-                color={colors.inkSoft}
-              />
+              {isLight ? (
+                <Text style={styles.toggleLabel}>{revealed ? "Hide" : "Show"}</Text>
+              ) : (
+                <Ionicons
+                  name={revealed ? "eye-off" : "eye"}
+                  size={20}
+                  color={colors.forestLightInkSoft}
+                />
+              )}
             </TouchableOpacity>
           ) : null}
         </View>
         {error ? (
           <Text style={styles.errorText}>{error}</Text>
         ) : helperText ? (
-          <Text style={styles.helperText}>{helperText}</Text>
+          <Text style={[styles.helperText, isLight && styles.helperTextLight]}>{helperText}</Text>
         ) : null}
       </View>
     );
@@ -92,7 +121,7 @@ const styles = StyleSheet.create({
   label: {
     fontSize: typography.sizes.sm,
     fontWeight: typography.weights.medium,
-    color: colors.inkSoft,
+    color: colors.forestLightInkSoft,
     marginBottom: spacing.xs,
   },
   inputWrap: {
@@ -101,15 +130,15 @@ const styles = StyleSheet.create({
     minHeight: 52,
     borderRadius: radii.md,
     borderWidth: 1,
-    borderColor: colors.line,
-    backgroundColor: colors.surfaceSunken,
+    borderColor: colors.forestLightLine,
+    backgroundColor: colors.forestLightField,
   },
   input: {
     flex: 1,
     minHeight: 52,
     paddingHorizontal: spacing.lg,
     fontSize: typography.sizes.base,
-    color: colors.ink,
+    color: colors.forestLightInk,
     // The container renders the field background; keep the raw input
     // transparent so the OS never paints a default background over it.
     backgroundColor: "transparent",
@@ -126,7 +155,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     borderRadius: radii.sm,
-    backgroundColor: colors.primarySoft,
+    backgroundColor: colors.forestLightPill,
     marginLeft: spacing.xs,
   },
   inputError: {
@@ -140,6 +169,43 @@ const styles = StyleSheet.create({
   helperText: {
     marginTop: spacing.xs,
     fontSize: typography.sizes.xs,
-    color: colors.inkFaint,
+    color: colors.forestLightInkFaint,
+  },
+  // --- Light (pale forest) surface ----------------------------------
+  // Same control, restyled for the light auth screens: taller, rounder,
+  // a green-wash fill, larger type, and a text toggle.
+  containerLight: {
+    marginBottom: spacing.xxl,
+  },
+  labelLight: {
+    fontSize: typography.sizes.base,
+    marginBottom: spacing.sm,
+    color: colors.forestLightInkSoft,
+  },
+  inputWrapLight: {
+    minHeight: 64,
+    borderRadius: radii.lg,
+    backgroundColor: colors.forestLightField,
+    borderColor: colors.forestLightLine,
+  },
+  inputLight: {
+    minHeight: 64,
+    paddingHorizontal: spacing.xl,
+    fontSize: typography.sizes.lg,
+    color: colors.forestLightInk,
+  },
+  toggleLabelButton: {
+    minHeight: 64,
+    paddingHorizontal: spacing.xl,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  toggleLabel: {
+    fontSize: typography.sizes.base,
+    fontWeight: typography.weights.semibold,
+    color: colors.forestAction,
+  },
+  helperTextLight: {
+    color: colors.forestLightInkFaint,
   },
 });

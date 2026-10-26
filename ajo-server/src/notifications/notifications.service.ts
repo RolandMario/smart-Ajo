@@ -162,13 +162,18 @@ export class NotificationsService {
 
   // ---- Inbox (mobile app) ----------------------------------------------------
 
+  /**
+   * One page of the member's in-app inbox (newest first) plus the unread
+   * badge count and the total number of inbox rows, so the client can page
+   * through the list ("Page 2 of 5") without over-fetching.
+   */
   async listForUser(
     userId: string,
     opts: { limit?: number; skip?: number } = {},
   ) {
     const { limit = 20, skip = 0 } = opts;
 
-    const [notifications, unreadCount] = await Promise.all([
+    const [notifications, unreadCount, total] = await Promise.all([
       this.notificationModel
         .find({
           user: new Types.ObjectId(userId),
@@ -183,9 +188,13 @@ export class NotificationsService {
         channel: NotificationChannel.PUSH,
         isRead: false,
       }),
+      this.notificationModel.countDocuments({
+        user: new Types.ObjectId(userId),
+        channel: NotificationChannel.PUSH,
+      }),
     ]);
 
-    return { notifications, unreadCount };
+    return { notifications, unreadCount, total };
   }
 
   async markRead(userId: string, notificationIds: string[]): Promise<void> {

@@ -1,5 +1,8 @@
 import axios from 'axios';
-import { PaystackService } from './paystack.service';
+import {
+  PaystackService,
+  PAYSTACK_NOT_CONFIGURED_MESSAGE,
+} from './paystack.service';
 
 /**
  * Focused unit tests for Dedicated Virtual Account (DVA) bank selection:
@@ -18,12 +21,17 @@ jest.mock('axios', () => {
 
 const createMock = axios.create as jest.Mock;
 
-function buildService(preferredBank = 'wema') {
+const VALID_TEST_KEY = 'sk_test_0123456789abcdef0123456789abcdef';
+
+function buildService(
+  preferredBank = 'wema',
+  secretKey: string | null = VALID_TEST_KEY,
+) {
   const configService = {
     get: jest.fn((key: string) => {
       switch (key) {
         case 'PAYSTACK_SECRET_KEY':
-          return 'sk_test_secret';
+          return secretKey ?? undefined;
         case 'PAYSTACK_BASE_URL':
           return 'https://api.paystack.co';
         case 'PAYSTACK_DVA_PREFERRED_BANK':
@@ -73,7 +81,7 @@ let post!: jest.Mock;
 
 beforeEach(() => {
   post = jest.fn();
-  createMock.mockReturnValue({ post, get: jest.fn() } as never);
+  createMock.mockReturnValue({ post, get: jest.fn() });
   createMock.mockClear();
 });
 
@@ -157,9 +165,15 @@ describe('PaystackService.createDedicatedAccount', () => {
 
   it('rethrows the last bank-availability error when every candidate is rejected', async () => {
     post
-      .mockRejectedValueOnce(paystackError('wema is not available in test mode'))
-      .mockRejectedValueOnce(paystackError('providus is not available in test mode'))
-      .mockRejectedValueOnce(paystackError('sterling is not available in test mode'))
+      .mockRejectedValueOnce(
+        paystackError('wema is not available in test mode'),
+      )
+      .mockRejectedValueOnce(
+        paystackError('providus is not available in test mode'),
+      )
+      .mockRejectedValueOnce(
+        paystackError('sterling is not available in test mode'),
+      )
       .mockRejectedValueOnce(
         paystackError('titan-paystack is not available in test mode'),
       );
@@ -170,5 +184,74 @@ describe('PaystackService.createDedicatedAccount', () => {
       'titan-paystack is not available in test mode',
     );
     expect(post).toHaveBeenCalledTimes(4);
+  });
+});
+
+/**
+ * Regression guard for "Paystack error: Invalid key" reaching the admin's
+ * payout screen. The server had been booting with a committed (revoked) test
+ * key, so every payment call 401'd and the raw gateway message was shown as if
+ * the payout logic were broken. These lock in the fail-fast behaviour.
+ */
+describe('PaystackService configuration guards', () => {
+  const transferParams = {
+    amountNaira: 1200,
+    recipientCode: 'RCP_test',
+    reason: 'Ajo payout',
+    reference: 'payout_test_1',
+  };
+
+  it('accepts a real-looking secret key, trimming quotes and whitespace', () => {
+    const service = buildService('wema', `  "${VALID_TEST_KEY}"\n`);
+
+    expect(service.isConfigured()).toBe(true);
+    expect(() => service.assertConfigured()).not.toThrow();
+  });
+
+  it('treats a missing key as unconfigured and refuses transfers', async () => {
+    const service = buildService('wema', null);
+
+    expect(service.isConfigured()).toBe(false);
+    expect(service.isTestMode()).toBe(false);
+    expect(() => service.assertConfigured()).toThrow(
+      PAYSTACK_NOT_CONFIGURED_MESSAGE,
+    );
+
+    await expect(service.initiateTransfer(transferParams)).rejects.toThrow(
+      PAYSTACK_NOT_CONFIGURED_MESSAGE,
+    );
+    // No HTTP call is attempted with `Bearer undefined`.
+    expect(post).not.toHaveBeenCalled();
+  });
+
+  it('treats placeholder keys as unconfigured', () => {
+    for (const key of [
+      'sk_test_your-paystack-secret-key',
+      'sk_test_placeholder',
+      'pk_test_0123456789abcdef0123456789abcdef',
+      'sk_test_short',
+    ]) {
+      expect(buildService('wema', key).isConfigured()).toBe(false);
+    }
+  });
+
+  it('maps a 401 "Invalid key" response to the configuration message', async () => {
+    post.mockRejectedValueOnce(paystackError('Invalid key', 401));
+    const service = buildService();
+
+    await expect(service.initiateTransfer(transferParams)).rejects.toThrow(
+      PAYSTACK_NOT_CONFIGURED_MESSAGE,
+    );
+  });
+
+  it('still reports ordinary 4xx transfer failures as Paystack errors', async () => {
+    post.mockRejectedValueOnce(
+      paystackError('Transfer limit exceeded for this account', 400),
+    );
+    const service = buildService();
+
+    await expect(service.initiateTransfer(transferParams)).rejects.toThrow(
+      'Paystack error: Transfer limit exceeded for this account',
+    );
   });
 });
