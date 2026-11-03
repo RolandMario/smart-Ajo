@@ -9,6 +9,7 @@ import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useFocusEffect } from "@react-navigation/native";
 import type { GroupsStackParamList } from "../../navigation/types";
 import { Screen } from "../../components/Screen";
+import { SubpageHeader } from "../../components/SubpageHeader";
 import { TextField } from "../../components/TextField";
 import { Button } from "../../components/Button";
 import { ErrorBanner } from "../../components/ErrorBanner";
@@ -109,7 +110,7 @@ export function BankAccountScreen({ navigation }: any) {
   return (
     <Screen>
       <ScrollView>
-        <Text style={styles.title}>Bank Account</Text>
+        <SubpageHeader title="Bank Account" onBack={() => navigation.goBack()} />
         {existing ? (
           <Text style={styles.subtitle}>
             Update your payout bank account. This is where cycle payouts will be sent.
@@ -173,12 +174,6 @@ export function BankAccountScreen({ navigation }: any) {
 }
 
 const styles = StyleSheet.create({
-  title: {
-    fontSize: typography.sizes.xxl,
-    fontWeight: typography.weights.bold,
-    color: colors.forestLightInk,
-    marginBottom: spacing.xs,
-  },
   subtitle: {
     fontSize: typography.sizes.base,
     color: colors.forestLightInkSoft,

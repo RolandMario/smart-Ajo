@@ -20,8 +20,11 @@ const current_user_decorator_1 = require("../common/decorators/current-user.deco
 const purchase_airtime_dto_1 = require("./dto/purchase-airtime.dto");
 const purchase_data_dto_1 = require("./dto/purchase-data.dto");
 const purchase_cable_dto_1 = require("./dto/purchase-cable.dto");
+const renew_cable_dto_1 = require("./dto/renew-cable.dto");
 const purchase_electricity_dto_1 = require("./dto/purchase-electricity.dto");
 const validate_dto_1 = require("./dto/validate.dto");
+const cashback_quote_query_dto_1 = require("./dto/cashback-quote-query.dto");
+const list_bill_history_query_dto_1 = require("./dto/list-bill-history-query.dto");
 let BillsController = class BillsController {
     bills;
     constructor(bills) {
@@ -42,6 +45,9 @@ let BillsController = class BillsController {
     purchaseCable(user, dto) {
         return this.bills.purchaseCable(user.userId, dto);
     }
+    renewCable(user, dto) {
+        return this.bills.renewCable(user.userId, dto);
+    }
     purchaseElectricity(user, dto) {
         return this.bills.purchaseElectricity(user.userId, dto);
     }
@@ -54,8 +60,11 @@ let BillsController = class BillsController {
     getCablePlans(provider = 'dstv') {
         return this.bills.getCablePlans(provider);
     }
-    getHistory(user) {
-        return this.bills.getHistory(user.userId);
+    getCashbackQuote(query) {
+        return this.bills.estimateCashback(query);
+    }
+    getHistory(user, query) {
+        return this.bills.getHistory(user.userId, query);
     }
     getReceipt(user, reference) {
         return this.bills.getReceipt(user.userId, reference);
@@ -103,6 +112,14 @@ __decorate([
     __metadata("design:returntype", void 0)
 ], BillsController.prototype, "purchaseCable", null);
 __decorate([
+    (0, common_1.Post)('cable/renew'),
+    __param(0, (0, current_user_decorator_1.CurrentUser)()),
+    __param(1, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, renew_cable_dto_1.RenewCableDto]),
+    __metadata("design:returntype", void 0)
+], BillsController.prototype, "renewCable", null);
+__decorate([
     (0, common_1.Post)('electricity'),
     __param(0, (0, current_user_decorator_1.CurrentUser)()),
     __param(1, (0, common_1.Body)()),
@@ -131,10 +148,18 @@ __decorate([
     __metadata("design:returntype", void 0)
 ], BillsController.prototype, "getCablePlans", null);
 __decorate([
+    (0, common_1.Get)('cashback-quote'),
+    __param(0, (0, common_1.Query)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [cashback_quote_query_dto_1.CashbackQuoteQueryDto]),
+    __metadata("design:returntype", void 0)
+], BillsController.prototype, "getCashbackQuote", null);
+__decorate([
     (0, common_1.Get)('history'),
     __param(0, (0, current_user_decorator_1.CurrentUser)()),
+    __param(1, (0, common_1.Query)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [Object]),
+    __metadata("design:paramtypes", [Object, list_bill_history_query_dto_1.ListBillHistoryQueryDto]),
     __metadata("design:returntype", void 0)
 ], BillsController.prototype, "getHistory", null);
 __decorate([

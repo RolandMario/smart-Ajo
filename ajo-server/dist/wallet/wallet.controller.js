@@ -31,6 +31,9 @@ let WalletController = class WalletController {
     listTransactions(user, query) {
         return this.walletService.listTransactions(user.userId, query.page ?? 1, query.limit ?? 20);
     }
+    getCashbackWallet(user) {
+        return this.walletService.getCashbackWallet(user.userId);
+    }
     initializeFunding(user, dto) {
         return this.walletService.initializeFunding(user.userId, dto.amount);
     }
@@ -69,6 +72,13 @@ __decorate([
     __metadata("design:paramtypes", [Object, list_transactions_query_dto_1.ListTransactionsQueryDto]),
     __metadata("design:returntype", void 0)
 ], WalletController.prototype, "listTransactions", null);
+__decorate([
+    (0, common_1.Get)('cashback'),
+    __param(0, (0, current_user_decorator_1.CurrentUser)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object]),
+    __metadata("design:returntype", void 0)
+], WalletController.prototype, "getCashbackWallet", null);
 __decorate([
     (0, common_1.Post)('fund/initialize'),
     __param(0, (0, current_user_decorator_1.CurrentUser)()),

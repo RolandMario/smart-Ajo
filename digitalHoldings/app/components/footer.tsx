@@ -28,7 +28,7 @@ export default function Footer() {
                 <span className="text-xl font-bold text-ajo-ink">Digital Smart<br />Environment</span>
               </div>
               <p className="text-sm text-ajo-inkSoft leading-relaxed">
-                A forward-thinking technology company specializing in the design, development, and delivery of innovative digital solutions. Ajo is one of our flagship projects.
+                A forward-thinking technology company specializing in the design, development, and delivery of innovative digital solutions. SmartThrift is one of our flagship projects.
               </p>
             </div>
 

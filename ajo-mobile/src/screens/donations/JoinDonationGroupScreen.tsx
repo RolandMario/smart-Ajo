@@ -9,6 +9,7 @@ import {
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import type { DonationsStackParamList } from "../../navigation/types";
 import { Screen } from "../../components/Screen";
+import { SubpageHeader } from "../../components/SubpageHeader";
 import { TextField } from "../../components/TextField";
 import { Button } from "../../components/Button";
 import { ErrorBanner } from "../../components/ErrorBanner";
@@ -61,7 +62,7 @@ export function JoinDonationGroupScreen({ navigation }: Props) {
       behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
       <Screen>
-        <Text style={styles.title}>Join a Pool</Text>
+        <SubpageHeader title="Join a Pool" onBack={() => navigation.goBack()} />
         <Text style={styles.subtitle}>
           Enter the Group ID the pool admin shared with you. You will be able to
           donate immediately after joining.
@@ -106,12 +107,6 @@ export function JoinDonationGroupScreen({ navigation }: Props) {
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
-  title: {
-    fontSize: typography.sizes.xxl,
-    fontWeight: typography.weights.bold,
-    color: colors.forestLightInk,
-    marginBottom: spacing.xs,
-  },
   subtitle: {
     fontSize: typography.sizes.base,
     color: colors.forestLightInkSoft,

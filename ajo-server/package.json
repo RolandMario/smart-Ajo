@@ -26,7 +26,9 @@
     "seed:backfill-cycle-rounds": "ts-node -r tsconfig-paths/register src/database/seeds/backfill-cycle-rounds.ts",
     "seed:backfill-join-codes": "ts-node -r tsconfig-paths/register src/database/seeds/backfill-join-codes.ts",
     "seed:purge-terminated-groups": "ts-node -r tsconfig-paths/register src/database/seeds/purge-terminated-groups.ts",
-    "seed:purge-terminated-pools": "ts-node -r tsconfig-paths/register src/database/seeds/purge-terminated-pools.ts"
+    "seed:purge-terminated-pools": "ts-node -r tsconfig-paths/register src/database/seeds/purge-terminated-pools.ts",
+    "seed:purge-glad-tidings": "ts-node -r tsconfig-paths/register src/database/seeds/purge-glad-tidings.ts",
+    "seed:provision-dedicated-account": "ts-node -r tsconfig-paths/register src/database/seeds/provision-dedicated-account.ts"
   },
   "dependencies": {
     "@nestjs/common": "^11.0.1",

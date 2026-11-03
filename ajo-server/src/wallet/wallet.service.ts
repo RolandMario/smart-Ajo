@@ -3,6 +3,7 @@ import {
   forwardRef,
   Inject,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { InjectConnection, InjectModel } from '@nestjs/mongoose';
@@ -28,6 +29,7 @@ import { BankAccount } from '../users/schemas/bank-account.schema';
 import { SetBankAccountDto } from './dto/set-bank-account.dto';
 import { NotificationsService } from '../notifications/notifications.service';
 import { NotificationEvents } from '../notifications/notification-events';
+import { toE164Nigeria } from '../common/utils/phone';
 
 export interface PaginatedWalletTransactions {
   transactions: WalletTransaction[];
@@ -37,8 +39,22 @@ export interface PaginatedWalletTransactions {
   totalPages: number;
 }
 
+/** Which wallet balance funds a bill purchase. */
+export type BillPaymentSource = 'main' | 'cashback';
+
+/**
+ * Rounds a naira amount to 2 dp. Cashback is a percentage of the purchase, so
+ * balances regularly carry fractions (₦100 × 0.5% = ₦0.50) and must not drift
+ * into floating-point noise.
+ */
+function roundNaira(amount: number): number {
+  return Math.round(amount * 100) / 100;
+}
+
 @Injectable()
 export class WalletService {
+  private readonly logger = new Logger(WalletService.name);
+
   constructor(
     @InjectModel(Wallet.name) private walletModel: Model<WalletDocument>,
     @InjectModel(WalletTransaction.name)
@@ -92,6 +108,8 @@ export class WalletService {
 
     return {
       balance: wallet.balance ?? 0,
+      /** Cashback earned on bills — shown as its own wallet on the profile. */
+      cashbackBalance: wallet.cashbackBalance ?? 0,
       currency: wallet.currency,
       recentTransactions,
       dedicatedAccount: user?.dedicatedAccount?.active
@@ -139,6 +157,38 @@ export class WalletService {
       limit,
       total,
       totalPages: Math.max(1, Math.ceil(total / limit)),
+    };
+  }
+
+  // ---- Cashback wallet -------------------------------------------------------
+
+  /**
+   * The member's cashback wallet: its balance plus the ledger rows that moved
+   * it (earned on a bill, or spent on one). Powers the mobile
+   * `CashbackWallet` screen opened from the profile.
+   */
+  async getCashbackWallet(userId: string, limit: number = 50) {
+    const wallet = await this.getOrCreateWallet(userId);
+
+    const transactions = await this.walletTxModel
+      .find({
+        user: wallet.user,
+        type: {
+          $in: [
+            WalletTransactionType.CASHBACK_CREDIT,
+            WalletTransactionType.CASHBACK_DEBIT,
+          ],
+        },
+        status: WalletTransactionStatus.SUCCESS,
+      })
+      .sort({ createdAt: -1 })
+      .limit(limit)
+      .lean();
+
+    return {
+      balance: wallet.cashbackBalance ?? 0,
+      currency: wallet.currency,
+      transactions,
     };
   }
 
@@ -294,13 +344,25 @@ export class WalletService {
   // ---- Dedicated virtual account (DVA) ---------------------------------------
 
   /**
-   * Returns the member's Paystack Dedicated Virtual Account, creating it
-   * lazily on first use (mirrors `getOrCreateWallet`) and storing it on
-   * the user. The account number is assigned by Paystack — the member's
-   * verified phone is passed to Paystack and used to reconcile inbound
-   * transfers via the `charge.success` webhook.
+   * Returns the member's OWN Paystack Dedicated Virtual Account, creating it
+   * lazily on first use (mirrors `getOrCreateWallet`) and storing it on the
+   * user.
+   *
+   * "Own" is deliberate: Ajo never adopts a customer that another product on
+   * the same Paystack integration already used to mint a virtual account.
+   * A shared account number would let one transfer be credited by two
+   * ledgers (or by neither), so every member gets an Ajo-tagged Paystack
+   * customer — with a deterministic `+ajo…` email alias when their real email
+   * already belongs to such a customer — and a virtual account of their own.
+   *
+   * Idempotent: an active account minted with the current Paystack mode is
+   * returned as-is; a test-mode code is discarded once the server switches to
+   * a live key (Paystack keeps separate customer lists per mode, so the old
+   * code answers "Customer not found").
    */
   async getOrCreateDedicatedAccount(userId: string): Promise<DedicatedAccount> {
+    this.paystack.assertConfigured();
+
     const user = await this.usersService.findById(userId);
 
     if (!user) {
@@ -313,21 +375,60 @@ export class WalletService {
       );
     }
 
+    const mode = this.paystack.keyMode();
     const stored = user.dedicatedAccount;
 
     if (stored?.active && stored.accountNumber) {
-      return stored;
+      if (stored.paystackMode === mode) {
+        return stored;
+      }
+
+      // Records created before `paystackMode` existed have an active number but
+      // no mode. Keep that number — members may already be transferring to it —
+      // by verifying the customer still exists in the current mode and
+      // backfilling the mode, instead of minting a second account.
+      if (!stored.paystackMode && stored.paystackCustomerCode) {
+        const existing = await this.paystack.fetchCustomer(
+          stored.paystackCustomerCode,
+        );
+
+        if (existing) {
+          stored.paystackMode = mode;
+          user.dedicatedAccount = stored;
+          await user.save();
+
+          return stored;
+        }
+      }
     }
 
-    // 1. Ensure the Paystack customer exists (reuse the stored code).
-    const customerCode =
-      stored?.paystackCustomerCode ?? (await this.createPaystackCustomer(user));
+    if (!user.email) {
+      throw new BadRequestException(
+        'An email address is required to create a dedicated account. Add one via PATCH /auth/me first.',
+      );
+    }
+
+    const { firstName, lastName } = this.splitName(user.name);
+
+    if (!firstName) {
+      throw new BadRequestException(
+        'Add your full name in Profile before creating a dedicated account — Paystack uses it for the account name.',
+      );
+    }
+
+    // 1. Resolve the Paystack customer Ajo owns for this member.
+    const customer = await this.resolveAjoCustomer(user, mode, stored);
 
     // Persist the customer code immediately so a later failure can be
     // retried without creating a duplicate Paystack customer.
-    if (customerCode !== stored?.paystackCustomerCode) {
+    if (
+      customer.customerCode !== stored?.paystackCustomerCode ||
+      stored?.paystackMode !== mode
+    ) {
       user.dedicatedAccount = {
-        paystackCustomerCode: customerCode,
+        paystackCustomerCode: customer.customerCode,
+        paystackCustomerEmail: customer.email,
+        paystackMode: mode,
         provider: 'paystack',
         currency: 'NGN',
         active: false,
@@ -336,14 +437,14 @@ export class WalletService {
     }
 
     // 2. Request the virtual account.
-    const { firstName, lastName } = this.splitName(user.name);
+    const phone = toE164Nigeria(user.phone) as string;
     let result: DedicatedAccountResult;
 
     try {
       result = await this.paystack.createDedicatedAccount({
-        customerCode,
+        customerCode: customer.customerCode,
         preferredBank: this.paystack.dvaPreferredBank(),
-        phone: user.phone,
+        phone,
         firstName,
         lastName,
       });
@@ -351,16 +452,31 @@ export class WalletService {
       // The customer may already have a DVA (e.g. a previous attempt
       // succeeded on Paystack's side but failed to persist). Recover the
       // existing assignment instead of erroring out.
-      const existing = await this.paystack.fetchDedicatedAccounts(customerCode);
-      result = existing.find((dva) => dva.active) ?? existing[0];
+      const existing = await this.paystack
+        .fetchDedicatedAccounts(customer.customerCode)
+        .catch(() => [] as DedicatedAccountResult[]);
 
-      if (!result?.accountNumber) {
+      const adopted =
+        existing.find((dva) => dva.active && dva.accountNumber) ??
+        existing.find((dva) => dva.accountNumber);
+
+      if (!adopted) {
         throw err;
       }
+
+      result = adopted;
+    }
+
+    if (!result.accountNumber) {
+      throw new BadRequestException(
+        'Paystack did not return an account number. Please try again in a moment.',
+      );
     }
 
     const dedicatedAccount: DedicatedAccount = {
-      paystackCustomerCode: customerCode,
+      paystackCustomerCode: customer.customerCode,
+      paystackCustomerEmail: customer.email,
+      paystackMode: mode,
       paystackAccountId: result.accountId,
       accountNumber: result.accountNumber,
       accountName: result.accountName,
@@ -420,18 +536,35 @@ export class WalletService {
    * `WalletTransaction`, and a second webhook for the same transfer is
    * skipped.
    *
-   * Returns `true` when a credit was applied, `false` if the user is
-   * unknown or the reference was already processed.
+   * The member is resolved from every identity Paystack sends, in order of
+   * reliability: the Ajo-owned customer code, the virtual account number,
+   * then the phone. Phone matching normalises Nigerian formats
+   * (`07068497568` vs `+2347068497568`) — a plain equality check silently
+   * dropped every transfer.
+   *
+   * Returns `true` when a credit was applied, `false` if no member matches or
+   * the reference was already processed.
    */
   async creditDedicatedAccountFunding(params: {
-    phone: string;
+    customerCode?: string;
+    accountNumber?: string;
+    phone?: string;
     amountNaira: number;
     reference: string;
     paystackData?: Record<string, unknown>;
   }): Promise<boolean> {
-    const user = await this.usersService.findByPhone(params.phone);
+    const user = await this.usersService.findByDedicatedAccountIdentity({
+      customerCode: params.customerCode,
+      accountNumber: params.accountNumber,
+      phone: params.phone,
+    });
 
     if (!user) {
+      this.logger.warn(
+        `Dedicated account funding: no member matched ` +
+          `(customer=${params.customerCode ?? 'n/a'}, account=${params.accountNumber ?? 'n/a'}, phone=${params.phone ?? 'n/a'})`,
+      );
+
       return false;
     }
 
@@ -489,19 +622,142 @@ export class WalletService {
     };
   }
 
-  private async createPaystackCustomer(user: {
-    phone: string;
-    email?: string;
-    name?: string;
-  }): Promise<string> {
+  /**
+   * Finds (or mints) the Paystack customer Ajo will attach the member's
+   * virtual account to.
+   *
+   * 1. Reuse a customer code we minted before, as long as Paystack still
+   *    knows it in the current mode.
+   * 2. If the member's email already has a Paystack customer WITHOUT an
+   *    active virtual account, reuse it — nothing is shared, because Ajo
+   *    creates the only DVA on it.
+   * 3. If that customer already has an active virtual account (created by
+   *    another product on the same Paystack business), mint a NEW customer
+   *    under a deterministic `+ajo…` alias of the member's email so Ajo's
+   *    account number is separate.
+   * 4. Otherwise create a fresh Ajo-tagged customer with their real email.
+   */
+  private async resolveAjoCustomer(
+    user: {
+      _id: Types.ObjectId;
+      name?: string;
+      email?: string;
+    },
+    mode: 'test' | 'live',
+    stored?: DedicatedAccount,
+  ): Promise<{ customerCode: string; email?: string }> {
+    if (stored?.paystackCustomerCode && stored.paystackMode === mode) {
+      const existing = await this.paystack.fetchCustomer(
+        stored.paystackCustomerCode,
+      );
+
+      if (existing) {
+        return {
+          customerCode: existing.customerCode,
+          email: stored.paystackCustomerEmail,
+        };
+      }
+
+      // Customer deleted on the dashboard — mint a fresh one below.
+    }
+
+    const email = user.email?.trim().toLowerCase();
+
+    if (!email) {
+      throw new BadRequestException(
+        'An email address is required to create a dedicated account. Add one via PATCH /auth/me first.',
+      );
+    }
+
+    const existingCustomer = await this.paystack.fetchCustomerByEmail(email);
+
+    if (!existingCustomer) {
+      return this.createAjoCustomer(user, email);
+    }
+
+    const accounts = await this.paystack
+      .fetchDedicatedAccounts(existingCustomer.customerCode)
+      .catch(() => [] as DedicatedAccountResult[]);
+
+    if (!accounts.some((dva) => dva.active)) {
+      return { customerCode: existingCustomer.customerCode, email };
+    }
+
+    // The email is already used by a customer that owns a virtual account
+    // from another product on this Paystack integration. Reusing it would
+    // mean Ajo and that product share one account number, so Ajo gets its
+    // own customer under a plus-alias of the member's email.
+    const alias = this.ajoAliasEmail(email, user._id.toString());
+
+    this.logger.warn(
+      `Paystack customer for ${email} already owns a dedicated account — ` +
+        `provisioning a separate Ajo customer (${alias}) for user ${user._id.toString()}`,
+    );
+
+    const existingAlias = await this.paystack.fetchCustomerByEmail(alias);
+
+    if (existingAlias) {
+      return { customerCode: existingAlias.customerCode, email: alias };
+    }
+
+    return this.createAjoCustomer(user, alias);
+  }
+
+  /**
+   * Creates a Paystack customer tagged with `metadata.app = 'ajo'`. If
+   * Paystack refuses the email as a duplicate (race with a concurrent
+   * request, or the lookup above missed it), the existing customer is reused
+   * so provisioning still succeeds.
+   */
+  private async createAjoCustomer(
+    user: { _id: Types.ObjectId; name?: string },
+    email: string,
+  ): Promise<{ customerCode: string; email?: string }> {
     const { firstName, lastName } = this.splitName(user.name);
-    const { customerCode } = await this.paystack.createCustomer({
-      firstName,
-      lastName,
-      phone: user.phone,
-      email: user.email,
-    });
-    return customerCode;
+
+    try {
+      const { customerCode } = await this.paystack.createCustomer({
+        firstName,
+        lastName,
+        email,
+        // No phone: two products on one integration can legitimately share a
+        // phone number, and the DVA request carries the phone itself.
+        metadata: { app: 'ajo', userId: user._id.toString() },
+      });
+
+      return { customerCode, email };
+    } catch (err) {
+      if (!this.paystack.isDuplicateCustomerError(err)) {
+        throw err;
+      }
+
+      const existing = await this.paystack.fetchCustomerByEmail(email);
+
+      if (!existing) {
+        throw err;
+      }
+
+      return { customerCode: existing.customerCode, email };
+    }
+  }
+
+  /**
+   * Deterministic plus-alias of a member's email, used to mint a Paystack
+   * customer that no other product on the integration owns:
+   * `jane@example.com` → `jane+ajo1a2b3c@example.com`. Gmail-style plus
+   * addressing still delivers to the member's inbox.
+   */
+  private ajoAliasEmail(email: string, userId: string): string {
+    const at = email.lastIndexOf('@');
+    const local = (at > 0 ? email.slice(0, at) : email).split('+')[0];
+    const domain = at > 0 ? email.slice(at) : '@ajo.app';
+    const tag =
+      userId
+        .replace(/[^a-z0-9]/gi, '')
+        .slice(-6)
+        .toLowerCase() || 'account';
+
+    return `${local}+ajo${tag}${domain}`;
   }
 
   // ---- Bank account (payout destination) -------------------------------------
@@ -1222,13 +1478,25 @@ export class WalletService {
    * `confirmBillPayment` or `failBillPayment` once the external provider
    * responds.
    */
+  /**
+   * Debits a bill purchase from the wallet the member chose to pay from.
+   *
+   * `options.source` is `main` by default; `cashback` spends the cashback
+   * balance instead (the app's "Pay from: Cashback" option). Returns `null`
+   * when the chosen balance can't cover the amount, so the caller can answer
+   * "Insufficient balance" without having moved any money.
+   */
   async debitForBillPayment(
     userId: Types.ObjectId,
     amountNaira: number,
     reference: string,
     metadata: Record<string, unknown>,
     session: ClientSession,
+    options: { source?: BillPaymentSource } = {},
   ): Promise<WalletTransactionDocument | null> {
+    const source: BillPaymentSource =
+      options.source === 'cashback' ? 'cashback' : 'main';
+
     const wallet = await this.walletModel
       .findOne({ user: userId })
       .session(session);
@@ -1237,15 +1505,22 @@ export class WalletService {
       return null;
     }
 
-    const balance = wallet.balance ?? 0;
+    const balance =
+      source === 'cashback'
+        ? (wallet.cashbackBalance ?? 0)
+        : (wallet.balance ?? 0);
     if (balance < amountNaira) {
       return null;
     }
 
     const balanceBefore = balance;
-    const balanceAfter = balanceBefore - amountNaira;
+    const balanceAfter = roundNaira(balanceBefore - amountNaira);
 
-    wallet.balance = balanceAfter;
+    if (source === 'cashback') {
+      wallet.cashbackBalance = balanceAfter;
+    } else {
+      wallet.balance = balanceAfter;
+    }
     await wallet.save({ session });
 
     const walletTx = await this.walletTxModel.create(
@@ -1253,13 +1528,18 @@ export class WalletService {
         {
           wallet: wallet._id,
           user: userId,
-          type: WalletTransactionType.BILL_PAYMENT,
+          type:
+            source === 'cashback'
+              ? WalletTransactionType.CASHBACK_DEBIT
+              : WalletTransactionType.BILL_PAYMENT,
           status: WalletTransactionStatus.PENDING,
           amount: amountNaira,
           balanceBefore,
           balanceAfter,
           reference,
-          metadata,
+          // `walletSource` lets the failure path refund the same balance the
+          // debit came out of, and keeps the ledger self-describing.
+          metadata: { ...metadata, walletSource: source },
         },
       ],
       { session },
@@ -1269,9 +1549,11 @@ export class WalletService {
   }
 
   /**
-   * Confirms a pending BILL_PAYMENT transaction (successful external call).
-   * Must run inside the same session as `debitForBillPayment` so the in-transaction
-   * (uncommitted) PENDING record is visible and the SUCCESS status persists on commit.
+   * Confirms a pending bill debit (successful external call). Handles both
+   * `BILL_PAYMENT` (main wallet) and `CASHBACK_DEBIT` (cashback wallet)
+   * entries. Must run inside the same session as `debitForBillPayment` so the
+   * in-transaction (uncommitted) PENDING record is visible and the SUCCESS
+   * status persists on commit.
    */
   async confirmBillPayment(
     reference: string,
@@ -1281,7 +1563,12 @@ export class WalletService {
       {
         reference,
         status: WalletTransactionStatus.PENDING,
-        type: WalletTransactionType.BILL_PAYMENT,
+        type: {
+          $in: [
+            WalletTransactionType.BILL_PAYMENT,
+            WalletTransactionType.CASHBACK_DEBIT,
+          ],
+        },
       },
       { $set: { status: WalletTransactionStatus.SUCCESS } },
       session ? { session } : undefined,
@@ -1289,7 +1576,8 @@ export class WalletService {
   }
 
   /**
-   * Marks a pending BILL_PAYMENT as FAILED and refunds the wallet.
+   * Marks a pending bill debit as FAILED and refunds the balance it came from
+   * (main wallet or cashback — see the entry's type).
    */
   async failBillPayment(
     reference: string,
@@ -1297,7 +1585,16 @@ export class WalletService {
     session: ClientSession,
   ): Promise<void> {
     const tx = await this.walletTxModel
-      .findOne({ reference, status: WalletTransactionStatus.PENDING })
+      .findOne({
+        reference,
+        status: WalletTransactionStatus.PENDING,
+        type: {
+          $in: [
+            WalletTransactionType.BILL_PAYMENT,
+            WalletTransactionType.CASHBACK_DEBIT,
+          ],
+        },
+      })
       .session(session);
 
     if (!tx) return;
@@ -1306,13 +1603,26 @@ export class WalletService {
 
     if (!wallet) return;
 
-    const balanceBefore = wallet.balance ?? 0;
-    const balanceAfter = balanceBefore + amountNaira;
-    wallet.balance = balanceAfter;
+    const refundToCashback = tx.type === WalletTransactionType.CASHBACK_DEBIT;
+
+    const balanceBefore = refundToCashback
+      ? (wallet.cashbackBalance ?? 0)
+      : (wallet.balance ?? 0);
+    const balanceAfter = roundNaira(balanceBefore + amountNaira);
+
+    if (refundToCashback) {
+      wallet.cashbackBalance = balanceAfter;
+    } else {
+      wallet.balance = balanceAfter;
+    }
     await wallet.save({ session });
 
     tx.status = WalletTransactionStatus.FAILED;
     await tx.save({ session });
+
+    // A cashback refund must not read like a wallet top-up, so only the main
+    // wallet's refund announces a new balance.
+    if (refundToCashback) return;
 
     const notifyUserId = tx.user.toString();
     const notifyNewBalance = balanceAfter;
@@ -1326,6 +1636,69 @@ export class WalletService {
         }),
       );
     }
+  }
+
+  /**
+   * Credits cashback earned on a successful bill purchase to the member's
+   * cashback balance, recording a CASHBACK_CREDIT ledger entry.
+   *
+   * Called inside the purchase transaction *after* the external vend was
+   * confirmed, so a failed purchase never earns cashback. Idempotent by
+   * `cb_<bill reference>`: a retried call moves nothing twice.
+   */
+  async creditBillCashback(
+    userId: string,
+    amountNaira: number,
+    refs: {
+      billReference: string;
+      billType: string;
+      /** Rate the cashback was computed from, kept for auditing. */
+      cashbackPercent: number;
+      purchaseAmount: number;
+    },
+    session: ClientSession,
+  ): Promise<void> {
+    if (amountNaira <= 0) return;
+
+    const reference = `cb_${refs.billReference}`;
+
+    const alreadyCredited = await this.walletTxModel
+      .findOne({ reference, status: WalletTransactionStatus.SUCCESS })
+      .session(session);
+    if (alreadyCredited) return;
+
+    const user = new Types.ObjectId(userId);
+
+    const wallet = await this.walletModel.findOne({ user }).session(session);
+    if (!wallet) return;
+
+    const balanceBefore = wallet.cashbackBalance ?? 0;
+    const balanceAfter = roundNaira(balanceBefore + amountNaira);
+
+    wallet.cashbackBalance = balanceAfter;
+    await wallet.save({ session });
+
+    await this.walletTxModel.create(
+      [
+        {
+          wallet: wallet._id,
+          user,
+          type: WalletTransactionType.CASHBACK_CREDIT,
+          status: WalletTransactionStatus.SUCCESS,
+          amount: amountNaira,
+          balanceBefore,
+          balanceAfter,
+          reference,
+          metadata: {
+            billReference: refs.billReference,
+            billType: refs.billType,
+            cashbackPercent: refs.cashbackPercent,
+            purchaseAmount: refs.purchaseAmount,
+          },
+        },
+      ],
+      { session },
+    );
   }
 
   /**

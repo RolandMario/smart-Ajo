@@ -123,8 +123,9 @@ export function billServiceTypeLabel(type: string): string {
 }
 
 export function billProviderLabel(provider: string): string {
+  // VTPass is the only bills provider; historical rows may still carry other
+  // values, which fall through to the raw string.
   if (provider === "vtpass") return "VTPass";
-  if (provider === "gladtidings") return "Gladtidings";
   return provider;
 }
 
@@ -186,6 +187,51 @@ export function billDiscoLabel(disco?: string | null): string {
   return labels[disco.toLowerCase()] ?? disco.toUpperCase();
 }
 
+/** "IKEJA ELECTRIC" → "Ikeja Electric". */
+function titleCaseWords(value: string): string {
+  return value
+    .toLowerCase()
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ");
+}
+
+/**
+ * The electricity product as it read on the receipt. VTpass returns the trading
+ * name (`disco_name`, e.g. "IKEJA ELECTRIC"), which beats our own mapping;
+ * rows without it (older receipts, or a provider that echoed back the bare code
+ * "IKEDC") fall back to the human label for the disco code.
+ */
+export function billDiscoProductLabel(
+  discoName?: string | null,
+  discoCode?: string | null,
+): string {
+  const name = discoName?.trim();
+  // A bare code in caps reads worse than our own mapping.
+  if (name && /\s/.test(name)) return titleCaseWords(name);
+  return billDiscoLabel(discoCode);
+}
+
+/**
+ * The vended token as it should read on a receipt.
+ *
+ * VTpass labels it inside the value (`"token": "Token : 2636…"`) and a bare
+ * 20-digit run is unreadable, so the label is dropped and long digit runs are
+ * grouped in fours.
+ */
+function receiptToken(value?: string | null): string | undefined {
+  const token = value?.replace(/^\s*token\s*[:-]?\s*/i, "").trim();
+  if (!token) return undefined;
+  return /^\d{12,}$/.test(token) ? token.replace(/(\d{4})(?=\d)/g, "$1 ") : token;
+}
+
+/** "79.9 kWh" → "79.9": the row label already carries the unit. */
+function receiptUnits(value?: string | null): string | undefined {
+  const units = value?.replace(/\s*kwh\s*$/i, "").trim();
+  return units || undefined;
+}
+
 function firstString(
   ...values: Array<unknown | undefined | null>
 ): string | undefined {
@@ -200,8 +246,9 @@ function firstString(
 /**
  * Type-specific receipt rows for a bill transaction. Air, data, cable and
  * electricity each surface their own meaningful fields (network, data plan,
- * cable package/subscriber, electricity disco/token/customer, etc.), falling
- * back gracefully on older rows whose metadata predates the richer fields.
+ * cable package/subscriber, electricity product/token/units/phone/customer,
+ * etc.), falling back gracefully on older rows whose metadata predates the
+ * richer fields.
  */
 export function billReceiptRows(tx: PlatformBillTransaction): BillReceiptRow[] {
   const metadata = tx.metadata ?? {};
@@ -249,7 +296,9 @@ export function billReceiptRows(tx: PlatformBillTransaction): BillReceiptRow[] {
       });
       {
         const plan =
-          firstString(metadata.packageName) ?? firstString(details.packageName);
+          firstString(metadata.packageName) ??
+          firstString(metadata.planName) ??
+          firstString(details.packageName);
         if (plan) rows.push({ label: "Package", value: plan });
       }
       rows.push({
@@ -266,8 +315,11 @@ export function billReceiptRows(tx: PlatformBillTransaction): BillReceiptRow[] {
 
     case "electricity":
       rows.push({
-        label: "Disco",
-        value: billDiscoLabel(firstString(metadata.disco)),
+        label: "Product",
+        value: billDiscoProductLabel(
+          firstString(details.discoName) ?? firstString(metadata.discoName),
+          firstString(metadata.disco),
+        ),
       });
       rows.push({
         label: "Meter",
@@ -280,13 +332,23 @@ export function billReceiptRows(tx: PlatformBillTransaction): BillReceiptRow[] {
         });
       }
       {
-        const token =
-          firstString(details.token) ?? firstString(metadata.token);
+        const token = receiptToken(
+          firstString(details.token) ?? firstString(metadata.token),
+        );
         if (token) rows.push({ label: "Token", value: token });
       }
       {
-        const units = firstString(details.units) ?? firstString(metadata.units);
-        if (units) rows.push({ label: "Units", value: units });
+        // Providers send the count with its unit ("79.9 kWh") — the label
+        // carries it, so only the number is shown.
+        const units = receiptUnits(
+          firstString(details.units) ?? firstString(metadata.units),
+        );
+        if (units) rows.push({ label: "Units (kWh)", value: units });
+      }
+      {
+        // The prepaid token also goes out by SMS, so show which line got it.
+        const phone = firstString(metadata.phone) ?? firstString(details.phone);
+        if (phone) rows.push({ label: "Phone", value: phone });
       }
       {
         const customer =

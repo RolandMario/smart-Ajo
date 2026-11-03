@@ -55,7 +55,7 @@ interface CircleItem {
  * forest canvas, a greeting with the member's avatar, a dark green
  * "Wallet balance" card showing the live wallet balance, and live
  * "Your circles" / "Personal savings" sections. The mock's "Kolo" is the
- * template's placeholder brand (that's the "Ajo" swap). Two deliberate
+ * template's placeholder brand (that's the "SmartThrift" swap). Two deliberate
  * deviations, per the README:
  *
  *  - The template's Send/Request affordances don't exist in ajo-server, so
@@ -192,6 +192,42 @@ export function WalletHomeScreen({ navigation }: Props) {
           </View>
         </View>
       </View>
+
+      {/*
+        Bank-transfer shortcut: the member's own dedicated account number,
+        minted by SmartThrift (see FundWalletScreen). Hidden until it exists so the
+        card never advertises a number Paystack hasn't assigned yet.
+      */}
+      {summary?.dedicatedAccount?.accountNumber ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Fund by bank transfer"
+          style={({ pressed }) => [
+            styles.transferRow,
+            pressed && styles.pressed,
+          ]}
+          onPress={() => navigation.navigate("FundWallet")}
+        >
+          <Ionicons
+            name="card-outline"
+            size={18}
+            color={colors.forestLightInk}
+          />
+          <View style={styles.transferText}>
+            <Text style={styles.transferTitle}>Fund by bank transfer</Text>
+            <Text style={styles.transferSubtitle} numberOfLines={1}>
+              {summary.dedicatedAccount.bankName} ·{" "}
+              {summary.dedicatedAccount.accountNumber}
+            </Text>
+          </View>
+          <Ionicons
+            name="chevron-forward"
+            size={18}
+            color={colors.forestLightInkFaint}
+          />
+        </Pressable>
+      ) : null}
+
       {/* ---- Your circles ----------------------------------------- */}
       <View style={styles.sectionHeader}>
         <Text style={styles.sectionTitle}>Your circles</Text>
@@ -380,7 +416,7 @@ function initials(name?: string | null): string {
 /** "Chidinma Amara Nnamdi" → "Chidinma N." (the mock's "Chidinma A." style). */
 function displayName(name?: string | null): string {
   const parts = (name ?? "").trim().split(/\s+/).filter(Boolean);
-  if (parts.length === 0) return "Ajo member";
+  if (parts.length === 0) return "SmartThrift member";
   if (parts.length === 1) return parts[0];
   return `${parts[0]} ${parts[parts.length - 1][0].toUpperCase()}.`;
 }
@@ -639,5 +675,31 @@ const styles = StyleSheet.create({
   },
   pressed: {
     opacity: 0.7,
+  },
+  transferRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.md,
+    backgroundColor: colors.forestLightCard,
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    borderColor: colors.forestLightLine,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    marginTop: -spacing.sm,
+    marginBottom: spacing.xl,
+  },
+  transferText: {
+    flex: 1,
+  },
+  transferTitle: {
+    fontSize: typography.sizes.sm,
+    fontWeight: typography.weights.semibold,
+    color: colors.forestLightInk,
+  },
+  transferSubtitle: {
+    fontSize: typography.sizes.xs,
+    color: colors.forestLightInkFaint,
+    marginTop: 2,
   },
 });

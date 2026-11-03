@@ -254,7 +254,9 @@ export type WalletTransactionType =
   | "bill_commission_credit"
   | "admin_credit"
   | "admin_withdrawal"
-  | "savings_debit";
+  | "savings_debit"
+  | "cashback_credit"
+  | "cashback_debit";
 export type WalletTransactionStatus = "pending" | "success" | "failed";
 
 export interface WalletTransaction {
@@ -277,10 +279,22 @@ export interface WalletTransaction {
 
 export interface WalletSummary {
   balance: number;
+  /** Cashback earned on bills — spent from the "Pay from: Cashback" option. */
+  cashbackBalance: number;
   currency: string;
   recentTransactions: WalletTransaction[];
   /** The member's Paystack Dedicated Virtual Account, when active. */
   dedicatedAccount?: DedicatedAccount | null;
+}
+
+/**
+ * GET /wallet/cashback — the cashback wallet opened from the profile: its
+ * balance plus every cashback movement (earned on a bill, or spent on one).
+ */
+export interface CashbackWallet {
+  balance: number;
+  currency: string;
+  transactions: WalletTransaction[];
 }
 
 /** Paginated member wallet ledger from GET /wallet/transactions. */
@@ -435,16 +449,23 @@ export interface BillTransaction {
   updatedAt: string;
 }
 
+/** Which wallet balance funds a bill purchase. */
+export type BillPaymentSource = "main" | "cashback";
+
 export interface AirtimePayload {
   phone: string;
   amount: number;
   network: string;
+  /** Defaults to the main wallet on the server when omitted. */
+  paymentSource?: BillPaymentSource;
 }
 
 export interface DataPayload {
   phone: string;
   dataPlanId: string;
   network: string;
+  /** Defaults to the main wallet on the server when omitted. */
+  paymentSource?: BillPaymentSource;
 }
 
 /** A single purchasable data plan returned by GET /bills/data-plans. */
@@ -453,6 +474,20 @@ export interface DataPlan {
   name: string;
   amount: number;
   fixedPrice?: boolean;
+  /** Share of the amount paid back to the cashback wallet, in percent. */
+  cashbackPercent?: number;
+  /** The cashback above, in naira — rendered on the plan card. */
+  cashback?: number;
+}
+
+/** A cable bouquet from GET /bills/cable-plans. */
+export interface CablePlan {
+  variationCode: string;
+  name: string;
+  amount: number;
+  fixedPrice?: boolean;
+  cashbackPercent?: number;
+  cashback?: number;
 }
 
 export interface CablePayload {
@@ -463,6 +498,27 @@ export interface CablePayload {
   variationCode?: string;
   /** Verified subscriber name, shown on the receipt. */
   customerName?: string;
+  /** Defaults to the main wallet on the server when omitted. */
+  paymentSource?: BillPaymentSource;
+}
+
+/**
+ * POST /bills/cable/renew — renews the bouquet a verified decoder is already
+ * on. The server takes the price from the smart card's own `Renewal_Amount`,
+ * so no amount or plan is sent (and the displayed amount is the one charged).
+ */
+export interface RenewCablePayload {
+  serviceProvider: "dstv" | "gotv" | "startimes";
+  smartCardNumber: string;
+  /** Verified subscriber name, shown on the receipt. */
+  customerName?: string;
+  /**
+   * The amount the member was shown. The server rejects the renewal if VTpass
+   * now bills a different figure, so a re-price can never be charged silently.
+   */
+  expectedAmount?: number;
+  /** Defaults to the main wallet on the server when omitted. */
+  paymentSource?: BillPaymentSource;
 }
 
 export interface ElectricityPayload {
@@ -470,9 +526,22 @@ export interface ElectricityPayload {
   meterNumber: string;
   meterType: "prepaid" | "postpaid";
   amount: number;
-  phone: string;
   /** Verified customer name, shown on the receipt. */
   customerName?: string;
+  /** Defaults to the main wallet on the server when omitted. */
+  paymentSource?: BillPaymentSource;
+}
+
+/**
+ * GET /bills/cashback-quote — what a purchase about to be confirmed will earn.
+ * The server re-prices data/cable from its own catalogue, so `purchaseAmount`
+ * is authoritative for those categories.
+ */
+export interface CashbackQuote {
+  serviceType: BillServiceType;
+  purchaseAmount: number;
+  cashbackPercent: number;
+  cashback: number;
 }
 
 export interface ValidateMeterPayload {
@@ -489,6 +558,8 @@ export interface ValidateSmartCardPayload {
 export interface ValidationResult {
   valid: boolean;
   name?: string;
+  /** Provider's own field name for the verified customer; the app reads `name`. */
+  customerName?: string;
   address?: string;
   packageInfo?: string;
   outstanding?: number;

@@ -3,6 +3,7 @@ import { StyleSheet, Text, View, Pressable } from "react-native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import type { BillsStackParamList } from "../../navigation/types";
 import { Screen } from "../../components/Screen";
+import { SubpageHeader } from "../../components/SubpageHeader";
 import { TextField } from "../../components/TextField";
 import { Button } from "../../components/Button";
 import { ErrorBanner } from "../../components/ErrorBanner";
@@ -10,6 +11,7 @@ import { LoadingScreen } from "../../components/LoadingScreen";
 import { ContactPicker } from "../../components/ContactPicker";
 import { useAuth } from "../../auth/AuthContext";
 import { e164ToLocalNigeria } from "../../utils/phone";
+import { formatNairaExact } from "../../utils/format";
 import { colors, radii, spacing, typography } from "../../theme";
 import { listDataPlans } from "../../api/bills";
 import { ApiError } from "../../api/api-error";
@@ -183,13 +185,18 @@ export function DataPurchaseScreen({ navigation }: Props) {
       provider: network,
       recipient: phone,
       amount: selectedPlan.amount,
-      metadata: { variationCode: selectedPlan.variationCode },
+      // The plan name travels with the code so the confirm screen can show the
+      // bundle and its validity without re-fetching the catalogue.
+      metadata: {
+        variationCode: selectedPlan.variationCode,
+        planName: selectedPlan.name,
+      },
     });
   }
 
   return (
     <Screen>
-      <Text style={styles.title}>Buy Data</Text>
+      <SubpageHeader title="Buy Data" onBack={() => navigation.goBack()} />
       {error && <ErrorBanner message={error} />}
       <TextField
         label="Phone Number"
@@ -270,9 +277,14 @@ export function DataPurchaseScreen({ navigation }: Props) {
                         <Text style={[styles.planAmount, active && styles.planTextActive]}>
                           ₦{item.amount.toLocaleString()}
                         </Text>
-                        {item.fixedPrice && !active && (
-                          <Text style={styles.fixedText}>Fixed</Text>
-                        )}
+                        {item.cashback && item.cashback > 0 ? (
+                          <Text
+                            style={[styles.cashbackText, active && styles.cashbackTextActive]}
+                            numberOfLines={1}
+                          >
+                            {formatNairaExact(item.cashback)} back
+                          </Text>
+                        ) : null}
                       </View>
                     </Pressable>
                   );
@@ -291,7 +303,6 @@ export function DataPurchaseScreen({ navigation }: Props) {
 }
 
 const styles = StyleSheet.create({
-  title: { fontSize: typography.sizes.xxl, fontWeight: typography.weights.bold, color: colors.forestLightInk, marginBottom: spacing.lg },
   label: { fontSize: typography.sizes.sm, fontWeight: typography.weights.medium, color: colors.forestLightInkSoft, marginBottom: spacing.xs },
   filterLabel: { fontSize: typography.sizes.sm, fontWeight: typography.weights.medium, color: colors.forestLightInkSoft, marginBottom: spacing.xs },
   row: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm, marginBottom: spacing.lg },
@@ -322,7 +333,8 @@ const styles = StyleSheet.create({
   durationText: { fontSize: typography.sizes.xs, fontWeight: typography.weights.semibold, color: colors.forestAction },
   durationTextActive: { color: colors.white },
   planAmount: { fontSize: typography.sizes.lg, color: colors.forestAction, fontWeight: typography.weights.bold },
-  fixedText: { fontSize: typography.sizes.xs, color: colors.forestLightInkFaint },
+  cashbackText: { fontSize: typography.sizes.xs, fontWeight: typography.weights.semibold, color: colors.gold },
+  cashbackTextActive: { color: colors.white },
   planTextActive: { color: colors.white },
   emptyText: { fontSize: typography.sizes.sm, color: colors.forestLightInkFaint, textAlign: "center", marginVertical: spacing.lg },
 });

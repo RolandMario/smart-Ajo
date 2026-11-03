@@ -1,16 +1,11 @@
 {
   "expo": {
-    "name": "SmartAjo",
+    "name": "SmartThrift",
     "slug": "AJo-Mobile",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/ajo.png",
+    "icon": "./assets/SmartThrift.png",
     "userInterfaceStyle": "light",
-    "splash": {
-      "image": "./assets/ajo.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
-    },
     "assetBundlePatterns": [
       "**/*"
     ],
@@ -19,20 +14,20 @@
       "bundleIdentifier": "com.smartenv.ajo",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
-        "NSContactsUsageDescription": "Allow Ajo to use your contacts for airtime and data top-ups."
+        "NSContactsUsageDescription": "Allow SmartThrift to use your contacts for airtime and data top-ups."
       }
     },
     "android": {
       "adaptiveIcon": {
         "backgroundColor": "#FBF6EF",
-        "foregroundImage": "./assets/ajo.png",
+        "foregroundImage": "./assets/SmartThrift.png",
         "backgroundImage": "",
         "monochromeImage": ""
       },
       "package": "com.smartenv.ajo"
     },
     "web": {
-      "favicon": "./assets/ajo.png"
+      "favicon": "./assets/SmartThrift.png"
     },
     "plugins": [
       [
@@ -41,6 +36,15 @@
           "android": {
             "enableMinifyInReleaseBuilds": true
           }
+        }
+      ],
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-logo.png",
+          "imageWidth": 200,
+          "resizeMode": "contain",
+          "backgroundColor": "#F7F8F3"
         }
       ]
     ],

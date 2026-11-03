@@ -12,7 +12,6 @@ const mongoose_1 = require("@nestjs/mongoose");
 const bills_controller_1 = require("./bills.controller");
 const bills_service_1 = require("./bills.service");
 const vtpass_service_1 = require("../payments/vtpass.service");
-const gladtidings_service_1 = require("../payments/gladtidings.service");
 const wallet_module_1 = require("../wallet/wallet.module");
 const notifications_module_1 = require("../notifications/notifications.module");
 const users_module_1 = require("../users/users.module");
@@ -35,7 +34,7 @@ exports.BillsModule = BillsModule = __decorate([
             users_module_1.UsersModule,
         ],
         controllers: [bills_controller_1.BillsController],
-        providers: [bills_service_1.BillsService, vtpass_service_1.VTPassService, gladtidings_service_1.GladTidingsService],
+        providers: [bills_service_1.BillsService, vtpass_service_1.VTPassService],
         exports: [bills_service_1.BillsService],
     })
 ], BillsModule);

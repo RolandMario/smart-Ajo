@@ -1,5 +1,12 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { Document, Types } from 'mongoose';
+import { Document, SchemaTypes, Types } from 'mongoose';
+
+/*
+ * NOTE: `type: SchemaTypes.ObjectId` (a real SchemaType) is required here.
+ * `Types.ObjectId` is the raw BSON class, which @nestjs/mongoose cannot map to
+ * a schema type — it silently falls back to `Mixed`, so ObjectId strings are
+ * never cast and `find({ user: <id string> })` matches nothing.
+ */
 
 export type BillTransactionDocument = BillTransaction & Document;
 
@@ -12,7 +19,12 @@ export type BillTransactionDocument = BillTransaction & Document;
 export class BillTransaction {
   _id!: Types.ObjectId;
 
-  @Prop({ type: Types.ObjectId, ref: 'User', required: true, index: true })
+  @Prop({
+    type: SchemaTypes.ObjectId,
+    ref: 'User',
+    required: true,
+    index: true,
+  })
   user!: Types.ObjectId;
 
   /** 'airtime' | 'data' | 'cable' | 'electricity' */
@@ -55,8 +67,12 @@ export class BillTransaction {
   metadata?: Record<string, unknown>;
 
   /** Link to the wallet transaction that recorded the debit. */
-  @Prop({ type: Types.ObjectId, ref: 'WalletTransaction' })
+  @Prop({ type: SchemaTypes.ObjectId, ref: 'WalletTransaction' })
   walletTransaction?: Types.ObjectId;
+
+  /** Populated by `@Schema({ timestamps: true })`. */
+  createdAt!: Date;
+  updatedAt!: Date;
 }
 
 export const BillTransactionSchema =

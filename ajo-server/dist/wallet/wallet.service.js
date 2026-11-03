@@ -11,6 +11,7 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 var __param = (this && this.__param) || function (paramIndex, decorator) {
     return function (target, key) { decorator(target, key, paramIndex); }
 };
+var WalletService_1;
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.WalletService = void 0;
 const common_1 = require("@nestjs/common");
@@ -24,13 +25,18 @@ const users_service_1 = require("../users/users.service");
 const paystack_service_1 = require("../payments/paystack.service");
 const notifications_service_1 = require("../notifications/notifications.service");
 const notification_events_1 = require("../notifications/notification-events");
-let WalletService = class WalletService {
+const phone_1 = require("../common/utils/phone");
+function roundNaira(amount) {
+    return Math.round(amount * 100) / 100;
+}
+let WalletService = WalletService_1 = class WalletService {
     walletModel;
     walletTxModel;
     connection;
     usersService;
     paystack;
     notificationsService;
+    logger = new common_1.Logger(WalletService_1.name);
     constructor(walletModel, walletTxModel, connection, usersService, paystack, notificationsService) {
         this.walletModel = walletModel;
         this.walletTxModel = walletTxModel;
@@ -66,6 +72,7 @@ let WalletService = class WalletService {
             .lean();
         return {
             balance: wallet.balance ?? 0,
+            cashbackBalance: wallet.cashbackBalance ?? 0,
             currency: wallet.currency,
             recentTransactions,
             dedicatedAccount: user?.dedicatedAccount?.active
@@ -99,6 +106,28 @@ let WalletService = class WalletService {
             limit,
             total,
             totalPages: Math.max(1, Math.ceil(total / limit)),
+        };
+    }
+    async getCashbackWallet(userId, limit = 50) {
+        const wallet = await this.getOrCreateWallet(userId);
+        const transactions = await this.walletTxModel
+            .find({
+            user: wallet.user,
+            type: {
+                $in: [
+                    wallet_enum_1.WalletTransactionType.CASHBACK_CREDIT,
+                    wallet_enum_1.WalletTransactionType.CASHBACK_DEBIT,
+                ],
+            },
+            status: wallet_enum_1.WalletTransactionStatus.SUCCESS,
+        })
+            .sort({ createdAt: -1 })
+            .limit(limit)
+            .lean();
+        return {
+            balance: wallet.cashbackBalance ?? 0,
+            currency: wallet.currency,
+            transactions,
         };
     }
     async initializeFunding(userId, amountNaira) {
@@ -188,6 +217,7 @@ let WalletService = class WalletService {
         await this.walletTxModel.updateOne({ reference, status: wallet_enum_1.WalletTransactionStatus.PENDING }, { $set: { status: wallet_enum_1.WalletTransactionStatus.FAILED } });
     }
     async getOrCreateDedicatedAccount(userId) {
+        this.paystack.assertConfigured();
         const user = await this.usersService.findById(userId);
         if (!user) {
             throw new common_1.NotFoundException('User not found');
@@ -195,40 +225,71 @@ let WalletService = class WalletService {
         if (!user.phone) {
             throw new common_1.BadRequestException('A verified phone number is required before a dedicated account can be created');
         }
+        const mode = this.paystack.keyMode();
         const stored = user.dedicatedAccount;
         if (stored?.active && stored.accountNumber) {
-            return stored;
+            if (stored.paystackMode === mode) {
+                return stored;
+            }
+            if (!stored.paystackMode && stored.paystackCustomerCode) {
+                const existing = await this.paystack.fetchCustomer(stored.paystackCustomerCode);
+                if (existing) {
+                    stored.paystackMode = mode;
+                    user.dedicatedAccount = stored;
+                    await user.save();
+                    return stored;
+                }
+            }
         }
-        const customerCode = stored?.paystackCustomerCode ?? (await this.createPaystackCustomer(user));
-        if (customerCode !== stored?.paystackCustomerCode) {
+        if (!user.email) {
+            throw new common_1.BadRequestException('An email address is required to create a dedicated account. Add one via PATCH /auth/me first.');
+        }
+        const { firstName, lastName } = this.splitName(user.name);
+        if (!firstName) {
+            throw new common_1.BadRequestException('Add your full name in Profile before creating a dedicated account — Paystack uses it for the account name.');
+        }
+        const customer = await this.resolveAjoCustomer(user, mode, stored);
+        if (customer.customerCode !== stored?.paystackCustomerCode ||
+            stored?.paystackMode !== mode) {
             user.dedicatedAccount = {
-                paystackCustomerCode: customerCode,
+                paystackCustomerCode: customer.customerCode,
+                paystackCustomerEmail: customer.email,
+                paystackMode: mode,
                 provider: 'paystack',
                 currency: 'NGN',
                 active: false,
             };
             await user.save();
         }
-        const { firstName, lastName } = this.splitName(user.name);
+        const phone = (0, phone_1.toE164Nigeria)(user.phone);
         let result;
         try {
             result = await this.paystack.createDedicatedAccount({
-                customerCode,
+                customerCode: customer.customerCode,
                 preferredBank: this.paystack.dvaPreferredBank(),
-                phone: user.phone,
+                phone,
                 firstName,
                 lastName,
             });
         }
         catch (err) {
-            const existing = await this.paystack.fetchDedicatedAccounts(customerCode);
-            result = existing.find((dva) => dva.active) ?? existing[0];
-            if (!result?.accountNumber) {
+            const existing = await this.paystack
+                .fetchDedicatedAccounts(customer.customerCode)
+                .catch(() => []);
+            const adopted = existing.find((dva) => dva.active && dva.accountNumber) ??
+                existing.find((dva) => dva.accountNumber);
+            if (!adopted) {
                 throw err;
             }
+            result = adopted;
+        }
+        if (!result.accountNumber) {
+            throw new common_1.BadRequestException('Paystack did not return an account number. Please try again in a moment.');
         }
         const dedicatedAccount = {
-            paystackCustomerCode: customerCode,
+            paystackCustomerCode: customer.customerCode,
+            paystackCustomerEmail: customer.email,
+            paystackMode: mode,
             paystackAccountId: result.accountId,
             accountNumber: result.accountNumber,
             accountName: result.accountName,
@@ -263,8 +324,14 @@ let WalletService = class WalletService {
         return this.getOrCreateDedicatedAccount(userId);
     }
     async creditDedicatedAccountFunding(params) {
-        const user = await this.usersService.findByPhone(params.phone);
+        const user = await this.usersService.findByDedicatedAccountIdentity({
+            customerCode: params.customerCode,
+            accountNumber: params.accountNumber,
+            phone: params.phone,
+        });
         if (!user) {
+            this.logger.warn(`Dedicated account funding: no member matched ` +
+                `(customer=${params.customerCode ?? 'n/a'}, account=${params.accountNumber ?? 'n/a'}, phone=${params.phone ?? 'n/a'})`);
             return false;
         }
         const existing = await this.walletTxModel.findOne({
@@ -308,15 +375,70 @@ let WalletService = class WalletService {
             lastName: parts.length > 1 ? parts.slice(1).join(' ') : undefined,
         };
     }
-    async createPaystackCustomer(user) {
+    async resolveAjoCustomer(user, mode, stored) {
+        if (stored?.paystackCustomerCode && stored.paystackMode === mode) {
+            const existing = await this.paystack.fetchCustomer(stored.paystackCustomerCode);
+            if (existing) {
+                return {
+                    customerCode: existing.customerCode,
+                    email: stored.paystackCustomerEmail,
+                };
+            }
+        }
+        const email = user.email?.trim().toLowerCase();
+        if (!email) {
+            throw new common_1.BadRequestException('An email address is required to create a dedicated account. Add one via PATCH /auth/me first.');
+        }
+        const existingCustomer = await this.paystack.fetchCustomerByEmail(email);
+        if (!existingCustomer) {
+            return this.createAjoCustomer(user, email);
+        }
+        const accounts = await this.paystack
+            .fetchDedicatedAccounts(existingCustomer.customerCode)
+            .catch(() => []);
+        if (!accounts.some((dva) => dva.active)) {
+            return { customerCode: existingCustomer.customerCode, email };
+        }
+        const alias = this.ajoAliasEmail(email, user._id.toString());
+        this.logger.warn(`Paystack customer for ${email} already owns a dedicated account — ` +
+            `provisioning a separate Ajo customer (${alias}) for user ${user._id.toString()}`);
+        const existingAlias = await this.paystack.fetchCustomerByEmail(alias);
+        if (existingAlias) {
+            return { customerCode: existingAlias.customerCode, email: alias };
+        }
+        return this.createAjoCustomer(user, alias);
+    }
+    async createAjoCustomer(user, email) {
         const { firstName, lastName } = this.splitName(user.name);
-        const { customerCode } = await this.paystack.createCustomer({
-            firstName,
-            lastName,
-            phone: user.phone,
-            email: user.email,
-        });
-        return customerCode;
+        try {
+            const { customerCode } = await this.paystack.createCustomer({
+                firstName,
+                lastName,
+                email,
+                metadata: { app: 'ajo', userId: user._id.toString() },
+            });
+            return { customerCode, email };
+        }
+        catch (err) {
+            if (!this.paystack.isDuplicateCustomerError(err)) {
+                throw err;
+            }
+            const existing = await this.paystack.fetchCustomerByEmail(email);
+            if (!existing) {
+                throw err;
+            }
+            return { customerCode: existing.customerCode, email };
+        }
+    }
+    ajoAliasEmail(email, userId) {
+        const at = email.lastIndexOf('@');
+        const local = (at > 0 ? email.slice(0, at) : email).split('+')[0];
+        const domain = at > 0 ? email.slice(at) : '@ajo.app';
+        const tag = userId
+            .replace(/[^a-z0-9]/gi, '')
+            .slice(-6)
+            .toLowerCase() || 'account';
+        return `${local}+ajo${tag}${domain}`;
     }
     async listBanks() {
         return this.paystack.listBanks();
@@ -738,32 +860,42 @@ let WalletService = class WalletService {
             },
         ], { session });
     }
-    async debitForBillPayment(userId, amountNaira, reference, metadata, session) {
+    async debitForBillPayment(userId, amountNaira, reference, metadata, session, options = {}) {
+        const source = options.source === 'cashback' ? 'cashback' : 'main';
         const wallet = await this.walletModel
             .findOne({ user: userId })
             .session(session);
         if (!wallet) {
             return null;
         }
-        const balance = wallet.balance ?? 0;
+        const balance = source === 'cashback'
+            ? (wallet.cashbackBalance ?? 0)
+            : (wallet.balance ?? 0);
         if (balance < amountNaira) {
             return null;
         }
         const balanceBefore = balance;
-        const balanceAfter = balanceBefore - amountNaira;
-        wallet.balance = balanceAfter;
+        const balanceAfter = roundNaira(balanceBefore - amountNaira);
+        if (source === 'cashback') {
+            wallet.cashbackBalance = balanceAfter;
+        }
+        else {
+            wallet.balance = balanceAfter;
+        }
         await wallet.save({ session });
         const walletTx = await this.walletTxModel.create([
             {
                 wallet: wallet._id,
                 user: userId,
-                type: wallet_enum_1.WalletTransactionType.BILL_PAYMENT,
+                type: source === 'cashback'
+                    ? wallet_enum_1.WalletTransactionType.CASHBACK_DEBIT
+                    : wallet_enum_1.WalletTransactionType.BILL_PAYMENT,
                 status: wallet_enum_1.WalletTransactionStatus.PENDING,
                 amount: amountNaira,
                 balanceBefore,
                 balanceAfter,
                 reference,
-                metadata,
+                metadata: { ...metadata, walletSource: source },
             },
         ], { session });
         return walletTx[0];
@@ -772,24 +904,48 @@ let WalletService = class WalletService {
         await this.walletTxModel.updateOne({
             reference,
             status: wallet_enum_1.WalletTransactionStatus.PENDING,
-            type: wallet_enum_1.WalletTransactionType.BILL_PAYMENT,
+            type: {
+                $in: [
+                    wallet_enum_1.WalletTransactionType.BILL_PAYMENT,
+                    wallet_enum_1.WalletTransactionType.CASHBACK_DEBIT,
+                ],
+            },
         }, { $set: { status: wallet_enum_1.WalletTransactionStatus.SUCCESS } }, session ? { session } : undefined);
     }
     async failBillPayment(reference, amountNaira, session) {
         const tx = await this.walletTxModel
-            .findOne({ reference, status: wallet_enum_1.WalletTransactionStatus.PENDING })
+            .findOne({
+            reference,
+            status: wallet_enum_1.WalletTransactionStatus.PENDING,
+            type: {
+                $in: [
+                    wallet_enum_1.WalletTransactionType.BILL_PAYMENT,
+                    wallet_enum_1.WalletTransactionType.CASHBACK_DEBIT,
+                ],
+            },
+        })
             .session(session);
         if (!tx)
             return;
         const wallet = await this.walletModel.findById(tx.wallet).session(session);
         if (!wallet)
             return;
-        const balanceBefore = wallet.balance ?? 0;
-        const balanceAfter = balanceBefore + amountNaira;
-        wallet.balance = balanceAfter;
+        const refundToCashback = tx.type === wallet_enum_1.WalletTransactionType.CASHBACK_DEBIT;
+        const balanceBefore = refundToCashback
+            ? (wallet.cashbackBalance ?? 0)
+            : (wallet.balance ?? 0);
+        const balanceAfter = roundNaira(balanceBefore + amountNaira);
+        if (refundToCashback) {
+            wallet.cashbackBalance = balanceAfter;
+        }
+        else {
+            wallet.balance = balanceAfter;
+        }
         await wallet.save({ session });
         tx.status = wallet_enum_1.WalletTransactionStatus.FAILED;
         await tx.save({ session });
+        if (refundToCashback)
+            return;
         const notifyUserId = tx.user.toString();
         const notifyNewBalance = balanceAfter;
         if (notifyUserId && notifyNewBalance !== undefined) {
@@ -799,6 +955,42 @@ let WalletService = class WalletService {
                 newBalance: notifyNewBalance,
             }));
         }
+    }
+    async creditBillCashback(userId, amountNaira, refs, session) {
+        if (amountNaira <= 0)
+            return;
+        const reference = `cb_${refs.billReference}`;
+        const alreadyCredited = await this.walletTxModel
+            .findOne({ reference, status: wallet_enum_1.WalletTransactionStatus.SUCCESS })
+            .session(session);
+        if (alreadyCredited)
+            return;
+        const user = new mongoose_2.Types.ObjectId(userId);
+        const wallet = await this.walletModel.findOne({ user }).session(session);
+        if (!wallet)
+            return;
+        const balanceBefore = wallet.cashbackBalance ?? 0;
+        const balanceAfter = roundNaira(balanceBefore + amountNaira);
+        wallet.cashbackBalance = balanceAfter;
+        await wallet.save({ session });
+        await this.walletTxModel.create([
+            {
+                wallet: wallet._id,
+                user,
+                type: wallet_enum_1.WalletTransactionType.CASHBACK_CREDIT,
+                status: wallet_enum_1.WalletTransactionStatus.SUCCESS,
+                amount: amountNaira,
+                balanceBefore,
+                balanceAfter,
+                reference,
+                metadata: {
+                    billReference: refs.billReference,
+                    billType: refs.billType,
+                    cashbackPercent: refs.cashbackPercent,
+                    purchaseAmount: refs.purchaseAmount,
+                },
+            },
+        ], { session });
     }
     async creditUserWallet(userId, amountNaira, note) {
         if (amountNaira <= 0) {
@@ -827,7 +1019,7 @@ let WalletService = class WalletService {
     }
 };
 exports.WalletService = WalletService;
-exports.WalletService = WalletService = __decorate([
+exports.WalletService = WalletService = WalletService_1 = __decorate([
     (0, common_1.Injectable)(),
     __param(0, (0, mongoose_1.InjectModel)(wallet_schema_1.Wallet.name)),
     __param(1, (0, mongoose_1.InjectModel)(wallet_transaction_schema_1.WalletTransaction.name)),

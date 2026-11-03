@@ -87,11 +87,21 @@ Wallet funding confirmation and payout finalization both rely on
 `POST /webhooks/paystack`. In the Paystack dashboard:
 - **Dedicated Virtual Accounts** must be enabled under Settings →
   Payment channels for members to receive a personal account number
-  (bank-transfer funding). Set `PAYSTACK_DVA_PREFERRED_BANK` (wema /
-  providus / sterling) to pick the first-choice issuing bank. Wema is
-  live-only — in **test mode** Paystack only accepts providus/sterling, so
-  the server automatically retries with a supported bank when the preferred
-  one is rejected (`... is not available in test mode`).
+  (bank-transfer funding). Set `PAYSTACK_DVA_PREFERRED_BANK` to a Paystack
+  **provider slug** — `wema-bank` (live), `titan-paystack`, `providus` or
+  `sterling` — as the first-choice issuing bank. The server reads
+  `GET /dedicated_account/available_providers` and falls back through the
+  providers this business actually offers, so an unavailable bank (`Invalid
+  bank`, `... is not available in test mode`) no longer fails provisioning.
+  `wema` is NOT a valid slug; `wema-bank` is.
+- **Ajo mints its own Paystack customer per member** (`metadata.app = 'ajo'`)
+  and never reuses a customer that another product on the same Paystack
+  integration already used for a virtual account — a shared account number
+  would let one transfer hit two ledgers. When the member's email already
+  belongs to such a customer, Ajo creates a customer under a deterministic
+  plus-alias (`jane+ajo1a2b3c@example.com`) instead. Test-mode customers do
+  not exist in live mode, so an account minted with `sk_test_…` is
+  re-provisioned automatically after switching to a live key.
 - Enable **Transfers** and set the webhook URL to
   `https://<your-domain>/webhooks/paystack`. For local development, expose
   your dev server with a tool like [ngrok](https://ngrok.com) and use the
@@ -203,8 +213,11 @@ current cycle's recipient.
   via Paystack, with a saved transfer recipient code)
 - `User.dedicatedAccount` — a member's Paystack **Dedicated Virtual
   Account** (DVA): a personal bank account number they can transfer money
-  into to fund their wallet. Created lazily, stored on the user, and
-  reconciled by the `charge.success` webhook via the customer's phone.
+  into to fund their wallet. Created lazily on an Ajo-owned Paystack
+  customer (never a shared one), stored on the user with the Paystack mode
+  it was minted in, and reconciled by the `charge.success` webhook using the
+  Paystack customer code, the virtual account number, or the phone in any
+  Nigerian format (`07068497568` ⇄ `+2347068497568`).
 - `PaystackService` — wraps Paystack's transaction (funding), bank
   resolution, transfer recipient, and transfer (payout) APIs, plus
   constant-time webhook signature verification

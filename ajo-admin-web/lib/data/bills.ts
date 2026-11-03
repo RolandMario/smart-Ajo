@@ -1,8 +1,7 @@
 import "server-only";
 import { authedFetch } from "@/lib/api/authed-client";
 import type {
-  BillProviderConfigItem,
-  BillProviderKey,
+  BillCatalogStatus,
   PaginatedBillServicePlans,
   BillServiceType,
   BillStatus,
@@ -14,13 +13,14 @@ import type {
  * Reads for the Bills admin screen (Server Components only — the JWT never
  * reaches the browser). See lib/data/admins.ts for the same pattern.
  */
-export async function getBillsProviders(): Promise<BillProviderConfigItem[]> {
-  return authedFetch<BillProviderConfigItem[]>("/admin/bills/providers");
+
+/** Sync status + plan counts per bill category (VTpass is the only provider). */
+export async function getBillsCatalog(): Promise<BillCatalogStatus[]> {
+  return authedFetch<BillCatalogStatus[]>("/admin/bills/catalog");
 }
 
 export interface ListBillsPlansParams {
   serviceType?: BillServiceType;
-  provider?: BillProviderKey;
   page?: number;
   limit?: number;
 }
@@ -30,7 +30,6 @@ export async function listBillsPlans(
 ): Promise<PaginatedBillServicePlans> {
   const query = new URLSearchParams();
   if (params.serviceType) query.set("serviceType", params.serviceType);
-  if (params.provider) query.set("provider", params.provider);
   if (params.page) query.set("page", String(params.page));
   if (params.limit) query.set("limit", String(params.limit));
   const qs = query.toString();

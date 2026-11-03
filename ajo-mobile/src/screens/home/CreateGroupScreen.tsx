@@ -9,6 +9,7 @@ import {
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import type { GroupsStackParamList } from "../../navigation/types";
 import { Screen } from "../../components/Screen";
+import { SubpageHeader } from "../../components/SubpageHeader";
 import { TextField } from "../../components/TextField";
 import { Button } from "../../components/Button";
 import { ErrorBanner } from "../../components/ErrorBanner";
@@ -81,7 +82,7 @@ export function CreateGroupScreen({ navigation }: Props) {
 
   return (
     <Screen>
-      <Text style={styles.title}>Create a Group</Text>
+      <SubpageHeader title="Create a Group" onBack={() => navigation.goBack()} />
       <Text style={styles.subtitle}>
         {`Set up your savings group. You'll be the group admin.`}
       </Text>
@@ -180,12 +181,6 @@ export function CreateGroupScreen({ navigation }: Props) {
 }
 
 const styles = StyleSheet.create({
-  title: {
-    fontSize: typography.sizes.xxl,
-    fontWeight: typography.weights.bold,
-    color: colors.forestLightInk,
-    marginBottom: spacing.xs,
-  },
   subtitle: {
     fontSize: typography.sizes.base,
     color: colors.forestLightInkSoft,

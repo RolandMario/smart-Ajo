@@ -31,6 +31,7 @@ import { DonationGroupDetailScreen } from "../screens/donations/DonationGroupDet
 import { DonationGroupDonationsScreen } from "../screens/donations/DonationGroupDonationsScreen";
 import { DonationPayoutScreen } from "../screens/donations/DonationPayoutScreen";
 import { BillServicesScreen } from "../screens/bills/BillServicesScreen";
+import { BillHistoryScreen } from "../screens/bills/BillHistoryScreen";
 import { AirtimePurchaseScreen } from "../screens/bills/AirtimePurchaseScreen";
 import { DataPurchaseScreen } from "../screens/bills/DataPurchaseScreen";
 import { CableSubscriptionScreen } from "../screens/bills/CableSubscriptionScreen";
@@ -66,7 +67,7 @@ function GroupsStackNavigator() {
       <GroupsStack.Screen
         name="CreateGroup"
         component={CreateGroupScreen}
-        options={{ title: "Create Group" }}
+        options={{ headerShown: false, title: "Create Group" }}
       />
       <GroupsStack.Screen
         name="GroupDetail"
@@ -81,32 +82,32 @@ function GroupsStackNavigator() {
       <GroupsStack.Screen
         name="JoinGroup"
         component={JoinGroupScreen}
-        options={{ title: "Join a Group" }}
+        options={{ headerShown: false, title: "Join a Group" }}
       />
       <GroupsStack.Screen
         name="LockRotation"
         component={LockRotationScreen}
-        options={{ title: "Payout Order" }}
+        options={{ headerShown: false, title: "Payout Order" }}
       />
       <GroupsStack.Screen
         name="ActivateGroup"
         component={ActivateGroupScreen}
-        options={{ title: "Activate" }}
+        options={{ headerShown: false, title: "Activate" }}
       />
       <GroupsStack.Screen
         name="EditGroup"
         component={EditGroupScreen}
-        options={{ title: "Edit Group" }}
+        options={{ headerShown: false, title: "Edit Group" }}
       />
       <GroupsStack.Screen
         name="CyclesList"
         component={CyclesListScreen}
-        options={{ title: "Cycles" }}
+        options={{ headerShown: false, title: "Cycles" }}
       />
       <GroupsStack.Screen
         name="CycleDetail"
         component={CycleDetailScreen}
-        options={{ title: "Cycle" }}
+        options={{ headerShown: false, title: "Cycle" }}
       />
       <GroupsStack.Screen
         name="CurrentCycle"
@@ -116,7 +117,7 @@ function GroupsStackNavigator() {
       <GroupsStack.Screen
         name="ContinueGroup"
         component={ContinueGroupScreen}
-        options={{ title: "Continue Group" }}
+        options={{ headerShown: false, title: "Continue Group" }}
       />
     </GroupsStack.Navigator>
   );
@@ -143,17 +144,17 @@ function WalletStackNavigator() {
       <WalletStack.Screen
         name="FundWallet"
         component={FundWalletScreen}
-        options={{ title: "Fund Wallet" }}
+        options={{ headerShown: false, title: "Fund Wallet" }}
       />
       <WalletStack.Screen
         name="BankAccount"
         component={BankAccountScreen}
-        options={{ title: "Bank Account" }}
+        options={{ headerShown: false, title: "Bank Account" }}
       />
       <WalletStack.Screen
         name="Transactions"
         component={TransactionsScreen}
-        options={{ title: "Transactions" }}
+        options={{ headerShown: false, title: "Transactions" }}
       />
       <WalletStack.Screen
         name="TransactionReceipt"
@@ -185,7 +186,7 @@ function SavingsStackNavigator() {
       <SavingsStack.Screen
         name="CreateSavingsPlan"
         component={CreateSavingsPlanScreen}
-        options={{ title: "Create Savings" }}
+        options={{ headerShown: false, title: "Create Savings" }}
       />
       <SavingsStack.Screen
         name="SavingsPlanDetail"
@@ -216,12 +217,12 @@ function DonationsStackNavigator() {
       <DonationsStack.Screen
         name="CreateDonationGroup"
         component={CreateDonationGroupScreen}
-        options={{ title: "Create Pool" }}
+        options={{ headerShown: false, title: "Create Pool" }}
       />
       <DonationsStack.Screen
         name="JoinDonationGroup"
         component={JoinDonationGroupScreen}
-        options={{ title: "Join Pool" }}
+        options={{ headerShown: false, title: "Join Pool" }}
       />
       <DonationsStack.Screen
         name="DonationGroupDetail"
@@ -253,11 +254,12 @@ function BillsStackNavigator() {
       {/* BillServices draws its own title row (with the account avatar), so it
           hides the native header — otherwise "Pay Bills" would appear twice. */}
       <BillsStack.Screen name="BillServices" component={BillServicesScreen} options={{ headerShown: false }} />
-      <BillsStack.Screen name="AirtimePurchase" component={AirtimePurchaseScreen} options={{ title: "Buy Airtime" }} />
-      <BillsStack.Screen name="DataPurchase" component={DataPurchaseScreen} options={{ title: "Buy Data" }} />
-      <BillsStack.Screen name="CableSubscription" component={CableSubscriptionScreen} options={{ title: "Cable TV" }} />
-      <BillsStack.Screen name="ElectricityPayment" component={ElectricityPaymentScreen} options={{ title: "Electricity" }} />
-      <BillsStack.Screen name="BillConfirmation" component={BillConfirmationScreen} options={{ title: "Confirm" }} />
+      <BillsStack.Screen name="BillHistory" component={BillHistoryScreen} options={{ title: "Bill History" }} />
+      <BillsStack.Screen name="AirtimePurchase" component={AirtimePurchaseScreen} options={{ headerShown: false, title: "Buy Airtime" }} />
+      <BillsStack.Screen name="DataPurchase" component={DataPurchaseScreen} options={{ headerShown: false, title: "Buy Data" }} />
+      <BillsStack.Screen name="CableSubscription" component={CableSubscriptionScreen} options={{ headerShown: false, title: "Cable TV" }} />
+      <BillsStack.Screen name="ElectricityPayment" component={ElectricityPaymentScreen} options={{ headerShown: false, title: "Electricity" }} />
+      <BillsStack.Screen name="BillConfirmation" component={BillConfirmationScreen} options={{ headerShown: false, title: "Confirm" }} />
       <BillsStack.Screen name="BillSuccess" component={BillSuccessScreen} options={{ headerShown: false }} />
     </BillsStack.Navigator>
   );

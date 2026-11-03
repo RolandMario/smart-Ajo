@@ -7,10 +7,6 @@ export class ListBillPlansQueryDto {
   serviceType?: string;
 
   @IsOptional()
-  @IsIn(['vtpass', 'gladtidings'])
-  provider?: string;
-
-  @IsOptional()
   @IsString()
   bucket?: string;
 

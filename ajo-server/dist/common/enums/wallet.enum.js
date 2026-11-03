@@ -15,6 +15,8 @@ var WalletTransactionType;
     WalletTransactionType["ADMIN_WITHDRAWAL"] = "admin_withdrawal";
     WalletTransactionType["SAVINGS_DEBIT"] = "savings_debit";
     WalletTransactionType["DONATION_DEBIT"] = "donation_debit";
+    WalletTransactionType["CASHBACK_CREDIT"] = "cashback_credit";
+    WalletTransactionType["CASHBACK_DEBIT"] = "cashback_debit";
 })(WalletTransactionType || (exports.WalletTransactionType = WalletTransactionType = {}));
 var WalletTransactionStatus;
 (function (WalletTransactionStatus) {

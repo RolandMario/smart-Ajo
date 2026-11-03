@@ -4,6 +4,7 @@ import type { AccountStackParamList } from "./types";
 import { ProfileScreen } from "../screens/home/ProfileScreen";
 import { EditProfileScreen } from "../screens/home/EditProfileScreen";
 import { NotificationsScreen } from "../screens/home/NotificationsScreen";
+import { CashbackWalletScreen } from "../screens/home/CashbackWalletScreen";
 import { colors } from "../theme";
 
 const AccountStack = createNativeStackNavigator<AccountStackParamList>();
@@ -34,13 +35,19 @@ export function AccountNavigator() {
       <AccountStack.Screen
         name="EditProfile"
         component={EditProfileScreen}
-        options={{ title: "Edit Profile" }}
+        options={{ headerShown: false, title: "Edit Profile" }}
       />
       {/* Alerts draws its own serif header (with the back chip), matching the
           other redesigned subpages. */}
       <AccountStack.Screen
         name="Notifications"
         component={NotificationsScreen}
+        options={{ headerShown: false }}
+      />
+      {/* Cashback wallet also draws its own SubpageHeader. */}
+      <AccountStack.Screen
+        name="CashbackWallet"
+        component={CashbackWalletScreen}
         options={{ headerShown: false }}
       />
     </AccountStack.Navigator>

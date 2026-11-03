@@ -14,8 +14,11 @@ import type { RequestUser } from '../common/decorators/current-user.decorator';
 import { PurchaseAirtimeDto } from './dto/purchase-airtime.dto';
 import { PurchaseDataDto } from './dto/purchase-data.dto';
 import { PurchaseCableDto } from './dto/purchase-cable.dto';
+import { RenewCableDto } from './dto/renew-cable.dto';
 import { PurchaseElectricityDto } from './dto/purchase-electricity.dto';
 import { ValidateMeterDto, ValidateSmartCardDto } from './dto/validate.dto';
+import { CashbackQuoteQueryDto } from './dto/cashback-quote-query.dto';
+import { ListBillHistoryQueryDto } from './dto/list-bill-history-query.dto';
 
 @UseGuards(JwtAuthGuard)
 @Controller('bills')
@@ -62,6 +65,12 @@ export class BillsController {
     return this.bills.purchaseCable(user.userId, dto);
   }
 
+  /** Renews the bouquet a verified decoder is already on (see `renewCable`). */
+  @Post('cable/renew')
+  renewCable(@CurrentUser() user: RequestUser, @Body() dto: RenewCableDto) {
+    return this.bills.renewCable(user.userId, dto);
+  }
+
   @Post('electricity')
   purchaseElectricity(
     @CurrentUser() user: RequestUser,
@@ -85,9 +94,21 @@ export class BillsController {
     return this.bills.getCablePlans(provider);
   }
 
+  /**
+   * Cashback the member would earn for a purchase they are about to confirm.
+   * Powers the confirm screen's "You'll earn ₦0.5 cashback" banner.
+   */
+  @Get('cashback-quote')
+  getCashbackQuote(@Query() query: CashbackQuoteQueryDto) {
+    return this.bills.estimateCashback(query);
+  }
+
   @Get('history')
-  getHistory(@CurrentUser() user: RequestUser) {
-    return this.bills.getHistory(user.userId);
+  getHistory(
+    @CurrentUser() user: RequestUser,
+    @Query() query: ListBillHistoryQueryDto,
+  ) {
+    return this.bills.getHistory(user.userId, query);
   }
 
   @Get('receipts/:reference')

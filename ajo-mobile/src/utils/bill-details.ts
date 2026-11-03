@@ -1,10 +1,10 @@
 import { formatNaira } from "./format";
 
 /**
- * Type-specific bill receipt fields shared by the wallet receipts and (once
- * wired up) any bill success screen. Each service category renders its own
- * meaningful rows — airtime → network, data → network + plan size, cable →
- * provider + package + subscriber, electricity → disco + meter + token +
+ * Type-specific bill receipt fields shared by the wallet receipts and the bill
+ * success screen. Each service category renders its own meaningful rows —
+ * airtime → network, data → network + plan size, cable → provider + package +
+ * subscriber, electricity → product (disco) + meter + token + units + phone +
  * customer — while falling back gracefully on rows whose metadata predates
  * the richer fields (e.g. no `providerDetails` from the provider response).
  */
@@ -66,6 +66,51 @@ function cableBrandLabel(provider?: string | null): string {
     default:
       return provider ? provider.toUpperCase() : "—";
   }
+}
+
+/** "IKEJA ELECTRIC" → "Ikeja Electric". */
+function titleCaseWords(value: string): string {
+  return value
+    .toLowerCase()
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ");
+}
+
+/**
+ * The vended token as it should read on a receipt.
+ *
+ * VTpass labels it inside the value (`"token": "Token : 2636…"`) and a bare
+ * 20-digit run is unreadable, so the label is dropped and long digit runs are
+ * grouped in fours — the way the token is read out when typing it into a meter.
+ */
+function receiptToken(value?: string | null): string | undefined {
+  const token = value?.replace(/^\s*token\s*[:-]?\s*/i, "").trim();
+  if (!token) return undefined;
+  return /^\d{12,}$/.test(token) ? token.replace(/(\d{4})(?=\d)/g, "$1 ") : token;
+}
+
+/** "79.9 kWh" → "79.9": the row label already carries the unit. */
+function receiptUnits(value?: string | null): string | undefined {
+  const units = value?.replace(/\s*kwh\s*$/i, "").trim();
+  return units || undefined;
+}
+
+/**
+ * The electricity product as it should read on a receipt. VTpass returns the
+ * trading name (`disco_name`, e.g. "IKEJA ELECTRIC"), which beats our own
+ * mapping; rows without it (older receipts, or a provider that echoed back the
+ * bare code "IKEDC") fall back to the human label for the disco code.
+ */
+function discoProductLabel(
+  discoName?: string | null,
+  discoCode?: string | null,
+): string {
+  const name = discoName?.trim();
+  // A bare code in caps reads worse than our own mapping.
+  if (name && /\s/.test(name)) return titleCaseWords(name);
+  return discoLabel(discoCode);
 }
 
 function discoLabel(disco?: string | null): string {
@@ -140,7 +185,9 @@ export function billReceiptRows(tx: BillReceiptSource): BillReceiptRow[] {
       });
       {
         const plan =
-          firstString(metadata.packageName) ?? firstString(details.packageName);
+          firstString(metadata.packageName) ??
+          firstString(metadata.planName) ??
+          firstString(details.packageName);
         if (plan) rows.push({ label: "Package", value: plan });
       }
       rows.push({
@@ -156,9 +203,14 @@ export function billReceiptRows(tx: BillReceiptSource): BillReceiptRow[] {
       break;
 
     case "electricity":
+      // Prepaid receipts lead with what was bought (the disco's trading name,
+      // e.g. "Ikeja Electric"), then the meter/token it was delivered to.
       rows.push({
-        label: "Disco",
-        value: discoLabel(firstString(metadata.disco)),
+        label: "Product",
+        value: discoProductLabel(
+          firstString(details.discoName) ?? firstString(metadata.discoName),
+          firstString(metadata.disco),
+        ),
       });
       rows.push({
         label: "Meter",
@@ -171,13 +223,25 @@ export function billReceiptRows(tx: BillReceiptSource): BillReceiptRow[] {
         }
       }
       {
-        const token =
-          firstString(details.token) ?? firstString(metadata.token);
+        const token = receiptToken(
+          firstString(details.token) ?? firstString(metadata.token),
+        );
         if (token) rows.push({ label: "Token", value: token });
       }
       {
-        const units = firstString(details.units) ?? firstString(metadata.units);
-        if (units) rows.push({ label: "Units", value: units });
+        // Providers send the count with its unit ("79.9 kWh") — the label below
+        // carries it, so only the number is shown.
+        const units = receiptUnits(
+          firstString(details.units) ?? firstString(metadata.units),
+        );
+        if (units) rows.push({ label: "Units (kWh)", value: units });
+      }
+      {
+        // The prepaid token also goes out by SMS, so members need to see which
+        // line received it.
+        const phone =
+          firstString(metadata.phone) ?? firstString(details.phone);
+        if (phone) rows.push({ label: "Phone", value: phone });
       }
       {
         const customer =

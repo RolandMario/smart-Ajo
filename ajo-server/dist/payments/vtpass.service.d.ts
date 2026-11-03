@@ -28,16 +28,25 @@ export declare class VTPassService {
     private configService;
     private readonly logger;
     private readonly client;
-    private readonly apiKey;
-    private readonly publicKey;
-    private readonly secretKey;
-    private readonly baseURL;
+    private readonly apiKey?;
+    private readonly publicKey?;
+    private readonly secretKey?;
     constructor(configService: ConfigService);
-    private getAuthHeaders;
+    isConfigured(): boolean;
+    missingConfig(): string[];
+    private readKey;
+    private assertConfigured;
+    private authHeaders;
     private getRequestId;
-    private isSuccessCode;
+    private isSuccessResponse;
+    private isDelivered;
+    private describeFailure;
+    private toFailureException;
     private handleError;
     private toPurchaseResult;
+    private submitPurchase;
+    private fetchRequery;
+    private requeryForToken;
     purchaseAirtime(params: {
         serviceID: string;
         phone: string;
@@ -54,6 +63,7 @@ export declare class VTPassService {
         amount: number;
         phone: string;
         variationCode?: string;
+        renewCurrentBouquet?: boolean;
     }): Promise<PurchaseResult>;
     purchaseElectricity(params: {
         serviceID: string;

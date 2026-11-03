@@ -121,7 +121,7 @@ export function DonationGroupDetailScreen({ navigation, route }: Props) {
     if (group.amountType === "fixed") {
       Alert.alert(
         "Confirm donation",
-        `Give ${formatNaira(group.amount ?? 0)} from your Ajo wallet to "${group.name}"?`,
+        `Give ${formatNaira(group.amount ?? 0)} from your SmartThrift wallet to "${group.name}"?`,
         [
           { text: "Cancel", style: "cancel" },
           {
@@ -256,7 +256,7 @@ export function DonationGroupDetailScreen({ navigation, route }: Props) {
       const code = detail.group.joinCode;
       if (Clipboard) {
         await Clipboard.setStringAsync(
-          `Join my Ajo pool "${detail.group.name}"\nGroup ID: ${code}`,
+          `Join my SmartThrift pool "${detail.group.name}"\nGroup ID: ${code}`,
         );
         Alert.alert(
           "Group ID copied",
@@ -632,7 +632,7 @@ export function DonationGroupDetailScreen({ navigation, route }: Props) {
           <View style={styles.modalCard}>
             <Text style={styles.modalTitle}>Choose your donation</Text>
             <Text style={styles.modalSubtitle}>
-              The amount is debited from your Ajo wallet.
+              The amount is debited from your SmartThrift wallet.
             </Text>
             <TextInput
               style={styles.modalInput}

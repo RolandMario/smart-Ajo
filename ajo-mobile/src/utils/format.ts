@@ -6,6 +6,19 @@ export function formatNaira(amount: number): string {
 }
 
 /**
+ * Format a naira amount keeping up to two decimals.
+ *
+ * Cashback is a percentage of the purchase, so amounts like ₦0.5 or ₦12.75 are
+ * normal — `formatNaira` would round them away and show "₦0".
+ */
+export function formatNairaExact(amount: number): string {
+  return `₦${amount.toLocaleString("en-NG", {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+  })}`;
+}
+
+/**
  * Format a donation amount: fixed pools show the naira amount, free-will
  * pools read "Any amount".
  */
@@ -70,6 +83,30 @@ export function formatDate(dateStr: string): string {
     month: "short",
     year: "numeric",
   });
+}
+
+/**
+ * "2026-10-25T…" → "Just now" / "5m ago" / "2h ago" / "2d ago", falling back
+ * to the full `formatDate` read-out for anything older than a week. Returns
+ * an empty string when the date is missing or unparseable (the API's older
+ * receipt payloads carried no timestamp).
+ */
+export function formatRelativeTime(dateStr?: string | null): string {
+  if (!dateStr) return "";
+  const then = new Date(dateStr).getTime();
+  if (Number.isNaN(then)) return "";
+
+  const minutes = Math.floor((Date.now() - then) / 60_000);
+  if (minutes < 1) return "Just now";
+  if (minutes < 60) return `${minutes}m ago`;
+
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+
+  const days = Math.floor(hours / 24);
+  if (days < 7) return `${days}d ago`;
+
+  return formatDate(dateStr);
 }
 
 /**

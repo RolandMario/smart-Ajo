@@ -104,7 +104,7 @@ export function SavingsPlanDetailScreen({ navigation, route }: Props) {
 
     Alert.alert(
       "Pay from wallet?",
-      `${formatNaira(current.amount)} will be moved from your Ajo wallet into "${current.name}".`,
+      `${formatNaira(current.amount)} will be moved from your SmartThrift wallet into "${current.name}".`,
       [
         { text: "Cancel", style: "cancel" },
         {
@@ -308,7 +308,7 @@ export function SavingsPlanDetailScreen({ navigation, route }: Props) {
                 ? `${paymentsLeft} payment${paymentsLeft === 1 ? "" : "s"} left · `
                 : ""}
               {formatNaira(plan.amount)} per {plan.frequency} interval, paid
-              from your Ajo wallet. Nothing is debited automatically.
+              from your SmartThrift wallet. Nothing is debited automatically.
             </Text>
             <Button
               title={`Pay ${formatNaira(plan.amount)} from wallet`}

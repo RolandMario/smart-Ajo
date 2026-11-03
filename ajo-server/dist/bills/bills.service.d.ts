@@ -1,8 +1,7 @@
-import { OnModuleInit } from '@nestjs/common';
 import { Connection, Model } from 'mongoose';
 import { VTPassService } from '../payments/vtpass.service';
-import { GladTidingsService } from '../payments/gladtidings.service';
 import { WalletService } from '../wallet/wallet.service';
+import type { BillPaymentSource } from '../wallet/wallet.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { UsersService } from '../users/users.service';
 import { BillProviderConfigDocument } from './schemas/bill-provider-config.schema';
@@ -20,10 +19,10 @@ export interface BillReceipt {
     recipient: string;
     metadata?: Record<string, unknown>;
     walletTransaction?: string;
+    createdAt?: string;
 }
-export declare class BillsService implements OnModuleInit {
+export declare class BillsService {
     private vtpass;
-    private gladtidings;
     private walletService;
     private usersService;
     private notificationsService;
@@ -32,67 +31,107 @@ export declare class BillsService implements OnModuleInit {
     private servicePlanModel;
     private billTransactionModel;
     private readonly logger;
-    constructor(vtpass: VTPassService, gladtidings: GladTidingsService, walletService: WalletService, usersService: UsersService, notificationsService: NotificationsService, connection: Connection, providerConfigModel: Model<BillProviderConfigDocument>, servicePlanModel: Model<BillServicePlanDocument>, billTransactionModel: Model<BillTransactionDocument>);
-    onModuleInit(): Promise<void>;
+    private readonly catalogueCache;
+    constructor(vtpass: VTPassService, walletService: WalletService, usersService: UsersService, notificationsService: NotificationsService, connection: Connection, providerConfigModel: Model<BillProviderConfigDocument>, servicePlanModel: Model<BillServicePlanDocument>, billTransactionModel: Model<BillTransactionDocument>);
+    private assertBillsConfigured;
     private getPlatformAdminUserId;
-    private resolveProvider;
+    private planCashbackPercent;
     private vtpassCatalog;
     private readonly DISCO_SERVICE_ID_MAP;
+    private resolveLiveCablePlan;
     validateMeter(disco: string, meterNumber: string, meterType: string): Promise<{
         valid: boolean;
+        name: string | undefined;
         customerName: string | undefined;
         address: string | undefined;
         packageInfo: string | undefined;
         outstanding: number | undefined;
+        meterType: string;
     }>;
     validateSmartCard(serviceProvider: string, smartCardNumber: string): Promise<{
         valid: boolean;
+        name: string | undefined;
         customerName: string | undefined;
         address: string | undefined;
         packageInfo: string | undefined;
         outstanding: number | undefined;
     }>;
+    private toValidationResult;
     private executeBillTransaction;
     purchaseAirtime(userId: string, dto: {
         amount: number;
         phone: string;
         network: string;
+        paymentSource?: BillPaymentSource;
     }): Promise<BillReceipt>;
     purchaseData(userId: string, dto: {
         phone: string;
         dataPlanId: string;
         network: string;
+        paymentSource?: BillPaymentSource;
     }): Promise<BillReceipt>;
     purchaseCable(userId: string, dto: {
         serviceProvider: string;
         smartCardNumber: string;
-        amount: number;
-        variationCode?: string;
+        variationCode: string;
         customerName?: string;
+        paymentSource?: BillPaymentSource;
+    }): Promise<BillReceipt>;
+    renewCable(userId: string, dto: {
+        serviceProvider: string;
+        smartCardNumber: string;
+        customerName?: string;
+        expectedAmount?: number;
+        paymentSource?: BillPaymentSource;
     }): Promise<BillReceipt>;
     purchaseElectricity(userId: string, dto: {
         disco: string;
         meterNumber: string;
         meterType: string;
         amount: number;
-        phone: string;
+        phone?: string;
         customerName?: string;
+        paymentSource?: BillPaymentSource;
     }): Promise<BillReceipt>;
-    getDataPlans(network: string): Promise<import("../payments/vtpass.service").ServiceVariation[]>;
-    getCablePlans(provider: string): Promise<import("../payments/vtpass.service").ServiceVariation[]>;
-    getActiveServiceTypes(): Promise<string[]>;
-    listProviderConfigs(): Promise<{
-        serviceType: "data" | "airtime" | "cable" | "electricity";
-        activeProvider: import("../payments/gladtidings.service").BillProviderKey;
-        lastSyncedAt: Date | undefined;
-        lastSyncStatus: string;
-        planTotal: number;
-        planActive: number;
-        configured: boolean;
+    private dataNetworkEntry;
+    private cableProviderEntry;
+    private liveCatalogue;
+    private planOverlay;
+    private liveDataPlans;
+    private liveCablePlans;
+    private matchCurrentBouquet;
+    private resolveLiveDataPlan;
+    getDataPlans(network: string): Promise<{
+        variationCode: string;
+        name: string;
+        amount: number;
+        fixedPrice: boolean;
+        cashbackPercent: number;
+        cashback: number;
     }[]>;
-    setProvider(serviceType: string, provider: 'vtpass' | 'gladtidings'): Promise<{
+    getCablePlans(provider: string): Promise<{
+        variationCode: string;
+        name: string;
+        amount: number;
+        fixedPrice: boolean;
+        cashbackPercent: number;
+        cashback: number;
+    }[]>;
+    estimateCashback(params: {
+        serviceType: 'airtime' | 'data' | 'cable' | 'electricity';
+        provider?: string;
+        variationCode?: string;
+        amount?: number;
+        packageName?: string;
+    }): Promise<{
         serviceType: "data" | "airtime" | "cable" | "electricity";
-        activeProvider: import("../payments/gladtidings.service").BillProviderKey;
+        purchaseAmount: number;
+        cashbackPercent: number;
+        cashback: number;
+    }>;
+    getActiveServiceTypes(): Promise<string[]>;
+    listCatalogStatus(): Promise<{
+        serviceType: "data" | "airtime" | "cable" | "electricity";
         lastSyncedAt: Date | undefined;
         lastSyncStatus: string;
         planTotal: number;
@@ -101,7 +140,7 @@ export declare class BillsService implements OnModuleInit {
     }[]>;
     syncPlans(serviceType: string): Promise<{
         serviceType: string;
-        provider: "vtpass" | "gladtidings";
+        provider: string;
         total: number;
         created: number;
         updated: number;
@@ -109,7 +148,6 @@ export declare class BillsService implements OnModuleInit {
     }>;
     listPlansAdmin(query?: {
         serviceType?: string;
-        provider?: string;
         bucket?: string;
         page?: number;
         limit?: number;
@@ -124,6 +162,7 @@ export declare class BillsService implements OnModuleInit {
             amount: number;
             fixedPrice: boolean;
             isActive: boolean;
+            cashbackPercent: number;
             updatedAt: Date | undefined;
         }[];
         page: number;
@@ -137,8 +176,17 @@ export declare class BillsService implements OnModuleInit {
         name: string;
         isActive: boolean;
     }>;
+    setPlanCashback(id: string, cashbackPercent: number): Promise<{
+        id: string;
+        serviceType: string;
+        name: string;
+        bucket: string;
+        cashbackPercent: number;
+    }>;
     private toBillReceipt;
-    getHistory(userId: string): Promise<BillReceipt[]>;
+    getHistory(userId: string, query?: {
+        serviceType?: string;
+    }): Promise<BillReceipt[]>;
     getReceipt(userId: string, reference: string): Promise<BillReceipt>;
     private toAdminBillTransaction;
     listTransactionsAdmin(query?: {

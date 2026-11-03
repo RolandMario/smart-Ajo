@@ -27,11 +27,13 @@ let PaystackService = PaystackService_1 = class PaystackService {
     client;
     secretKey;
     DVA_BANK_POOL = [
+        'wema-bank',
+        'titan-paystack',
         'wema',
         'providus',
         'sterling',
-        'titan-paystack',
     ];
+    providerCache;
     constructor(configService) {
         this.configService = configService;
         this.secretKey = this.normalizeSecret(this.configService.get('PAYSTACK_SECRET_KEY'));
@@ -79,6 +81,22 @@ let PaystackService = PaystackService_1 = class PaystackService {
         const data = error.response.data;
         const message = (data?.message ?? '').toLowerCase();
         return data?.code === 'invalid_Key' || message.includes('invalid key');
+    }
+    errorMessage(error) {
+        if (axios_1.default.isAxiosError(error)) {
+            const data = error.response?.data;
+            return data?.message ?? error.message;
+        }
+        return error instanceof Error ? error.message : String(error);
+    }
+    isCustomerNotFoundError(error) {
+        return /customer (?:not found|does not exist)|customer_not_found/i.test(this.errorMessage(error));
+    }
+    isDuplicateCustomerError(error) {
+        return /customer (?:already )?exists|already (?:exists|been taken)|duplicate/i.test(this.errorMessage(error));
+    }
+    isDedicatedAccountExistsError(error) {
+        return /already (?:has|have) (?:a )?dedicated account|dedicated account (?:already )?(?:exists|assigned)/i.test(this.errorMessage(error));
     }
     handleError(action, error) {
         if (axios_1.default.isAxiosError(error)) {
@@ -180,13 +198,17 @@ let PaystackService = PaystackService_1 = class PaystackService {
     }
     async createCustomer(params) {
         try {
-            const body = { phone: params.phone };
+            const body = {};
+            if (params.phone)
+                body.phone = params.phone;
             if (params.email)
                 body.email = params.email;
             if (params.firstName)
                 body.first_name = params.firstName;
             if (params.lastName)
                 body.last_name = params.lastName;
+            if (params.metadata)
+                body.metadata = params.metadata;
             const response = await this.client.post('/customer', body);
             return { customerCode: response.data.data.customer_code };
         }
@@ -194,22 +216,88 @@ let PaystackService = PaystackService_1 = class PaystackService {
             return this.handleError('customer creation', error);
         }
     }
-    dvaPreferredBank() {
-        return (this.configService.get('PAYSTACK_DVA_PREFERRED_BANK') ?? 'wema');
+    async fetchCustomer(customerCode) {
+        try {
+            const response = await this.client.get(`/customer/${encodeURIComponent(customerCode)}`);
+            const data = response.data?.data ?? {};
+            return {
+                customerCode: data.customer_code ?? customerCode,
+                email: data.email,
+                phone: data.phone,
+            };
+        }
+        catch (error) {
+            if (this.isCustomerNotFoundError(error)) {
+                this.logger.warn(`Paystack customer ${customerCode} not found in this mode — it will be re-provisioned`);
+                return null;
+            }
+            return this.handleError('customer lookup', error);
+        }
     }
-    dvaBankCandidates() {
-        const preferred = this.dvaPreferredBank().trim().toLowerCase();
-        return [
-            preferred,
-            ...this.DVA_BANK_POOL.filter((bank) => bank !== preferred),
-        ];
+    async fetchCustomerByEmail(email) {
+        try {
+            const response = await this.client.get('/customer', { params: { email } });
+            const list = Array.isArray(response.data?.data) ? response.data.data : [];
+            const match = list.find((entry) => (entry.email ?? '').toLowerCase() === email.trim().toLowerCase());
+            if (!match?.customer_code)
+                return null;
+            return {
+                customerCode: match.customer_code,
+                email: match.email,
+                phone: match.phone,
+            };
+        }
+        catch (error) {
+            if (this.isCustomerNotFoundError(error))
+                return null;
+            return this.handleError('customer lookup', error);
+        }
+    }
+    dvaPreferredBank() {
+        return (this.configService.get('PAYSTACK_DVA_PREFERRED_BANK') ??
+            'wema-bank');
+    }
+    async fetchDedicatedAccountProviders() {
+        if (this.providerCache &&
+            Date.now() - this.providerCache.fetchedAt < 5 * 60_000) {
+            return this.providerCache.slugs;
+        }
+        try {
+            const response = await this.client.get('/dedicated_account/available_providers');
+            const list = Array.isArray(response?.data?.data)
+                ? response.data.data
+                : [];
+            const slugs = list
+                .map((provider) => provider.provider_slug?.trim().toLowerCase())
+                .filter((slug) => !!slug);
+            if (slugs.length > 0) {
+                this.providerCache = { fetchedAt: Date.now(), slugs };
+                return slugs;
+            }
+        }
+        catch (error) {
+            this.logger.warn(`Could not fetch dedicated account providers: ${this.errorMessage(error)}`);
+        }
+        return [];
+    }
+    dvaBankCandidates(available = [], preferred = this.dvaPreferredBank()) {
+        const ordered = [preferred, ...available, ...this.DVA_BANK_POOL];
+        const seen = new Set();
+        return ordered
+            .map((bank) => bank.trim().toLowerCase())
+            .filter((bank) => {
+            if (!bank || seen.has(bank))
+                return false;
+            seen.add(bank);
+            return true;
+        });
     }
     isDvaBankUnavailableError(error) {
-        const message = error instanceof Error ? error.message : String(error);
-        return /is not available in test mode|bank is not (?:available|supported)/i.test(message);
+        return /is not available in test mode|not available for this business|invalid (?:preferred )?bank|bank is not (?:available|supported)|unsupported bank/i.test(this.errorMessage(error));
     }
     async createDedicatedAccount(params) {
-        const banks = this.dvaBankCandidates();
+        const providers = await this.fetchDedicatedAccountProviders();
+        const banks = this.dvaBankCandidates(providers, params.preferredBank);
         let lastError;
         for (const bank of banks) {
             try {
@@ -223,6 +311,7 @@ let PaystackService = PaystackService_1 = class PaystackService {
                 if (!this.isDvaBankUnavailableError(err)) {
                     throw err;
                 }
+                this.logger.warn(`Dedicated account bank "${bank}" unavailable — trying the next provider`);
             }
         }
         throw lastError;
@@ -237,44 +326,33 @@ let PaystackService = PaystackService_1 = class PaystackService {
                 last_name: params.lastName,
                 country: 'NG',
             });
-            const da = response.data.data.dedicated_account ?? {};
-            const assignment = da.assignment ?? {};
-            return {
-                accountId: da.id ? String(da.id) : undefined,
-                accountNumber: da.account_number ?? assignment.account_number ?? '',
-                accountName: da.account_name ?? '',
-                bankName: da.bank?.name ?? assignment.bank?.name ?? '',
-                currency: da.currency ?? assignment.currency ?? 'NGN',
-                active: da.active ?? da.assigned ?? true,
-            };
+            const payload = response?.data?.data ?? {};
+            const account = payload.dedicated_account ?? payload;
+            return this.mapDedicatedAccount(account);
         }
         catch (error) {
             return this.handleError('dedicated account creation', error);
         }
     }
+    mapDedicatedAccount(account) {
+        const assignment = account.assignment ?? {};
+        return {
+            accountId: account.id ? String(account.id) : undefined,
+            accountNumber: account.account_number ?? assignment.account_number ?? '',
+            accountName: account.account_name ?? '',
+            bankName: account.bank?.name ?? assignment.bank?.name ?? '',
+            currency: account.currency ?? assignment.currency ?? 'NGN',
+            active: account.active ?? account.assigned ?? true,
+        };
+    }
     async fetchDedicatedAccounts(customerCode) {
         try {
-            const response = await this.client.get('/dedicated_account', {
-                params: { customer_code: customerCode },
-            });
-            const list = Array.isArray(response.data.data) ? response.data.data : [];
+            const response = await this.client.get('/dedicated_account', { params: { customer: customerCode } });
+            const list = Array.isArray(response?.data?.data)
+                ? response.data.data
+                : [];
             return list
-                .map((entry) => {
-                const da = entry.dedicated_account ?? {};
-                const assignment = da.assignment ?? {};
-                return {
-                    accountId: entry.id
-                        ? String(entry.id)
-                        : da.id
-                            ? String(da.id)
-                            : undefined,
-                    accountNumber: da.account_number ?? assignment.account_number ?? '',
-                    accountName: da.account_name ?? '',
-                    bankName: da.bank?.name ?? assignment.bank?.name ?? '',
-                    currency: da.currency ?? assignment.currency ?? 'NGN',
-                    active: da.active ?? da.assigned ?? false,
-                };
-            })
+                .map((entry) => this.mapDedicatedAccount(entry.dedicated_account ?? entry))
                 .filter((entry) => entry.accountNumber.length > 0);
         }
         catch (error) {
@@ -283,7 +361,7 @@ let PaystackService = PaystackService_1 = class PaystackService {
     }
     async deactivateDedicatedAccount(accountId) {
         try {
-            await this.client.post(`/dedicated_account/${encodeURIComponent(accountId)}/deactivate`, {});
+            await this.client.delete(`/dedicated_account/${encodeURIComponent(accountId)}`);
         }
         catch (error) {
             this.handleError('dedicated account deactivation', error);
@@ -310,6 +388,9 @@ let PaystackService = PaystackService_1 = class PaystackService {
     }
     isTestMode() {
         return this.secretKey.startsWith('sk_test_');
+    }
+    keyMode() {
+        return this.isTestMode() ? 'test' : 'live';
     }
     testTransferOtp() {
         return this.configService.get('PAYSTACK_TRANSFER_OTP') ?? '123456';

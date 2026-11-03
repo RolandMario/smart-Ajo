@@ -10,6 +10,7 @@ import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useFocusEffect } from "@react-navigation/native";
 import type { GroupsStackParamList } from "../../navigation/types";
 import { Screen } from "../../components/Screen";
+import { SubpageHeader } from "../../components/SubpageHeader";
 import { Button } from "../../components/Button";
 import { ErrorBanner } from "../../components/ErrorBanner";
 import { LoadingScreen } from "../../components/LoadingScreen";
@@ -103,7 +104,10 @@ export function ContinueGroupScreen({ navigation, route }: Props) {
   if (!detail) {
     return (
       <Screen>
-        <Text style={styles.title}>Continue Group</Text>
+        <SubpageHeader
+          title="Continue Group"
+          onBack={() => navigation.goBack()}
+        />
         {error && <ErrorBanner message={error} />}
       </Screen>
     );
@@ -112,7 +116,10 @@ export function ContinueGroupScreen({ navigation, route }: Props) {
   return (
     <Screen>
       <ScrollView>
-        <Text style={styles.title}>Continue Group</Text>
+        <SubpageHeader
+          title="Continue Group"
+          onBack={() => navigation.goBack()}
+        />
         <Text style={styles.subtitle}>
           Start a new round for "{detail.group.name}". Adjust settings below or
           keep the current values.
@@ -177,12 +184,6 @@ export function ContinueGroupScreen({ navigation, route }: Props) {
 }
 
 const styles = StyleSheet.create({
-  title: {
-    fontSize: typography.sizes.xxl,
-    fontWeight: typography.weights.bold,
-    color: colors.forestLightInk,
-    marginBottom: spacing.sm,
-  },
   subtitle: {
     fontSize: typography.sizes.sm,
     color: colors.forestLightInkSoft,

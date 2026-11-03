@@ -8,12 +8,36 @@ import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
  * member's verified phone number. Paystack assigns the account number
  * (the phone is used to create the Paystack customer and to reconcile
  * inbound transfers via the `charge.success` webhook).
+ *
+ * Ajo always provisions its OWN Paystack customer for a member (see
+ * `WalletService.resolveAjoCustomer`) so the account number belongs to Ajo
+ * alone — a customer, and therefore a DVA, created by another product on the
+ * same Paystack integration is never reused.
  */
 @Schema({ _id: false, timestamps: false })
 export class DedicatedAccount {
   /** Paystack customer code (CUS_xxx) the DVA is attached to. */
   @Prop()
   paystackCustomerCode?: string;
+
+  /**
+   * Email registered on that Paystack customer. Normally the member's own
+   * email; when the member's email already belongs to a Paystack customer
+   * whose DVA is claimed by another product, a deterministic plus-alias of it
+   * (`jane+ajo1a2b3c@example.com`) is used instead so Ajo gets its own
+   * customer, and this field records whichever one was used.
+   */
+  @Prop()
+  paystackCustomerEmail?: string;
+
+  /**
+   * Paystack mode the account was minted in — `live` or `test`. Paystack keeps
+   * separate customer lists per mode, so a code issued in test mode is
+   * invisible (and unusable) once the server runs a live key. Storing the mode
+   * lets provisioning detect that and start over instead of failing forever.
+   */
+  @Prop()
+  paystackMode?: string;
 
   /**
    * Paystack's numeric id for the dedicated account, when returned by the

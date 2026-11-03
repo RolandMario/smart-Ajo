@@ -18,6 +18,7 @@ class PurchaseElectricityDto {
     amount;
     phone;
     customerName;
+    paymentSource;
 }
 exports.PurchaseElectricityDto = PurchaseElectricityDto;
 __decorate([
@@ -38,11 +39,13 @@ __decorate([
 __decorate([
     (0, class_validator_1.IsDefined)(),
     (0, class_validator_1.IsNumber)(),
-    (0, class_validator_1.Min)(100),
+    (0, class_validator_1.IsInt)(),
+    (0, class_validator_1.Min)(500),
+    (0, class_validator_1.Max)(500_000),
     __metadata("design:type", Number)
 ], PurchaseElectricityDto.prototype, "amount", void 0);
 __decorate([
-    (0, class_validator_1.IsDefined)(),
+    (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
 ], PurchaseElectricityDto.prototype, "phone", void 0);
@@ -51,4 +54,9 @@ __decorate([
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
 ], PurchaseElectricityDto.prototype, "customerName", void 0);
+__decorate([
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsIn)(['main', 'cashback']),
+    __metadata("design:type", String)
+], PurchaseElectricityDto.prototype, "paymentSource", void 0);
 //# sourceMappingURL=purchase-electricity.dto.js.map

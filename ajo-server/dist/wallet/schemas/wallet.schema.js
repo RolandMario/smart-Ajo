@@ -16,6 +16,7 @@ let Wallet = class Wallet {
     _id;
     user;
     balance;
+    cashbackBalance;
     currency;
 };
 exports.Wallet = Wallet;
@@ -27,6 +28,10 @@ __decorate([
     (0, mongoose_1.Prop)({ required: true, default: 0, min: 0 }),
     __metadata("design:type", Number)
 ], Wallet.prototype, "balance", void 0);
+__decorate([
+    (0, mongoose_1.Prop)({ type: Number, default: 0, min: 0 }),
+    __metadata("design:type", Number)
+], Wallet.prototype, "cashbackBalance", void 0);
 __decorate([
     (0, mongoose_1.Prop)({ default: 'NGN' }),
     __metadata("design:type", String)

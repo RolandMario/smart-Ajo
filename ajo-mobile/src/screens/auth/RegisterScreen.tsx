@@ -26,7 +26,7 @@ const PASSWORD_REGEX = /^(?=.*[A-Za-z])(?=.*\d)/;
 /** Server caps `name` at 100 chars (UpdateProfileDto). */
 const NAME_MAX_LENGTH = 100;
 
-const TERMS_COPY = "I agree to Ajo's Terms of Service and Privacy Policy.";
+const TERMS_COPY = "I agree to SmartThrift's Terms of Service and Privacy Policy.";
 
 /**
  * Create account — the light counterpart to the sign-in screen: pale forest

@@ -3,7 +3,6 @@ import { MongooseModule } from '@nestjs/mongoose';
 import { BillsController } from './bills.controller';
 import { BillsService } from './bills.service';
 import { VTPassService } from '../payments/vtpass.service';
-import { GladTidingsService } from '../payments/gladtidings.service';
 import { WalletModule } from '../wallet/wallet.module';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { UsersModule } from '../users/users.module';
@@ -32,7 +31,7 @@ import {
     UsersModule,
   ],
   controllers: [BillsController],
-  providers: [BillsService, VTPassService, GladTidingsService],
+  providers: [BillsService, VTPassService],
   exports: [BillsService],
 })
 export class BillsModule {}

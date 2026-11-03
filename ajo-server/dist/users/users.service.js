@@ -18,6 +18,7 @@ const mongoose_1 = require("@nestjs/mongoose");
 const mongoose_2 = require("mongoose");
 const user_schema_1 = require("./schemas/user.schema");
 const role_enum_1 = require("../common/enums/role.enum");
+const phone_1 = require("../common/utils/phone");
 let UsersService = class UsersService {
     userModel;
     constructor(userModel) {
@@ -33,6 +34,27 @@ let UsersService = class UsersService {
     }
     findById(id) {
         return this.userModel.findById(id);
+    }
+    findByDedicatedAccountIdentity(params) {
+        const identities = [];
+        if (params.customerCode) {
+            identities.push({
+                'dedicatedAccount.paystackCustomerCode': params.customerCode,
+            });
+        }
+        if (params.accountNumber) {
+            identities.push({
+                'dedicatedAccount.accountNumber': params.accountNumber,
+            });
+        }
+        const phoneVariants = (0, phone_1.ngPhoneVariants)(params.phone);
+        if (phoneVariants.length > 0) {
+            identities.push({ phone: { $in: phoneVariants } });
+        }
+        if (identities.length === 0) {
+            return Promise.resolve(null);
+        }
+        return this.userModel.findOne({ $or: identities });
     }
     async findByIds(ids) {
         if (ids.length === 0)

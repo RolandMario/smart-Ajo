@@ -15,6 +15,14 @@
  *                       claimed bank transfer).
  * DONATION_DEBIT     -> wallet was debited to fund a donation into a
  *                       DonationGroup (pool collection) escrow.
+ * CASHBACK_CREDIT    -> cashback earned on a successful bill purchase was
+ *                       credited to the member's cashback balance.
+ * CASHBACK_DEBIT     -> a bill was paid out of the cashback balance
+ *                       (the "Pay from: Cashback" option).
+ *
+ * `balanceBefore` / `balanceAfter` on a CASHBACK_* entry refer to the
+ * cashback balance, not the main wallet balance — the two balances live on
+ * the same Wallet document but are spent independently.
  */
 export enum WalletTransactionType {
   FUNDING = 'funding',
@@ -30,6 +38,10 @@ export enum WalletTransactionType {
   SAVINGS_DEBIT = 'savings_debit',
   /** Wallet debited to fund a pool donation (moved into the pool's escrow). */
   DONATION_DEBIT = 'donation_debit',
+  /** Cashback earned on a bill purchase, credited to the cashback balance. */
+  CASHBACK_CREDIT = 'cashback_credit',
+  /** Bill paid from the cashback balance instead of the main wallet. */
+  CASHBACK_DEBIT = 'cashback_debit',
 }
 
 /**

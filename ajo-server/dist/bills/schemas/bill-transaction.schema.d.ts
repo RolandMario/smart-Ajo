@@ -12,6 +12,8 @@ export declare class BillTransaction {
     recipient: string;
     metadata?: Record<string, unknown>;
     walletTransaction?: Types.ObjectId;
+    createdAt: Date;
+    updatedAt: Date;
 }
 export declare const BillTransactionSchema: import("mongoose").Schema<BillTransaction, import("mongoose").Model<BillTransaction, any, any, any, any, any, BillTransaction>, {}, {}, {}, {}, import("mongoose").DefaultSchemaOptions, BillTransaction, Document<unknown, {}, BillTransaction, {
     id: string;
@@ -113,6 +115,24 @@ export declare const BillTransactionSchema: import("mongoose").Schema<BillTransa
         id: string;
     }> | undefined;
     walletTransaction?: import("mongoose").SchemaDefinitionProperty<Types.ObjectId | undefined, BillTransaction, Document<unknown, {}, BillTransaction, {
+        id: string;
+    }, import("mongoose").DefaultSchemaOptions> & Omit<BillTransaction & Required<{
+        _id: Types.ObjectId;
+    }> & {
+        __v: number;
+    }, "id"> & {
+        id: string;
+    }> | undefined;
+    createdAt?: import("mongoose").SchemaDefinitionProperty<Date, BillTransaction, Document<unknown, {}, BillTransaction, {
+        id: string;
+    }, import("mongoose").DefaultSchemaOptions> & Omit<BillTransaction & Required<{
+        _id: Types.ObjectId;
+    }> & {
+        __v: number;
+    }, "id"> & {
+        id: string;
+    }> | undefined;
+    updatedAt?: import("mongoose").SchemaDefinitionProperty<Date, BillTransaction, Document<unknown, {}, BillTransaction, {
         id: string;
     }, import("mongoose").DefaultSchemaOptions> & Omit<BillTransaction & Required<{
         _id: Types.ObjectId;

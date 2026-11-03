@@ -20,7 +20,7 @@
         "EXPO_PUBLIC_API_BASE_URL": "https://ajo-server.vercel.app"
       },
       "android": {
-        "buildType": "app-bundle"
+        "buildType": "apk"
       },
       "ios": {
         "resourceClass": "m-medium"

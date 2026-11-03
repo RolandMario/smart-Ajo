@@ -15,6 +15,8 @@ export const TRANSACTION_TYPE_LABELS: Record<string, string> = {
   admin_credit: "Wallet Credit",
   admin_withdrawal: "Withdrawal",
   savings_debit: "Savings",
+  cashback_credit: "Cashback earned",
+  cashback_debit: "Bill paid from cashback",
 };
 
 export function transactionTypeLabel(type: string): string {
@@ -28,6 +30,7 @@ const CREDIT_TYPES: readonly WalletTransactionType[] = [
   "service_fee_credit",
   "bill_commission_credit",
   "admin_credit",
+  "cashback_credit",
 ];
 
 /** Whether a wallet transaction type represents money coming in. */

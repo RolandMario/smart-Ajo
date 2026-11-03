@@ -124,16 +124,11 @@ export function TransactionReceiptScreen({ navigation, route }: Props) {
   }, []);
 
   const rawRecipient = billDetail?.recipient ?? transaction.metadata?.recipient;
-  const externalReference =
-    billDetail?.externalReference ??
-    (typeof transaction.metadata?.externalReference === "string"
-      ? transaction.metadata.externalReference
-      : undefined);
 
   // Bill payments render type-specific rows (network, data plan, cable
-  // package/subscriber, electricity disco/token/customer...). When the stored
-  // receipt can't be fetched (e.g. server hiccup), fall back to the wallet
-  // transaction's captured metadata so the most useful fields still show.
+  // package/subscriber, electricity product/meter/token/units/phone...). When
+  // the stored receipt can't be fetched (e.g. server hiccup), fall back to the
+  // wallet transaction's captured metadata so the most useful fields still show.
   const billRows =
     transaction.type === "bill_payment"
       ? billReceiptRows(
@@ -154,17 +149,17 @@ export function TransactionReceiptScreen({ navigation, route }: Props) {
       <View style={styles.container}>
         {/* Receipt — captured as the shared image */}
         <View ref={receiptRef} collapsable={false} style={styles.receipt}>
-          {/* Sm@rtAjo header */}
+          {/* SmartThrift header */}
           <View style={styles.brandRow}>
             <Image
               source={require("../../../assets/ajo.png")}
               style={styles.logoImage}
               resizeMode="contain"
               accessible
-              accessibilityLabel="Ajo logo"
+              accessibilityLabel="SmartThrift logo"
             />
             <View style={styles.brandTextWrap}>
-              <Text style={styles.brandName}>Sm@rtAjo</Text>
+              <Text style={styles.brandName}>SmartThrift</Text>
               <Text style={styles.brandTagline}>Save Together, Grow Together</Text>
             </View>
           </View>
@@ -205,12 +200,6 @@ export function TransactionReceiptScreen({ navigation, route }: Props) {
             <Text style={styles.label}>Reference</Text>
             <Text style={styles.value}>{transaction.reference}</Text>
           </View>
-          {externalReference ? (
-            <View style={styles.detailRow}>
-              <Text style={styles.label}>External Ref</Text>
-              <Text style={styles.value}>{externalReference}</Text>
-            </View>
-          ) : null}
           <View style={styles.detailRow}>
             <Text style={styles.label}>Balance after</Text>
             <Text style={styles.value}>{formatNaira(transaction.balanceAfter)}</Text>

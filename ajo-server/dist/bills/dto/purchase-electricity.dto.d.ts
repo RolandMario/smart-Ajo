@@ -3,6 +3,7 @@ export declare class PurchaseElectricityDto {
     meterNumber: string;
     meterType: 'prepaid' | 'postpaid';
     amount: number;
-    phone: string;
+    phone?: string;
     customerName?: string;
+    paymentSource?: 'main' | 'cashback';
 }

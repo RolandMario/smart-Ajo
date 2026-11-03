@@ -3,6 +3,7 @@ import { StyleSheet, Text, View, Pressable } from "react-native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import type { BillsStackParamList } from "../../navigation/types";
 import { Screen } from "../../components/Screen";
+import { SubpageHeader } from "../../components/SubpageHeader";
 import { TextField } from "../../components/TextField";
 import { Button } from "../../components/Button";
 import { ErrorBanner } from "../../components/ErrorBanner";
@@ -18,7 +19,6 @@ export function ElectricityPaymentScreen({ navigation }: Props) {
   const [meterNo, setMeterNo] = useState("");
   const [meterType, setMeterType] = useState<"prepaid"|"postpaid">("prepaid");
   const [amount, setAmount] = useState("");
-  const [phone, setPhone] = useState("");
   const [validating, setValidating] = useState(false);
   const [verified, setVerified] = useState<{name?:string;address?:string}|null>(null);
   const [error, setError] = useState<string|null>(null);
@@ -41,18 +41,20 @@ export function ElectricityPaymentScreen({ navigation }: Props) {
   function handleContinue() {
     if (!verified) { setError("Verify meter first"); return; }
     const n = Number(amount);
-    if (n < 100) { setError("Minimum amount is ₦100"); return; }
-    if (!phone || phone.length < 10) { setError("Enter a valid phone number"); return; }
+    if (n < 500) { setError("Minimum amount is ₦500"); return; }
+    if (n > 500000) { setError("Maximum amount is ₦500,000"); return; }
     navigation.navigate("BillConfirmation", {
       serviceType: "electricity", provider: disco, recipient: meterNo, amount: n,
       customerName: verified?.name,
-      metadata: { disco, meterNumber: meterNo, meterType, phone },
+      // No phone number here: the server sends the member's account number to
+      // VTpass (it is where the prepaid token SMS goes).
+      metadata: { disco, meterNumber: meterNo, meterType },
     });
   }
 
   return (
     <Screen>
-      <Text style={styles.title}>Electricity</Text>
+      <SubpageHeader title="Electricity" onBack={() => navigation.goBack()} />
       {error && <ErrorBanner message={error} />}
       <Text style={styles.label}>Distribution Company</Text>
       <View style={styles.row}>{DISCOS.slice(0,6).map((d)=>(
@@ -82,8 +84,7 @@ export function ElectricityPaymentScreen({ navigation }: Props) {
       {verified && (
         <>
           <TextField label="Amount (₦)" placeholder="Enter amount" keyboardType="number-pad" value={amount} onChangeText={setAmount} />
-          <TextField label="Phone Number" placeholder="08012345678" keyboardType="phone-pad" value={phone} onChangeText={setPhone} maxLength={11} />
-          <Button title="Continue" onPress={handleContinue} disabled={!amount||!phone||Number(amount)<100} />
+          <Button title="Continue" onPress={handleContinue} disabled={!amount||Number(amount)<500} />
         </>
       )}
     </Screen>
@@ -91,7 +92,6 @@ export function ElectricityPaymentScreen({ navigation }: Props) {
 }
 
 const styles = StyleSheet.create({
-  title: {fontSize:typography.sizes.xxl,fontWeight:typography.weights.bold,color:colors.forestLightInk,marginBottom:spacing.lg},
   label: {fontSize:typography.sizes.sm,fontWeight:typography.weights.medium,color:colors.forestLightInkSoft,marginBottom:spacing.xs},
   row: {flexDirection:"row",flexWrap:"wrap",gap:spacing.sm,marginBottom:spacing.md},
   chip: {paddingHorizontal:spacing.md,paddingVertical:spacing.xs,borderRadius:radii.full,borderWidth:1,borderColor:colors.forestLightLine,backgroundColor:colors.white},

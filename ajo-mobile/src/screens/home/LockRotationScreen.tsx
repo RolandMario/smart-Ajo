@@ -10,6 +10,7 @@ import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useFocusEffect } from "@react-navigation/native";
 import type { GroupsStackParamList } from "../../navigation/types";
 import { Screen } from "../../components/Screen";
+import { SubpageHeader } from "../../components/SubpageHeader";
 import { Button } from "../../components/Button";
 import { ErrorBanner } from "../../components/ErrorBanner";
 import { LoadingScreen } from "../../components/LoadingScreen";
@@ -106,7 +107,7 @@ export function LockRotationScreen({ navigation, route }: Props) {
 
   return (
     <Screen scrollable={false}>
-      <Text style={styles.title}>Set Payout Order</Text>
+      <SubpageHeader title="Set Payout Order" onBack={() => navigation.goBack()} />
       <Text style={styles.subtitle}>
         Arrange members in the order they will receive payouts. Position 1 collects first.
       </Text>
@@ -188,12 +189,6 @@ export function LockRotationScreen({ navigation, route }: Props) {
 }
 
 const styles = StyleSheet.create({
-  title: {
-    fontSize: typography.sizes.xxl,
-    fontWeight: typography.weights.bold,
-    color: colors.forestLightInk,
-    marginBottom: spacing.xs,
-  },
   subtitle: {
     fontSize: typography.sizes.base,
     color: colors.forestLightInkSoft,

@@ -1,15 +1,29 @@
 import { Metadata } from 'next'
 import Link from 'next/link'
-import { ArrowRight, Users, Zap, CheckCircle, Shield, Smartphone, Globe, Layers } from 'lucide-react'
+import Image from 'next/image'
+import {
+  ArrowRight,
+  CheckCircle,
+  Globe,
+  HandCoins,
+  Landmark,
+  Layers,
+  PiggyBank,
+  Shield,
+  Smartphone,
+  Users,
+  Wallet,
+} from 'lucide-react'
 import NavBar from '../../components/navBar'
+import Footer from '@/app/components/footer'
 
 export const metadata: Metadata = {
-  title: 'Ajo - A Digital Smart Environment Project',
+  title: 'SmartThrift - A Digital Smart Environment Project',
   description:
-    'Ajo is a modern digital savings platform built by Digital Smart Environment. Create or join savings groups, automate contributions, and receive rotating payouts.',
+    'SmartThrift is a modern digital savings platform built by Digital Smart Environment. Run rotating contribution groups, save towards personal goals, and pool funds for shared purposes — all from one secure app.',
 }
 
-export default function AjoProjectPage() {
+export default function SmartThriftProjectPage() {
   return (
     <main className="min-h-screen bg-ajo-canvas">
       <NavBar />
@@ -21,12 +35,12 @@ export default function AjoProjectPage() {
           <div className="grid items-center gap-10 lg:grid-cols-2">
             <div>
               <h1 className="text-4xl md:text-5xl font-bold text-ajo-ink leading-tight">
-                Ajo — Save Together, Thrive Together.
+                SmartThrift — Save Together, Thrive Together.
               </h1>
-              <p className="mt-6 text-lg text-ajo-inkSoft leading-relaxed">
-                Ajo brings the traditional savings group experience into the modern era. Built by Digital Smart
-                Environment, it lets people create or join savings groups, automate contributions, and receive
-                rotating payouts — all from their phone.
+              <p className="mt-6 text-lg text-ajo-ink-soft leading-relaxed">
+                SmartThrift (formerly Ajo) brings the traditional savings group experience into the modern era. Built
+                by Digital Smart Environment, it lets people run rotating contribution groups, save towards personal
+                goals, and pool funds for shared purposes — all from their phone.
               </p>
               <div className="mt-8 flex flex-wrap gap-4">
                 <a href="/contact" className="btn-primary">
@@ -41,81 +55,207 @@ export default function AjoProjectPage() {
 
             <div className="relative flex justify-center">
               <div className="rounded-card bg-ajo-primary p-4 shadow-soft">
-                <div className="flex h-[340px] w-full items-center justify-center rounded-card bg-ajo-surfaceSunken">
-                  <Smartphone className="h-32 w-32 text-ajo-primary" />
+                <div className="flex h-[340px] w-full flex-col items-center justify-center gap-6 rounded-card bg-ajo-surface-sunken px-10">
+                  <Image
+                    src="/images/SmartThrift.png"
+                    alt="SmartThrift app logo"
+                    width={442}
+                    height={286}
+                    priority
+                    className="h-auto w-48 sm:w-56"
+                  />
+                  <span className="text-sm font-semibold uppercase tracking-wide text-ajo-primary">SmartThrift</span>
                 </div>
               </div>
             </div>
           </div>
         </div>
       </section>
-      {/* Features */}
+      {/* Services */}
       <section className="bg-ajo-canvas">
         <div className="mx-auto max-w-7xl px-4 py-16 sm:px-6 lg:px-8">
           <div className="max-w-3xl">
-            <p className="eyebrow">What Ajo Does</p>
-            <h2 className="section-title">Digital savings groups, simplified.</h2>
+            <p className="eyebrow">What SmartThrift Does</p>
+            <h2 className="section-title">Three ways to save, one simple app.</h2>
             <p className="mt-4 section-copy">
-              Ajo is one of the projects executed by Digital Smart Environment, showcasing our end-to-end ability to
-              design, develop, and deliver a full digital product — from backend services to a member-facing mobile
-              app and an admin console.
+              SmartThrift is one of the projects executed by Digital Smart Environment, showcasing our end-to-end
+              ability to design, develop, and deliver a full digital product — from backend services to a
+              member-facing mobile app and an admin console.
             </p>
           </div>
 
-          <div className="mt-12 grid gap-8 md:grid-cols-2 lg:grid-cols-4">
+          <div className="mt-12 grid gap-8 lg:grid-cols-3">
             <div className="rounded-card border border-ajo-line bg-white p-6">
-              <Users className="h-6 w-6 text-ajo-primary mb-3" />
-              <h3 className="text-lg font-bold text-ajo-ink mb-2">Create or Join Groups</h3>
-              <p className="text-sm text-ajo-inkSoft">Start savings groups with custom amounts, frequency, and limits.</p>
+              <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-ajo-primary-soft">
+                <Users className="h-6 w-6 text-ajo-primary" />
+              </div>
+              <p className="text-sm font-semibold text-ajo-primary mb-2">01 · Rotating Savings</p>
+              <h3 className="text-xl font-bold text-ajo-ink mb-3">Group Contributions</h3>
+              <p className="text-sm text-ajo-ink-soft leading-relaxed">
+                Members form contribution groups, each contributing an agreed amount on a regular basis. The pooled
+                funds are then disbursed to one member per cycle until every member has received their turn.
+              </p>
+              <ul className="mt-4 space-y-2 text-sm text-ajo-ink-soft">
+                <li className="flex items-start gap-2">
+                  <CheckCircle className="mt-0.5 h-4 w-4 shrink-0 text-ajo-success" />
+                  Custom contribution amount and cycle schedule
+                </li>
+                <li className="flex items-start gap-2">
+                  <CheckCircle className="mt-0.5 h-4 w-4 shrink-0 text-ajo-success" />
+                  Daily, weekly, or monthly contributions
+                </li>
+                <li className="flex items-start gap-2">
+                  <CheckCircle className="mt-0.5 h-4 w-4 shrink-0 text-ajo-success" />
+                  Rotation order set by the group admin
+                </li>
+                <li className="flex items-start gap-2">
+                  <CheckCircle className="mt-0.5 h-4 w-4 shrink-0 text-ajo-success" />
+                  One member collects the pooled payout each cycle
+                </li>
+              </ul>
             </div>
             <div className="rounded-card border border-ajo-line bg-white p-6">
-              <Zap className="h-6 w-6 text-ajo-primary mb-3" />
-              <h3 className="text-lg font-bold text-ajo-ink mb-2">Automated Contributions</h3>
-              <p className="text-sm text-ajo-inkSoft">Auto-debit wallets so members never miss a payment.</p>
+              <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-ajo-primary-soft">
+                <PiggyBank className="h-6 w-6 text-ajo-primary" />
+              </div>
+              <p className="text-sm font-semibold text-ajo-primary mb-2">02 · Goal-Based Budgeting</p>
+              <h3 className="text-xl font-bold text-ajo-ink mb-3">Individual Savings</h3>
+              <p className="text-sm text-ajo-ink-soft leading-relaxed">
+                Users can set aside a fixed amount of money for a defined period and initiate a payout once their
+                savings goal is reached.
+              </p>
+              <ul className="mt-4 space-y-2 text-sm text-ajo-ink-soft">
+                <li className="flex items-start gap-2">
+                  <CheckCircle className="mt-0.5 h-4 w-4 shrink-0 text-ajo-success" />
+                  Name a plan after its purpose — rent, school fees, a project
+                </li>
+                <li className="flex items-start gap-2">
+                  <CheckCircle className="mt-0.5 h-4 w-4 shrink-0 text-ajo-success" />
+                  Set the amount, frequency, and duration that suit the goal
+                </li>
+                <li className="flex items-start gap-2">
+                  <CheckCircle className="mt-0.5 h-4 w-4 shrink-0 text-ajo-success" />
+                  Pay into the plan from your wallet at each interval
+                </li>
+                <li className="flex items-start gap-2">
+                  <CheckCircle className="mt-0.5 h-4 w-4 shrink-0 text-ajo-success" />
+                  Request a payout as soon as the goal is reached
+                </li>
+              </ul>
             </div>
             <div className="rounded-card border border-ajo-line bg-white p-6">
-              <CheckCircle className="h-6 w-6 text-ajo-primary mb-3" />
-              <h3 className="text-lg font-bold text-ajo-ink mb-2">Rotating Payouts</h3>
-              <p className="text-sm text-ajo-inkSoft">Fair, transparent, automated rotation ensures everyone benefits.</p>
+              <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-ajo-primary-soft">
+                <HandCoins className="h-6 w-6 text-ajo-primary" />
+              </div>
+              <p className="text-sm font-semibold text-ajo-primary mb-2">03 · Shared Goals</p>
+              <h3 className="text-xl font-bold text-ajo-ink mb-3">Pool Collection</h3>
+              <p className="text-sm text-ajo-ink-soft leading-relaxed">
+                A group can be formed to collect funds that will be used for a specific purpose agreed upon by the
+                members — a project, an event, or a shared goal. The collected funds are held and later disbursed
+                according to the group's decision.
+              </p>
+              <ul className="mt-4 space-y-2 text-sm text-ajo-ink-soft">
+                <li className="flex items-start gap-2">
+                  <CheckCircle className="mt-0.5 h-4 w-4 shrink-0 text-ajo-success" />
+                  Create a group around a shared purpose
+                </li>
+                <li className="flex items-start gap-2">
+                  <CheckCircle className="mt-0.5 h-4 w-4 shrink-0 text-ajo-success" />
+                  Members contribute towards the agreed target
+                </li>
+                <li className="flex items-start gap-2">
+                  <CheckCircle className="mt-0.5 h-4 w-4 shrink-0 text-ajo-success" />
+                  Every contribution is tracked per member
+                </li>
+                <li className="flex items-start gap-2">
+                  <CheckCircle className="mt-0.5 h-4 w-4 shrink-0 text-ajo-success" />
+                  Funds are held, then disbursed by the group's decision
+                </li>
+              </ul>
             </div>
-            <div className="rounded-card border border-ajo-line bg-white p-6">
-              <Shield className="h-6 w-6 text-ajo-primary mb-3" />
-              <h3 className="text-lg font-bold text-ajo-ink mb-2">Secure Wallet</h3>
-              <p className="text-sm text-ajo-inkSoft">Bank-level security protecting deposits and management.</p>
+          </div>
+
+          <div className="mt-10 grid gap-6 rounded-card border border-ajo-line bg-white p-6 sm:p-8 md:grid-cols-2 lg:grid-cols-4">
+            <div className="flex items-start gap-3">
+              <Wallet className="mt-0.5 h-5 w-5 shrink-0 text-ajo-primary" />
+              <div>
+                <h3 className="text-sm font-bold text-ajo-ink">Wallet-first payments</h3>
+                <p className="mt-1 text-sm text-ajo-ink-soft">
+                  Fund every group, plan, or pool straight from your in-app wallet.
+                </p>
+              </div>
+            </div>
+            <div className="flex items-start gap-3">
+              <Shield className="mt-0.5 h-5 w-5 shrink-0 text-ajo-primary" />
+              <div>
+                <h3 className="text-sm font-bold text-ajo-ink">Funds held securely</h3>
+                <p className="mt-1 text-sm text-ajo-ink-soft">
+                  Contributions are held safely until it is time to disburse them.
+                </p>
+              </div>
+            </div>
+            <div className="flex items-start gap-3">
+              <CheckCircle className="mt-0.5 h-5 w-5 shrink-0 text-ajo-primary" />
+              <div>
+                <h3 className="text-sm font-bold text-ajo-ink">Transparent cycles</h3>
+                <p className="mt-1 text-sm text-ajo-ink-soft">
+                  Every contribution, cycle, and payout is tracked per member.
+                </p>
+              </div>
+            </div>
+            <div className="flex items-start gap-3">
+              <Landmark className="mt-0.5 h-5 w-5 shrink-0 text-ajo-primary" />
+              <div>
+                <h3 className="text-sm font-bold text-ajo-ink">Payouts to your bank</h3>
+                <p className="mt-1 text-sm text-ajo-ink-soft">
+                  Withdraw your savings straight to your saved bank account.
+                </p>
+              </div>
             </div>
           </div>
         </div>
       </section>
 
-      {/* Delivered surface */}
+      {/* The Build */}
       <section className="bg-white">
         <div className="mx-auto max-w-7xl px-4 py-16 sm:px-6 lg:px-8">
           <div className="max-w-3xl">
             <p className="eyebrow">The Build</p>
             <h2 className="section-title">A complete, production-ready product.</h2>
+            <p className="mt-4 section-copy">
+              SmartThrift ships as one platform: a member mobile app, the backend services that move the money, and an
+              admin console for operations.
+            </p>
           </div>
           <div className="mt-12 grid gap-8 lg:grid-cols-3">
             <div className="rounded-card border border-ajo-line bg-white p-6">
               <Smartphone className="h-6 w-6 text-ajo-primary mb-3" />
               <h3 className="text-lg font-bold text-ajo-ink mb-2">Member Mobile App</h3>
-              <p className="text-sm text-ajo-inkSoft">The member-facing app for joining groups, contributing, and managing savings on the go.</p>
+              <p className="text-sm text-ajo-ink-soft leading-relaxed">
+                The member-facing app for contribution groups, personal savings plans, pool collections, and wallet
+                management on the go.
+              </p>
             </div>
             <div className="rounded-card border border-ajo-line bg-white p-6">
               <Globe className="h-6 w-6 text-ajo-primary mb-3" />
               <h3 className="text-lg font-bold text-ajo-ink mb-2">Backend Services</h3>
-              <p className="text-sm text-ajo-inkSoft">Secure APIs powering groups, cycles, contributions, payouts, and wallets.</p>
+              <p className="text-sm text-ajo-ink-soft leading-relaxed">
+                Secure APIs powering groups, contribution cycles, savings plans, pools, payouts, and wallets.
+              </p>
             </div>
             <div className="rounded-card border border-ajo-line bg-white p-6">
               <Layers className="h-6 w-6 text-ajo-primary mb-3" />
               <h3 className="text-lg font-bold text-ajo-ink mb-2">Admin Console</h3>
-              <p className="text-sm text-ajo-inkSoft">An internal console for platform administration and operations.</p>
+              <p className="text-sm text-ajo-ink-soft leading-relaxed">
+                An internal console for platform administration, user management, and operational oversight.
+              </p>
             </div>
           </div>
 
           <div className="mt-12 rounded-card bg-ajo-primary p-8 text-white sm:p-12">
             <div className="flex flex-col items-start justify-between gap-6 md:flex-row md:items-center">
               <div>
-                <h3 className="text-2xl font-bold mb-2">Want a product built like Ajo?</h3>
+                <h3 className="text-2xl font-bold mb-2">Want a product built like SmartThrift?</h3>
                 <p className="text-white/90">
                   Digital Smart Environment can design, develop, and deliver your next digital solution end-to-end.
                 </p>
@@ -129,51 +269,7 @@ export default function AjoProjectPage() {
         </div>
       </section>
 
-      {/* Footer */}
-      <footer className="bg-ajo-surfaceSunken border-t border-ajo-line px-4 py-12 sm:px-6 lg:px-8">
-        <div className="mx-auto max-w-7xl">
-          <div className="grid gap-8 md:grid-cols-2 lg:grid-cols-4">
-            <div className="space-y-4">
-              <div className="flex items-center gap-3">
-                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-ajo-primary">
-                  <span className="text-xl font-bold text-white">D</span>
-                </div>
-                <span className="text-xl font-bold text-ajo-ink">Digital Smart<br />Environment</span>
-              </div>
-              <p className="text-sm text-ajo-inkSoft leading-relaxed">
-                A forward-thinking technology company delivering innovative digital solutions. Ajo is one of our flagship projects.
-              </p>
-            </div>
-            <div className="space-y-4">
-              <h3 className="font-semibold text-ajo-ink">Quick Links</h3>
-              <nav className="flex flex-col space-y-2 text-sm">
-                <Link href="/" className="text-ajo-inkSoft hover:text-ajo-ink transition">Home</Link>
-                <Link href="/#services" className="text-ajo-inkSoft hover:text-ajo-ink transition">Services</Link>
-                <Link href="/#projects" className="text-ajo-inkSoft hover:text-ajo-ink transition">Projects</Link>
-                <Link href="/contact" className="text-ajo-inkSoft hover:text-ajo-ink transition">Contact</Link>
-              </nav>
-            </div>
-            <div className="space-y-4">
-              <h3 className="font-semibold text-ajo-ink">Services</h3>
-              <nav className="flex flex-col space-y-2 text-sm">
-                <Link href="/#services" className="text-ajo-inkSoft hover:text-ajo-ink transition">Custom Software Development</Link>
-                <Link href="/#services" className="text-ajo-inkSoft hover:text-ajo-ink transition">Mobile & Web Apps</Link>
-                <Link href="/#services" className="text-ajo-inkSoft hover:text-ajo-ink transition">Responsive Website Design</Link>
-                <Link href="/#services" className="text-ajo-inkSoft hover:text-ajo-ink transition">Digital Transformation</Link>
-              </nav>
-            </div>
-            <div className="space-y-4">
-              <h3 className="font-semibold text-ajo-ink">Get in Touch</h3>
-              <Link href="mailto:hello@digitalsmartenvironment.com" className="text-sm text-ajo-inkSoft hover:text-ajo-ink transition">
-                hello@digitalsmartenvironment.com
-              </Link>
-            </div>
-          </div>
-          <div className="mt-8 border-t border-ajo-line pt-8 text-center text-sm text-ajo-inkSoft">
-            <p>&copy; 2026 Digital Smart Environment. All rights reserved.</p>
-          </div>
-        </div>
-      </footer>
+      <Footer />
     </main>
   )
 }

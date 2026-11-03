@@ -4,6 +4,7 @@ export declare class Wallet {
     _id: Types.ObjectId;
     user: Types.ObjectId;
     balance: number;
+    cashbackBalance: number;
     currency: string;
 }
 export declare const WalletSchema: import("mongoose").Schema<Wallet, import("mongoose").Model<Wallet, any, any, any, any, any, Wallet>, {}, {}, {}, {}, import("mongoose").DefaultSchemaOptions, Wallet, Document<unknown, {}, Wallet, {
@@ -34,6 +35,15 @@ export declare const WalletSchema: import("mongoose").Schema<Wallet, import("mon
         id: string;
     }> | undefined;
     balance?: import("mongoose").SchemaDefinitionProperty<number, Wallet, Document<unknown, {}, Wallet, {
+        id: string;
+    }, import("mongoose").DefaultSchemaOptions> & Omit<Wallet & Required<{
+        _id: Types.ObjectId;
+    }> & {
+        __v: number;
+    }, "id"> & {
+        id: string;
+    }> | undefined;
+    cashbackBalance?: import("mongoose").SchemaDefinitionProperty<number, Wallet, Document<unknown, {}, Wallet, {
         id: string;
     }, import("mongoose").DefaultSchemaOptions> & Omit<Wallet & Required<{
         _id: Types.ObjectId;

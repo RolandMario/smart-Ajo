@@ -1,4 +1,4 @@
-import { IsDefined, IsIn, IsString } from 'class-validator';
+import { IsDefined, IsIn, IsOptional, IsString } from 'class-validator';
 
 export class PurchaseDataDto {
   @IsDefined()
@@ -12,4 +12,9 @@ export class PurchaseDataDto {
   @IsDefined()
   @IsString()
   dataPlanId!: string;
+
+  /** Which wallet pays: the main wallet (default) or the cashback wallet. */
+  @IsOptional()
+  @IsIn(['main', 'cashback'])
+  paymentSource?: 'main' | 'cashback';
 }

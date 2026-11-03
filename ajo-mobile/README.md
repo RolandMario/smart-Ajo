@@ -1,6 +1,6 @@
 # ajo-mobile
 
-Expo (React Native) member-facing app for **Ajo** — a digital thrift-collection
+Expo (React Native) member-facing app for **SmartThrift** — a digital thrift-collection
 (esusu/ajo) platform. Users create or join savings groups, contribute in
 rotating cycles, track payouts, fund their wallet, and receive notifications —
 all from their phone. This is separate from `ajo-admin-web`, which is the
@@ -32,7 +32,7 @@ Built with Expo SDK 57 (React Native 0.86, React 19.2.3), React Navigation v7
     `expo-local-authentication` (`hasHardwareAsync` → `isEnrolledAsync`
     → `authenticateAsync`) gating that stored credential.
   - Two deliberate deviations from the source design: the footer reads
-    "New to Ajo?" (the mock's "Kolo" is the template's placeholder
+    "New to SmartThrift?" (the mock's "Kolo" is the template's placeholder
     brand), and "Remember me" is kept — sharing the "Forgot password?"
     row — because it's where the existing credential prefill lives.
 - **Create-account screen** — `RegisterScreen`, built on the same light
@@ -142,7 +142,7 @@ Built with Expo SDK 57 (React Native 0.86, React 19.2.3), React Navigation v7
   - **Wallet** — Wallet home, fund wallet, bank account, transactions
   - **Savings** — Personal savings stack (plan list, create plan, plan
     detail). Plans are funded **by the member**: each interval is paid
-    from the Ajo wallet with the "Pay" button on the plan — nothing is
+    from the SmartThrift wallet with the "Pay" button on the plan — nothing is
     debited automatically. The plan's "Recent activity" ledger is paged
     **10 entries per page** (`GET /savings/plans/:id?page=…&limit=10`)
     using the shared `Pagination` component.
@@ -151,7 +151,7 @@ Built with Expo SDK 57 (React Native 0.86, React 19.2.3), React Navigation v7
   - **Pools** — Pool collections stack (list + dashboard stats, create
     pool, join by Group ID, pool detail with the donate action, paginated
     donor history, and an admin-only payout screen where the destination
-    account can be changed). Donations are debited from the Ajo wallet;
+    account can be changed). Donations are debited from the SmartThrift wallet;
     the admin pays the pool's escrow out to a bank account.
   - **Bills** — Airtime, data, cable and electricity purchases
 
@@ -315,4 +315,4 @@ test pass before shipping.
 
 ## License
 
-This project is proprietary and part of the Ajo platform.
+This project is proprietary and part of the SmartThrift platform.

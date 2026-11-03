@@ -37,6 +37,15 @@ export class WalletController {
     );
   }
 
+  /**
+   * The member's cashback wallet — balance plus the cashback ledger (earned
+   * on bills, spent on bills). Opens from the profile screen.
+   */
+  @Get('cashback')
+  getCashbackWallet(@CurrentUser() user: RequestUser) {
+    return this.walletService.getCashbackWallet(user.userId);
+  }
+
   @Post('fund/initialize')
   initializeFunding(
     @CurrentUser() user: RequestUser,

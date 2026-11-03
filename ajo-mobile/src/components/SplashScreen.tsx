@@ -59,19 +59,19 @@ export function SplashScreen({ navigation }: SplashScreenProps) {
           },
         ]}
       >
-        {/* Logo */}
+        {/* Logo — the brand mark in the theme's forest/gold palette */}
         <View style={styles.logoContainer}>
           <Image
-            source={require("../../assets/ajo.png")}
+            source={require("../../assets/splash-logo.png")}
             style={styles.logoImage}
             resizeMode="contain"
             accessible
-            accessibilityLabel="Ajo logo"
+            accessibilityLabel="SmartThrift logo"
           />
         </View>
 
         {/* App Name */}
-        <Text style={styles.appName}>Sm@rtAjo</Text>
+        <Text style={styles.appName}>SmartThrift</Text>
 
         {/* Tagline */}
         <Text style={styles.tagline}>Save Together, Grow Together</Text>
@@ -103,16 +103,8 @@ const styles = StyleSheet.create({
     marginBottom: spacing.xl,
   },
   logoImage: {
-    width: 220,
-    height: 154,
-    shadowColor: colors.black,
-    shadowOffset: {
-      width: 0,
-      height: 4,
-    },
-    shadowOpacity: 0.15,
-    shadowRadius: 8,
-    elevation: 8,
+    width: 200,
+    height: 200,
   },
   appName: {
     fontSize: typography.sizes.xxxl + 8,

@@ -24,10 +24,17 @@ let BillTransaction = class BillTransaction {
     recipient;
     metadata;
     walletTransaction;
+    createdAt;
+    updatedAt;
 };
 exports.BillTransaction = BillTransaction;
 __decorate([
-    (0, mongoose_1.Prop)({ type: mongoose_2.Types.ObjectId, ref: 'User', required: true, index: true }),
+    (0, mongoose_1.Prop)({
+        type: mongoose_2.SchemaTypes.ObjectId,
+        ref: 'User',
+        required: true,
+        index: true,
+    }),
     __metadata("design:type", mongoose_2.Types.ObjectId)
 ], BillTransaction.prototype, "user", void 0);
 __decorate([
@@ -72,7 +79,7 @@ __decorate([
     __metadata("design:type", Object)
 ], BillTransaction.prototype, "metadata", void 0);
 __decorate([
-    (0, mongoose_1.Prop)({ type: mongoose_2.Types.ObjectId, ref: 'WalletTransaction' }),
+    (0, mongoose_1.Prop)({ type: mongoose_2.SchemaTypes.ObjectId, ref: 'WalletTransaction' }),
     __metadata("design:type", mongoose_2.Types.ObjectId)
 ], BillTransaction.prototype, "walletTransaction", void 0);
 exports.BillTransaction = BillTransaction = __decorate([

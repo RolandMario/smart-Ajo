@@ -1,13 +1,12 @@
 import React, { useState } from "react";
-import { StyleSheet, Text, View } from "react-native";
 import { Screen } from "../../components/Screen";
+import { SubpageHeader } from "../../components/SubpageHeader";
 import { TextField } from "../../components/TextField";
 import { Button } from "../../components/Button";
 import { ErrorBanner } from "../../components/ErrorBanner";
 import { ApiError } from "../../api/api-error";
 import { updateProfile } from "../../api/auth";
 import { useAuth } from "../../auth/AuthContext";
-import { colors, spacing, typography } from "../../theme";
 
 export function EditProfileScreen({ navigation }: any) {
   const { user, refreshUser } = useAuth();
@@ -37,7 +36,7 @@ export function EditProfileScreen({ navigation }: any) {
 
   return (
     <Screen>
-      <Text style={styles.title}>Edit Profile</Text>
+      <SubpageHeader title="Edit Profile" onBack={() => navigation.goBack()} />
 
       {error && <ErrorBanner message={error} />}
 
@@ -69,12 +68,3 @@ export function EditProfileScreen({ navigation }: any) {
     </Screen>
   );
 }
-
-const styles = StyleSheet.create({
-  title: {
-    fontSize: typography.sizes.xxl,
-    fontWeight: typography.weights.bold,
-    color: colors.forestLightInk,
-    marginBottom: spacing.xl,
-  },
-});

@@ -143,9 +143,6 @@ export default async function BillTransactionReceiptPage({
                 ))}
                 <ReceiptRow label="Processor" value="Smart Env" />
                 <ReceiptRow label="Reference" value={tx.reference} mono />
-                {tx.externalReference ? (
-                  <ReceiptRow label="External Ref" value={tx.externalReference} mono />
-                ) : null}
                 <ReceiptRow label="Date" value={formatDateTime(tx.createdAt)} />
               </dl>
 
@@ -154,6 +151,26 @@ export default async function BillTransactionReceiptPage({
               </div>
             </div>
           </div>
+
+          {/* Kept out of the shared/printed receipt (members found the
+              processor's own ids confusing) but still here for support:
+              the provider reference is the vendor's transaction id, and the
+              requery id is the key VTpass needs to re-pull a token that was
+              still being generated when the vend returned. */}
+          {tx.externalReference ? (
+            <p className="mt-3 text-center text-xs text-ink-soft">
+              Provider reference:{" "}
+              <span className="font-mono break-all">{tx.externalReference}</span>
+            </p>
+          ) : null}
+          {typeof tx.metadata?.providerRequestId === "string" ? (
+            <p className="mt-1 text-center text-xs text-ink-soft">
+              Requery id:{" "}
+              <span className="font-mono break-all">
+                {tx.metadata.providerRequestId}
+              </span>
+            </p>
+          ) : null}
         </div>
       </div>
     </>

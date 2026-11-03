@@ -3,6 +3,7 @@ import { StyleSheet, Text, View } from "react-native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import type { GroupsStackParamList } from "../../navigation/types";
 import { Screen } from "../../components/Screen";
+import { SubpageHeader } from "../../components/SubpageHeader";
 import { Button } from "../../components/Button";
 import { ErrorBanner } from "../../components/ErrorBanner";
 import { ApiError } from "../../api/api-error";
@@ -59,7 +60,7 @@ export function ActivateGroupScreen({ navigation, route }: Props) {
 
   return (
     <Screen>
-      <Text style={styles.title}>Activate Group</Text>
+      <SubpageHeader title="Activate Group" onBack={() => navigation.goBack()} />
       <Text style={styles.subtitle}>
         Activating this group will create the first contribution cycle and enable members
         {`to start contributing. Each member will get a wallet if they don't already have one.`}
@@ -86,12 +87,6 @@ export function ActivateGroupScreen({ navigation, route }: Props) {
 }
 
 const styles = StyleSheet.create({
-  title: {
-    fontSize: typography.sizes.xxl,
-    fontWeight: typography.weights.bold,
-    color: colors.forestLightInk,
-    marginBottom: spacing.xs,
-  },
   subtitle: {
     fontSize: typography.sizes.base,
     color: colors.forestLightInkSoft,

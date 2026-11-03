@@ -1,7 +1,7 @@
 import { Platform } from "react-native";
 
 /**
- * Design tokens — Ajo Mobile
+ * Design tokens — SmartThrift
  * ----------------------------
  * This is the member-facing app — people checking their savings group,
  * funding their wallet, and watching a payout land. The whole app runs on

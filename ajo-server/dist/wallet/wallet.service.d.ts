@@ -14,6 +14,7 @@ export interface PaginatedWalletTransactions {
     total: number;
     totalPages: number;
 }
+export type BillPaymentSource = 'main' | 'cashback';
 export declare class WalletService {
     private walletModel;
     private walletTxModel;
@@ -21,11 +22,13 @@ export declare class WalletService {
     private usersService;
     private paystack;
     private notificationsService;
+    private readonly logger;
     constructor(walletModel: Model<WalletDocument>, walletTxModel: Model<WalletTransactionDocument>, connection: Connection, usersService: UsersService, paystack: PaystackService, notificationsService: NotificationsService);
     private isDuplicateKeyError;
     getOrCreateWallet(userId: string): Promise<WalletDocument>;
     getWalletSummary(userId: string): Promise<{
         balance: number;
+        cashbackBalance: number;
         currency: string;
         recentTransactions: (WalletTransaction & import("mongoose").Document<Types.ObjectId, any, any, Record<string, any>, {}> & Required<{
             _id: Types.ObjectId;
@@ -43,12 +46,22 @@ export declare class WalletService {
         } | null;
     }>;
     listTransactions(userId: string, page?: number, limit?: number): Promise<PaginatedWalletTransactions>;
+    getCashbackWallet(userId: string, limit?: number): Promise<{
+        balance: number;
+        currency: string;
+        transactions: (WalletTransaction & import("mongoose").Document<Types.ObjectId, any, any, Record<string, any>, {}> & Required<{
+            _id: Types.ObjectId;
+        }> & {
+            __v: number;
+        })[];
+    }>;
     initializeFunding(userId: string, amountNaira: number): Promise<{
         authorizationUrl: string;
         reference: string;
     }>;
     verifyFunding(userId: string, reference: string): Promise<{
         balance: number;
+        cashbackBalance: number;
         currency: string;
         recentTransactions: (WalletTransaction & import("mongoose").Document<Types.ObjectId, any, any, Record<string, any>, {}> & Required<{
             _id: Types.ObjectId;
@@ -70,13 +83,17 @@ export declare class WalletService {
     getOrCreateDedicatedAccount(userId: string): Promise<DedicatedAccount>;
     refreshDedicatedAccount(userId: string): Promise<DedicatedAccount>;
     creditDedicatedAccountFunding(params: {
-        phone: string;
+        customerCode?: string;
+        accountNumber?: string;
+        phone?: string;
         amountNaira: number;
         reference: string;
         paystackData?: Record<string, unknown>;
     }): Promise<boolean>;
     private splitName;
-    private createPaystackCustomer;
+    private resolveAjoCustomer;
+    private createAjoCustomer;
+    private ajoAliasEmail;
     listBanks(): Promise<BankListEntry[]>;
     setBankAccount(userId: string, dto: SetBankAccountDto): Promise<BankAccount>;
     getBankAccount(userId: string): Promise<BankAccount | null>;
@@ -123,9 +140,17 @@ export declare class WalletService {
         userPaid: number;
         actualCost: number;
     }, session: ClientSession): Promise<void>;
-    debitForBillPayment(userId: Types.ObjectId, amountNaira: number, reference: string, metadata: Record<string, unknown>, session: ClientSession): Promise<WalletTransactionDocument | null>;
+    debitForBillPayment(userId: Types.ObjectId, amountNaira: number, reference: string, metadata: Record<string, unknown>, session: ClientSession, options?: {
+        source?: BillPaymentSource;
+    }): Promise<WalletTransactionDocument | null>;
     confirmBillPayment(reference: string, session?: ClientSession): Promise<void>;
     failBillPayment(reference: string, amountNaira: number, session: ClientSession): Promise<void>;
+    creditBillCashback(userId: string, amountNaira: number, refs: {
+        billReference: string;
+        billType: string;
+        cashbackPercent: number;
+        purchaseAmount: number;
+    }, session: ClientSession): Promise<void>;
     creditUserWallet(userId: string, amountNaira: number, note?: string): Promise<{
         balance: number;
         currency: string;

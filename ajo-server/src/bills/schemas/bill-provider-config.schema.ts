@@ -1,18 +1,17 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document, Types } from 'mongoose';
-import type { BillProviderKey } from '../../payments/gladtidings.service';
 
 export type BillProviderConfigDocument = BillProviderConfig & Document;
 
 export type BillServiceType = 'airtime' | 'data' | 'cable' | 'electricity';
 
 /**
- * Admin-controlled routing: which provider (VTPass or Gladtidings) is the
- * *active* source for each bill service category, plus the last successful
- * plan sync so the admin UI can show freshness at a glance.
+ * Per-category catalogue state for the admin Bills console: when the VTpass
+ * plan catalogue was last synchronised and how that sync went.
  *
- * One document per service type. If a document is missing for a category the
- * system falls back to VTPass (the original behaviour).
+ * VTPass is the only bills provider, so the old `activeProvider` routing field
+ * is gone — the remaining job of this document is to surface sync freshness.
+ * One document per service type; a missing document simply means "never synced".
  */
 @Schema({ timestamps: true })
 export class BillProviderConfig {
@@ -27,11 +26,7 @@ export class BillProviderConfig {
   })
   serviceType!: string;
 
-  /** The provider to route this category through ('vtpass' | 'gladtidings'). */
-  @Prop({ type: String, required: true, enum: ['vtpass', 'gladtidings'] })
-  activeProvider!: BillProviderKey;
-
-  /** ISO timestamp of the most recent successful plan synchronisation. */
+  /** Timestamp of the most recent successful plan synchronisation. */
   @Prop({ type: Date })
   lastSyncedAt?: Date;
 
@@ -39,6 +34,7 @@ export class BillProviderConfig {
   @Prop({ type: String, default: 'never' })
   lastSyncStatus?: string;
 
+  /** How many plans the last sync pulled from VTpass. */
   @Prop({ type: Number, default: 0 })
   planCount?: number;
 }

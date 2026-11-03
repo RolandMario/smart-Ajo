@@ -172,30 +172,33 @@ export class WebhookController {
 
     // 3. Dedicated Virtual Account path: an inbound bank transfer into a
     // member's personal account number. There is no PENDING ledger entry —
-    // the funds already settled — so we credit the wallet directly,
-    // matching the member by the phone attached to the Paystack customer.
+    // the funds already settled — so we credit the wallet directly. The
+    // member is resolved by the Ajo-owned Paystack customer code first, then
+    // the receiving account number, and only then the phone Paystack echoes
+    // (which is sent in local format, e.g. 07068497568).
     const customer =
       (data.customer as Record<string, unknown> | undefined) ?? {};
     const phone = customer.phone as string | undefined;
 
-    if (!phone) {
-      this.logger.warn(
-        `charge.success ref=${reference}: no matching wallet top-up and no customer phone — skipping`,
-      );
-      return;
-    }
-
     const credited = await this.walletService.creditDedicatedAccountFunding({
+      customerCode,
+      accountNumber,
       phone,
       amountNaira,
       reference,
       paystackData: data,
     });
 
-    this.logger.log(
-      credited
-        ? `Wallet funded via dedicated account: ref=${reference}, amount=${amountNaira} NGN`
-        : `charge.success ref=${reference}: already credited or unknown customer — skipping`,
+    if (credited) {
+      this.logger.log(
+        `Wallet funded via dedicated account: ref=${reference}, amount=${amountNaira} NGN`,
+      );
+      return;
+    }
+
+    this.logger.warn(
+      `charge.success ref=${reference}: already credited, or no member matched ` +
+        `(customer=${customerCode ?? 'n/a'}, account=${accountNumber ?? 'n/a'}, phone=${phone ?? 'n/a'}) — skipping`,
     );
   }
 

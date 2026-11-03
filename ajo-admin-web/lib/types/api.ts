@@ -334,14 +334,19 @@ export interface PlatformAdminListItem {
   createdAt: string;
 }
 
-// ---- Platform admin: Bill / VTU services (multi-provider) ------------------
+// ---- Platform admin: Bill / VTU services (VTpass is the only provider) -----
 
 export type BillServiceType = "airtime" | "data" | "cable" | "electricity";
-export type BillProviderKey = "vtpass" | "gladtidings";
 
-export interface BillProviderConfigItem {
+/** VTpass is the platform's single bills provider. */
+export type BillProviderKey = "vtpass";
+
+/**
+ * Per-category catalogue state shown on the Bills screen. There is no provider
+ * to choose — only "when did we last sync VTpass' plan list, and did it work".
+ */
+export interface BillCatalogStatus {
   serviceType: BillServiceType;
-  activeProvider: BillProviderKey;
   lastSyncedAt?: string;
   lastSyncStatus: string;
   planTotal: number;
@@ -359,6 +364,8 @@ export interface BillServicePlanAdmin {
   amount: number;
   fixedPrice: boolean;
   isActive: boolean;
+  /** Share of the purchase amount paid back to the member, in percent. */
+  cashbackPercent: number;
   updatedAt?: string;
 }
 

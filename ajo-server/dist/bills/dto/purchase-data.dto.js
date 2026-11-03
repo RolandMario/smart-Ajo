@@ -15,6 +15,7 @@ class PurchaseDataDto {
     network;
     phone;
     dataPlanId;
+    paymentSource;
 }
 exports.PurchaseDataDto = PurchaseDataDto;
 __decorate([
@@ -32,4 +33,9 @@ __decorate([
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
 ], PurchaseDataDto.prototype, "dataPlanId", void 0);
+__decorate([
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsIn)(['main', 'cashback']),
+    __metadata("design:type", String)
+], PurchaseDataDto.prototype, "paymentSource", void 0);
 //# sourceMappingURL=purchase-data.dto.js.map

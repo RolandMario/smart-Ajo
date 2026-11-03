@@ -21,7 +21,7 @@ import { useAuth } from "../../auth/AuthContext";
 import { listMyGroups } from "../../api/groups";
 import { getWalletSummary } from "../../api/wallet";
 import { formatPhoneForDisplay } from "../../utils/phone";
-import { formatNaira, statusLabel } from "../../utils/format";
+import { formatNaira, formatNairaExact, statusLabel } from "../../utils/format";
 import { initials } from "../../utils/names";
 import type { MyGroupListItem } from "../../types/api";
 import { colors, radii, spacing, typography } from "../../theme";
@@ -52,6 +52,7 @@ export function ProfileScreen({ navigation }: Props) {
 
   const [groups, setGroups] = useState<MyGroupListItem[]>([]);
   const [balance, setBalance] = useState<number | null>(null);
+  const [cashbackBalance, setCashbackBalance] = useState<number | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -66,6 +67,7 @@ export function ProfileScreen({ navigation }: Props) {
       // GroupsListScreen already guards this way.
       setGroups(loadedGroups.filter((item) => item?.group != null));
       setBalance(wallet?.balance ?? null);
+      setCashbackBalance(wallet?.cashbackBalance ?? 0);
     });
     return () => {
       cancelled = true;
@@ -97,7 +99,7 @@ export function ProfileScreen({ navigation }: Props) {
 
             <View style={styles.identity}>
               <Text style={styles.name} numberOfLines={1}>
-                {user?.name ?? "Ajo member"}
+                {user?.name ?? "SmartThrift member"}
               </Text>
               <Text style={styles.phone} numberOfLines={1}>
                 {user ? formatPhoneForDisplay(user.phone) : "—"}
@@ -142,6 +144,37 @@ export function ProfileScreen({ navigation }: Props) {
             <Text style={styles.statLabel}>Wallet</Text>
           </View>
         </View>
+
+        {/* ---- Cashback wallet ------------------------------------ */}
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`Cashback wallet, ${cashbackBalance === null ? "loading" : formatNairaExact(cashbackBalance)}`}
+          style={({ pressed }) => [
+            styles.cashbackCard,
+            pressed && styles.cashbackCardPressed,
+          ]}
+          onPress={() => navigation.navigate("CashbackWallet")}
+        >
+          <View style={styles.cashbackIcon}>
+            <Ionicons name="gift" size={18} color={colors.forestAction} />
+          </View>
+
+          <View style={styles.cashbackBody}>
+            <Text style={styles.cashbackLabel}>Cashback wallet</Text>
+            <Text style={styles.cashbackValue} numberOfLines={1}>
+              {cashbackBalance === null ? "—" : formatNairaExact(cashbackBalance)}
+            </Text>
+            <Text style={styles.cashbackHint}>
+              Earned on bills — tap to see every credit
+            </Text>
+          </View>
+
+          <Ionicons
+            name="chevron-forward"
+            size={18}
+            color={colors.forestLightInkFaint}
+          />
+        </Pressable>
 
         {/* ---- Circle history ------------------------------------- */}
         <Text style={styles.sectionTitle}>Your circles</Text>
@@ -335,6 +368,48 @@ const styles = StyleSheet.create({
     width: 1,
     alignSelf: "stretch",
     backgroundColor: colors.forestLightLine,
+  },
+  cashbackCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.md,
+    backgroundColor: colors.forestLightCard,
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    borderColor: colors.forestLightLine,
+    padding: spacing.lg,
+    marginBottom: spacing.xl,
+  },
+  cashbackCardPressed: {
+    opacity: 0.85,
+  },
+  cashbackIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: radii.full,
+    backgroundColor: colors.forestLightPill,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  cashbackBody: {
+    flex: 1,
+    // See `identity` — keeps a long balance from widening the card.
+    minWidth: 0,
+  },
+  cashbackLabel: {
+    fontSize: typography.sizes.sm,
+    color: colors.forestLightInkSoft,
+  },
+  cashbackValue: {
+    fontSize: typography.sizes.xl,
+    fontWeight: typography.weights.bold,
+    color: colors.forestAction,
+    marginTop: 2,
+  },
+  cashbackHint: {
+    fontSize: typography.sizes.xs,
+    color: colors.forestLightInkFaint,
+    marginTop: 2,
   },
   sectionTitle: {
     fontSize: typography.sizes.lg,

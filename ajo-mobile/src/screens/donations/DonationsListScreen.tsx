@@ -68,7 +68,7 @@ export function DonationsListScreen({ navigation }: Props) {
           <Text style={styles.title}>Pool Collections</Text>
           <Text style={styles.subtitle}>
             Create a pool, share its Group ID, and collect donations straight
-            into your Ajo wallet.
+            into your SmartThrift wallet.
           </Text>
         </View>
         <AccountMenu />

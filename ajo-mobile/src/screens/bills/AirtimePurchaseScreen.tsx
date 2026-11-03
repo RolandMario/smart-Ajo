@@ -3,6 +3,7 @@ import { StyleSheet, Text, View, Pressable } from "react-native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import type { BillsStackParamList } from "../../navigation/types";
 import { Screen } from "../../components/Screen";
+import { SubpageHeader } from "../../components/SubpageHeader";
 import { TextField } from "../../components/TextField";
 import { Button } from "../../components/Button";
 import { ErrorBanner } from "../../components/ErrorBanner";
@@ -34,7 +35,8 @@ export function AirtimePurchaseScreen({ navigation }: Props) {
     setError(null);
     if (!phone.trim() || phone.length < 10) { setError("Enter a valid phone number"); return; }
     if (!network) { setError("Select a network"); return; }
-    if (amount < 10) { setError("Minimum amount is ₦10"); return; }
+    if (amount < 50) { setError("Minimum amount is ₦50"); return; }
+    if (amount > 50000) { setError("Maximum amount is ₦50,000"); return; }
     navigation.navigate("BillConfirmation", {
       serviceType: "airtime",
       provider: network,
@@ -46,7 +48,7 @@ export function AirtimePurchaseScreen({ navigation }: Props) {
 
   return (
     <Screen>
-      <Text style={styles.title}>Buy Airtime</Text>
+      <SubpageHeader title="Buy Airtime" onBack={() => navigation.goBack()} />
       {error && <ErrorBanner message={error} />}
       <TextField
         label="Phone Number"
@@ -79,13 +81,12 @@ export function AirtimePurchaseScreen({ navigation }: Props) {
         ))}
       </View>
       <TextField label="Or custom amount" placeholder="Enter amount" keyboardType="number-pad" value={custom} onChangeText={handleCustom} />
-      <Button title="Continue" onPress={handleContinue} disabled={!phone || !network || amount < 10} />
+      <Button title="Continue" onPress={handleContinue} disabled={!phone || !network || amount < 50} />
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  title: { fontSize: typography.sizes.xxl, fontWeight: typography.weights.bold, color: colors.forestLightInk, marginBottom: spacing.lg },
   label: { fontSize: typography.sizes.sm, fontWeight: typography.weights.medium, color: colors.forestLightInkSoft, marginBottom: spacing.xs },
   row: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm, marginBottom: spacing.lg },
   chip: { paddingHorizontal: spacing.lg, paddingVertical: spacing.sm, borderRadius: radii.full, borderWidth: 1, borderColor: colors.forestLightLine, backgroundColor: colors.white },

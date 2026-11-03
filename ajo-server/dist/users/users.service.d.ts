@@ -44,6 +44,11 @@ export declare class UsersService {
     } & {
         id: string;
     }, {}, UserDocument, "findOne", {}>;
+    findByDedicatedAccountIdentity(params: {
+        customerCode?: string;
+        accountNumber?: string;
+        phone?: string;
+    }): Promise<UserDocument | null>;
     findByIds(ids: (string | Types.ObjectId)[]): Promise<Array<{
         _id: Types.ObjectId;
         name?: string;

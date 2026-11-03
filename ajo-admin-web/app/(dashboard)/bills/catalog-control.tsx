@@ -1,12 +1,9 @@
 "use client";
 
-import { useActionState, useTransition, useState } from "react";
-import {
-  setBillProviderAction,
-  syncBillsPlansAction,
-} from "@/lib/data/bills-actions";
+import { useTransition, useState } from "react";
+import { syncBillsPlansAction } from "@/lib/data/bills-actions";
 import { Button } from "@/components/ui/button";
-import type { BillProviderConfigItem, BillServiceType } from "@/lib/types/api";
+import type { BillCatalogStatus, BillServiceType } from "@/lib/types/api";
 import { formatDate } from "@/lib/format";
 
 const SERVICE_LABELS: Record<BillServiceType, string> = {
@@ -16,9 +13,20 @@ const SERVICE_LABELS: Record<BillServiceType, string> = {
   electricity: "Electricity",
 };
 
-export function ProviderControl({ config }: { config: BillProviderConfigItem }) {
+/** `lastSyncStatus` is 'never', 'success' or the text of the last failure. */
+function syncStatusLabel(status: string): string {
+  if (status === "never") return "Never synced";
+  if (status === "success") return "Last sync succeeded";
+  return status;
+}
+
+/**
+ * One row of the Bills catalogue screen: how many VTpass plans exist for a
+ * category and a button to pull the latest list. There is no provider to pick —
+ * VTpass is the only bills provider.
+ */
+export function CatalogControl({ config }: { config: BillCatalogStatus }) {
   const { serviceType } = config;
-  const [state, formAction] = useActionState(setBillProviderAction, {});
   const [syncing, startSyncing] = useTransition();
   const [syncResult, setSyncResult] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -50,23 +58,12 @@ export function ProviderControl({ config }: { config: BillProviderConfigItem }) 
             ? ` · last synced ${formatDate(config.lastSyncedAt)}`
             : " · not synced yet"}
         </p>
+        <p className="text-xs mt-1 text-ink-soft">
+          {syncStatusLabel(config.lastSyncStatus)}
+        </p>
       </div>
 
       <div className="flex flex-col items-end gap-2 shrink-0">
-        <form action={formAction} className="flex items-center gap-2">
-          <input type="hidden" name="serviceType" value={serviceType} />
-          <select
-            name="provider"
-            defaultValue={config.activeProvider}
-            className="rounded-md border border-line bg-canvas px-3 py-2 text-sm text-ink"
-          >
-            <option value="vtpass">VTPass</option>
-            <option value="gladtidings">Gladtidings</option>
-          </select>
-          <Button type="submit" variant="secondary" className="text-xs">
-            Set active
-          </Button>
-        </form>
         <Button
           variant="ghost"
           onClick={handleSync}
@@ -76,12 +73,7 @@ export function ProviderControl({ config }: { config: BillProviderConfigItem }) 
           {syncing ? "Syncing…" : "Synchronize plans"}
         </Button>
 
-        {(state.error || error) && (
-          <p className="text-xs text-danger">{state.error ?? error}</p>
-        )}
-        {state.success && !state.error && (
-          <p className="text-xs text-success">Provider updated.</p>
-        )}
+        {error && <p className="text-xs text-danger">{error}</p>}
         {syncResult && !error && (
           <p className="text-xs text-ink-soft">{syncResult}</p>
         )}

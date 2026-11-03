@@ -106,8 +106,8 @@ export default function Home() {
             <p className="section-copy">
               Digital Smart Environment specializes in the design, development, and delivery of innovative digital
               solutions. We provide end-to-end services in custom software development, mobile and web application
-              creation, responsive website design, and digital transformation of IT services. Ajo — a digital savings
-              platform — is one of the projects executed by Digital Smart Environment.
+              creation, responsive website design, and digital transformation of IT services. SmartThrift (formerly
+              Ajo) — a digital savings platform — is one of the projects executed by Digital Smart Environment.
             </p>
           </div>
         </div>
@@ -190,20 +190,20 @@ export default function Home() {
           </div>
 
           <div className="mt-12 grid gap-8 md:grid-cols-2 lg:grid-cols-3">
-            {/* Ajo featured project */}
+            {/* SmartThrift featured project */}
             <Link
               href="/projects/ajo"
               className="rounded-card overflow-hidden border border-ajo-line bg-white shadow-sm transition hover:shadow-lg"
             >
               <div className="flex h-48 items-center justify-center bg-ajo-primary">
-                <span className="text-6xl font-bold text-white">A</span>
+                <span className="text-6xl font-bold text-white">S</span>
               </div>
               <div className="p-6">
                 <p className="text-sm font-semibold text-ajo-primary mb-1">Flagship Project · Digital Savings</p>
-                <h3 className="text-2xl font-bold text-ajo-ink mb-2">Ajo</h3>
+                <h3 className="text-2xl font-bold text-ajo-ink mb-2">SmartThrift</h3>
                 <p className="text-ajo-inkSoft mb-4">
-                  A modern digital savings platform for creating and joining savings groups, automating contributions,
-                  and receiving rotating payouts — save together, thrive together.
+                  A modern digital savings platform for rotating group contributions, goal-based individual savings,
+                  and pool collections for shared purposes — save together, thrive together.
                 </p>
                 <span className="inline-flex items-center gap-2 text-sm font-semibold text-ajo-primary">
                   View Project <ArrowRight className="h-4 w-4" />

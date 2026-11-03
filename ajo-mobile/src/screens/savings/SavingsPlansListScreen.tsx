@@ -72,7 +72,7 @@ export function SavingsPlansListScreen({ navigation }: Props) {
           <Text style={styles.title}>Personal Savings</Text>
           <Text style={styles.subtitle}>
             {
-              "Your own savings goals, funded from your Ajo wallet — pay each interval whenever you're ready."
+              "Your own savings goals, funded from your SmartThrift wallet — pay each interval whenever you're ready."
             }
           </Text>
         </View>
@@ -94,8 +94,8 @@ export function SavingsPlansListScreen({ navigation }: Props) {
           <View style={styles.empty}>
             <Text style={styles.emptyTitle}>No savings plans yet</Text>
             <Text style={styles.emptySubtitle}>
-              Create a savings plan, then pay each interval from your Ajo
-              wallet — nothing is debited automatically.
+              Create a savings plan, then pay each interval from your
+              SmartThrift wallet — nothing is debited automatically.
             </Text>
           </View>
         }

@@ -89,7 +89,7 @@ export function GroupMembersScreen({ navigation, route }: Props) {
     try {
       const Clipboard = await loadClipboardSafe();
       if (Clipboard) {
-        await Clipboard.setStringAsync(`Join my Ajo group\nGroup ID: ${code}`);
+        await Clipboard.setStringAsync(`Join my SmartThrift group\nGroup ID: ${code}`);
         Alert.alert(
           "Group ID copied",
           `Share the ID so others can search & join.\n\n${code}`,

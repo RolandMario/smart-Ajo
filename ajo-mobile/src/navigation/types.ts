@@ -33,6 +33,8 @@ export type GroupsStackParamList = {
 
 export type BillsStackParamList = {
   BillServices: undefined;
+  /** Every bill payment on the member's wallet — opened from "View All". */
+  BillHistory: undefined;
   AirtimePurchase: undefined;
   DataPurchase: undefined;
   CableSubscription: undefined;
@@ -51,7 +53,9 @@ export type BillsStackParamList = {
     amount: number;
     recipient: string;
     provider: string;
-    externalReference?: string;
+    /** The stored purchase metadata, so the receipt can render the
+     * type-specific rows (network/plan/bouquet, electricity token + units). */
+    metadata?: Record<string, unknown>;
     createdAt?: string;
   };
 };
@@ -116,6 +120,8 @@ export type AccountStackParamList = {
   ProfileMain: undefined;
   EditProfile: undefined;
   Notifications: undefined;
+  /** Cashback earned on bills — opened from the profile's Cashback card. */
+  CashbackWallet: undefined;
 };
 
 export type RootStackParamList = {

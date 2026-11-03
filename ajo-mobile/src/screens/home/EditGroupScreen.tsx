@@ -8,6 +8,7 @@ import {
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import type { GroupsStackParamList } from "../../navigation/types";
 import { Screen } from "../../components/Screen";
+import { SubpageHeader } from "../../components/SubpageHeader";
 import { TextField } from "../../components/TextField";
 import { Button } from "../../components/Button";
 import { ErrorBanner } from "../../components/ErrorBanner";
@@ -114,7 +115,7 @@ export function EditGroupScreen({ navigation, route }: Props) {
 
   return (
     <Screen>
-      <Text style={styles.title}>Edit Group</Text>
+      <SubpageHeader title="Edit Group" onBack={() => navigation.goBack()} />
       <Text style={styles.subtitle}>
         Update group details. All members will be notified of changes.
       </Text>
@@ -185,12 +186,6 @@ export function EditGroupScreen({ navigation, route }: Props) {
 }
 
 const styles = StyleSheet.create({
-  title: {
-    fontSize: typography.sizes.xxl,
-    fontWeight: typography.weights.bold,
-    color: colors.forestLightInk,
-    marginBottom: spacing.xs,
-  },
   subtitle: {
     fontSize: typography.sizes.base,
     color: colors.forestLightInkSoft,

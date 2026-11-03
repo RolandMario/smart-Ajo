@@ -28,7 +28,7 @@ const E164_REGEX = /^\+[1-9]\d{7,14}$/;
  * forest-green CTA, an `or` divider and the fingerprint affordance.
  *
  * Two deliberate deviations from the source design, both flagged in the
- * README: the footer carries the app's real brand name ("New to Ajo?" —
+ * README: the footer carries the app's real brand name ("New to SmartThrift?" —
  * the mock's "Kolo" is the template's placeholder), and "Remember me" is
  * kept, sharing the "Forgot password?" row, because it's the only place
  * the existing persisted-credential prefill can live in this layout.
@@ -217,7 +217,7 @@ export function PhoneEntryScreen({ navigation }: Props) {
       {notice && <Text style={styles.notice}>{notice}</Text>}
 
       <View style={styles.footer}>
-        <Text style={styles.footerText}>New to Ajo?</Text>
+        <Text style={styles.footerText}>New to SmartThrift?</Text>
         <Pressable onPress={() => navigation.navigate("Register")} accessibilityRole="link">
           <Text style={styles.footerLink}> Create an account</Text>
         </Pressable>

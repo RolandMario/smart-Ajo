@@ -108,19 +108,20 @@ let WebhookController = WebhookController_1 = class WebhookController {
         }
         const customer = data.customer ?? {};
         const phone = customer.phone;
-        if (!phone) {
-            this.logger.warn(`charge.success ref=${reference}: no matching wallet top-up and no customer phone — skipping`);
-            return;
-        }
         const credited = await this.walletService.creditDedicatedAccountFunding({
+            customerCode,
+            accountNumber,
             phone,
             amountNaira,
             reference,
             paystackData: data,
         });
-        this.logger.log(credited
-            ? `Wallet funded via dedicated account: ref=${reference}, amount=${amountNaira} NGN`
-            : `charge.success ref=${reference}: already credited or unknown customer — skipping`);
+        if (credited) {
+            this.logger.log(`Wallet funded via dedicated account: ref=${reference}, amount=${amountNaira} NGN`);
+            return;
+        }
+        this.logger.warn(`charge.success ref=${reference}: already credited, or no member matched ` +
+            `(customer=${customerCode ?? 'n/a'}, account=${accountNumber ?? 'n/a'}, phone=${phone ?? 'n/a'}) — skipping`);
     }
     extractEscrowIdentifiers(data) {
         const customer = data.customer ?? {};

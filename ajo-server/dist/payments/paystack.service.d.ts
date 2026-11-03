@@ -25,6 +25,11 @@ export interface BankListEntry {
 export interface CreateCustomerResult {
     customerCode: string;
 }
+export interface PaystackCustomerResult {
+    customerCode: string;
+    email?: string;
+    phone?: string;
+}
 export interface DedicatedAccountResult {
     accountId?: string;
     accountNumber: string;
@@ -44,11 +49,16 @@ export declare class PaystackService {
     private readonly client;
     private readonly secretKey;
     private readonly DVA_BANK_POOL;
+    private providerCache?;
     constructor(configService: ConfigService);
     private normalizeSecret;
     isConfigured(): boolean;
     assertConfigured(): void;
     private isInvalidKeyError;
+    private errorMessage;
+    isCustomerNotFoundError(error: unknown): boolean;
+    isDuplicateCustomerError(error: unknown): boolean;
+    isDedicatedAccountExistsError(error: unknown): boolean;
     private handleError;
     initializeTransaction(email: string, amountNaira: number, reference: string): Promise<InitializeTransactionResult>;
     verifyTransaction(reference: string): Promise<VerifyTransactionResult>;
@@ -62,11 +72,15 @@ export declare class PaystackService {
     createCustomer(params: {
         firstName?: string;
         lastName?: string;
-        phone: string;
+        phone?: string;
         email?: string;
+        metadata?: Record<string, unknown>;
     }): Promise<CreateCustomerResult>;
+    fetchCustomer(customerCode: string): Promise<PaystackCustomerResult | null>;
+    fetchCustomerByEmail(email: string): Promise<PaystackCustomerResult | null>;
     dvaPreferredBank(): string;
-    dvaBankCandidates(): string[];
+    fetchDedicatedAccountProviders(): Promise<string[]>;
+    dvaBankCandidates(available?: string[], preferred?: string): string[];
     private isDvaBankUnavailableError;
     createDedicatedAccount(params: {
         customerCode: string;
@@ -76,6 +90,7 @@ export declare class PaystackService {
         lastName?: string;
     }): Promise<DedicatedAccountResult>;
     private requestDedicatedAccount;
+    private mapDedicatedAccount;
     fetchDedicatedAccounts(customerCode: string): Promise<DedicatedAccountResult[]>;
     deactivateDedicatedAccount(accountId: string): Promise<void>;
     initiateTransfer(params: {
@@ -85,6 +100,7 @@ export declare class PaystackService {
         reference: string;
     }): Promise<InitiateTransferResult>;
     isTestMode(): boolean;
+    keyMode(): 'test' | 'live';
     testTransferOtp(): string;
     resolveOtp(transferCode: string, otp: string): Promise<{
         status: string;

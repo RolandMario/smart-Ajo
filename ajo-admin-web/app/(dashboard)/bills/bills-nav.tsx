@@ -1,19 +1,19 @@
 import Link from "next/link";
 
 const SECTIONS = [
-  { href: "/bills", label: "Providers" },
+  { href: "/bills", label: "Catalogue" },
   { href: "/bills/plans", label: "Plans" },
   { href: "/bills/transactions", label: "Transactions" },
 ] as const;
 
 /** Sub-navigation shared by the three Bills console screens. */
-export function BillsNav({ active }: { active: "providers" | "plans" | "transactions" }) {
+export function BillsNav({ active }: { active: "catalog" | "plans" | "transactions" }) {
   return (
     <nav className="flex items-center gap-1 border-b border-line bg-surface px-8">
       {SECTIONS.map((section) => {
         const activeHere =
           section.href === "/bills"
-            ? active === "providers"
+            ? active === "catalog"
             : section.href === `/bills/${active}`;
         return (
           <Link

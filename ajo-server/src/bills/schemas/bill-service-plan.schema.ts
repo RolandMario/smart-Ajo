@@ -24,8 +24,8 @@ export class BillServicePlan {
   })
   serviceType!: string;
 
-  /** Which provider this plan originated from ('vtpass' | 'gladtidings'). */
-  @Prop({ type: String, required: true, enum: ['vtpass', 'gladtidings'] })
+  /** Which provider this plan originated from. VTPass is the only provider. */
+  @Prop({ type: String, required: true, enum: ['vtpass'], default: 'vtpass' })
   provider!: string;
 
   /** The plan identifier as known by the provider (variation/cableplan/dataplan id). */
@@ -50,6 +50,18 @@ export class BillServicePlan {
   /** Admin toggle — off plans are hidden from the mobile app. */
   @Prop({ type: Boolean, default: true, index: true })
   isActive!: boolean;
+
+  /**
+   * Share of the purchase amount returned to the member as cashback, in
+   * percent (0–100, decimals allowed — `0.5` = half a percent).
+   *
+   * One row exists per sellable thing in every category, so this single field
+   * configures data plans, airtime networks, cable bouquets (DSTV/GOtv/
+   * StarTimes) and electricity discos alike. `0` (the default) means "no
+   * cashback", so plans are opt-in.
+   */
+  @Prop({ type: Number, default: 0, min: 0, max: 100 })
+  cashbackPercent!: number;
 
   /** Any provider-specific extra fields worth preserving across syncs. */
   @Prop({ type: Object })

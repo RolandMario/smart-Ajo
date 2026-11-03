@@ -34,7 +34,7 @@ export default function NavBar() {
             <a href="/contact" className="transition hover:text-ajo-ink">Contact</a>
             <Link href="/projects/ajo" className="inline-flex items-center gap-2 rounded-full bg-ajo-primary px-4 py-2 text-sm font-semibold text-white transition hover:-translate-y-0.5 hover:shadow-lg">
               <Download className="h-4 w-4" />
-              Ajo App
+              SmartThrift App
             </Link>
             <Link href="/projects/smartcafe" className="inline-flex items-center gap-2 rounded-full bg-ajo-accent px-4 py-2 text-sm font-semibold text-ajo-ink transition hover:-translate-y-0.5 hover:shadow-lg">
               <Download className="h-4 w-4" />

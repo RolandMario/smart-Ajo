@@ -1,14 +1,16 @@
-import React, { useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import {
-  Clipboard,
+  Alert,
   Linking,
+  Share,
   StyleSheet,
   Text,
   View,
 } from "react-native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
-import type { GroupsStackParamList } from "../../navigation/types";
+import type { WalletStackParamList } from "../../navigation/types";
 import { Screen } from "../../components/Screen";
+import { SubpageHeader } from "../../components/SubpageHeader";
 import { TextField } from "../../components/TextField";
 import { Button } from "../../components/Button";
 import { ErrorBanner } from "../../components/ErrorBanner";
@@ -20,13 +22,29 @@ import {
   verifyFunding,
 } from "../../api/wallet";
 import type { DedicatedAccount } from "../../types/api";
+import { loadClipboardSafe } from "../../utils/expo-clipboard-client";
 import { colors, radii, spacing, typography } from "../../theme";
 
-type Props = NativeStackScreenProps<GroupsStackParamList, "GroupsList">;
+type Props = NativeStackScreenProps<WalletStackParamList, "FundWallet">;
 
-type FundMode = "card" | "bank";
+type FundMode = "bank" | "card";
 
-export function FundWalletScreen({ navigation }: any) {
+/**
+ * Bank-transfer provisioning state for the virtual account card:
+ * `creating` (Paystack is minting/fetching the account) → `ready`, or
+ * `error` + Retry when provisioning fails (e.g. no email on the profile, or
+ * dedicated accounts aren't enabled on the Paystack business).
+ */
+type DvaStatus = "creating" | "ready" | "error";
+
+/** Maps a thrown provisioning error to a member-facing message. */
+function describeDvaError(err: unknown): string {
+  return err instanceof ApiError
+    ? err.message
+    : "Could not set up your dedicated account. Please try again.";
+}
+
+export function FundWalletScreen({ navigation }: Props) {
   const [amount, setAmount] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -35,13 +53,64 @@ export function FundWalletScreen({ navigation }: any) {
   const [verifying, setVerifying] = useState(false);
   const [success, setSuccess] = useState(false);
 
-  // Bank-transfer (Dedicated Virtual Account) funding state.
-  const [mode, setMode] = useState<FundMode>("card");
+  // Bank-transfer (Dedicated Virtual Account) funding state. Bank transfer is
+  // the DEFAULT tab: it needs no card, and the wallet is credited
+  // automatically when the money lands.
+  const [mode, setMode] = useState<FundMode>("bank");
   const [dva, setDva] = useState<DedicatedAccount | null>(null);
-  const [dvaLoading, setDvaLoading] = useState(false);
+  const [dvaStatus, setDvaStatus] = useState<DvaStatus>("creating");
   const [dvaError, setDvaError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [rotating, setRotating] = useState(false);
+
+  /**
+   * Provisions (or re-fetches) the member's own virtual account. Used by the
+   * Retry button; the first load happens in the effect below.
+   */
+  const loadDva = useCallback(async () => {
+    setDvaStatus("creating");
+    setDvaError(null);
+
+    try {
+      const data = await getDedicatedAccount();
+      setDva(data);
+      setDvaStatus("ready");
+      setCopied(false);
+    } catch (err) {
+      setDvaStatus("error");
+      setDvaError(describeDvaError(err));
+    }
+  }, []);
+
+  // The server creates the member's own virtual account lazily on first call,
+  // so opening this screen IS the "create my account number" action. The state
+  // starts in `creating`, and this effect only writes state after the request
+  // resolves (a synchronous setState inside an effect would cascade renders).
+  useEffect(() => {
+    let active = true;
+
+    (async () => {
+      try {
+        const data = await getDedicatedAccount();
+
+        if (!active) return;
+
+        setDva(data);
+        setDvaStatus("ready");
+      } catch (err) {
+        if (!active) return;
+
+        setDvaStatus("error");
+        setDvaError(describeDvaError(err));
+      }
+    })().catch(() => {
+      // Defensive: the inner try/catch already handles API failures.
+    });
+
+    return () => {
+      active = false;
+    };
+  }, []);
 
   async function handleFund() {
     const amountNum = parseInt(amount, 10);
@@ -98,59 +167,84 @@ export function FundWalletScreen({ navigation }: any) {
     }
   }
 
-  async function loadDva() {
-    setDvaLoading(true);
-    setDvaError(null);
-    try {
-      const data = await getDedicatedAccount();
-      setDva(data);
-      setCopied(false);
-    } catch (err) {
-      if (err instanceof ApiError) {
-        setDvaError(err.message);
-      } else {
-        setDvaError(
-          "Could not fetch your virtual account. Please try again.",
-        );
-      }
-    } finally {
-      setDvaLoading(false);
-    }
-  }
-
-  function openBankTab() {
-    setMode("bank");
-    setError(null);
-    if (!dva && !dvaLoading && !dvaError) {
-      loadDva();
-    }
-  }
-
+  /**
+   * Copy via the lazily-loaded `expo-clipboard` (see the module's comment on
+   * why it must not be imported at startup). Falls back to an alert showing
+   * the number when the native module is unavailable.
+   */
   async function copyAccountNumber() {
     if (!dva?.accountNumber) return;
-    try {
-      Clipboard.setString(dva.accountNumber);
-      setCopied(true);
-    } catch {
-      // Copying is best-effort — never block on it.
+
+    const Clipboard = await loadClipboardSafe();
+
+    if (Clipboard) {
+      try {
+        await Clipboard.setStringAsync(dva.accountNumber);
+        setCopied(true);
+        return;
+      } catch {
+        // Fall through to the alert — copying is best-effort.
+      }
     }
+
+    Alert.alert(
+      "Account number",
+      `${dva.accountNumber}\n${dva.bankName}\n${dva.accountName}`,
+    );
+  }
+
+  /** Share the account details through the OS share sheet. */
+  async function shareAccountDetails() {
+    if (!dva) return;
+
+    const message = [
+      "Fund my SmartThrift wallet by bank transfer:",
+      `${dva.bankName} — ${dva.accountNumber}`,
+      `Account name: ${dva.accountName}`,
+    ].join("\n");
+
+    try {
+      await Share.share({ message });
+    } catch {
+      Alert.alert("Account details", message);
+    }
+  }
+
+  /** Rotating the number is destructive — confirm before calling Paystack. */
+  function confirmNewNumber() {
+    Alert.alert(
+      "Get a new account number?",
+      "Your current number stops accepting transfers immediately. Money already sent to it is still credited to your wallet.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Get new number",
+          style: "destructive",
+          onPress: () => {
+            void handleNewNumber();
+          },
+        },
+      ],
+    );
   }
 
   async function handleNewNumber() {
     setRotating(true);
     setDvaError(null);
+
     try {
       const data = await refreshDedicatedAccount();
       setDva(data);
+      setDvaStatus("ready");
       setCopied(false);
     } catch (err) {
-      if (err instanceof ApiError) {
-        setDvaError(err.message);
-      } else {
-        setDvaError(
-          "Could not get a new account number. Please try again.",
-        );
-      }
+      // Keep the current card on screen; the refresh was best-effort.
+      setDvaStatus(dva ? "ready" : "error");
+      setDvaError(
+        err instanceof ApiError
+          ? err.message
+          : "Could not get a new account number. Please try again.",
+      );
     } finally {
       setRotating(false);
     }
@@ -175,23 +269,29 @@ export function FundWalletScreen({ navigation }: any) {
 
   return (
     <Screen>
-      <Text style={styles.title}>Fund Wallet</Text>
+      <SubpageHeader title="Fund Wallet" onBack={() => navigation.goBack()} />
       <Text style={styles.subtitle}>
         Add money to your wallet to contribute to your savings groups.
       </Text>
 
       <View style={styles.tabs}>
         <Button
-          title="Card"
-          variant={mode === "card" ? "primary" : "ghost"}
-          style={styles.tabButton}
-          onPress={() => setMode("card")}
-        />
-        <Button
           title="Bank Transfer"
           variant={mode === "bank" ? "primary" : "ghost"}
           style={styles.tabButton}
-          onPress={openBankTab}
+          onPress={() => {
+            setMode("bank");
+            setError(null);
+          }}
+        />
+        <Button
+          title="Card"
+          variant={mode === "card" ? "primary" : "ghost"}
+          style={styles.tabButton}
+          onPress={() => {
+            setMode("card");
+            setError(null);
+          }}
         />
       </View>
 
@@ -245,25 +345,26 @@ export function FundWalletScreen({ navigation }: any) {
         </View>
       ) : (
         <View>
-          {dvaLoading && !dva && (
+          {dvaStatus === "creating" && !dva && (
             <Text style={styles.helperText}>
-              Setting up your virtual account…
+              Setting up your dedicated account…
             </Text>
           )}
 
-          {dvaError && (
-            <View>
-              <ErrorBanner message={dvaError} />
-              <Button
-                title="Retry"
-                variant="secondary"
-                onPress={loadDva}
-                loading={dvaLoading}
-              />
-            </View>
+          {dvaError && <ErrorBanner message={dvaError} />}
+
+          {dvaStatus === "error" && (
+            <Button
+              title="Retry"
+              variant="secondary"
+              onPress={() => {
+                void loadDva();
+              }}
+              style={styles.retryButton}
+            />
           )}
 
-          {!dvaLoading && dva && !dvaError && (
+          {dva && (
             <View>
               <View style={styles.dvaCard}>
                 <Text style={styles.dvaLabel}>Bank</Text>
@@ -279,7 +380,18 @@ export function FundWalletScreen({ navigation }: any) {
               <Button
                 title={copied ? "Copied ✓" : "Copy Account Number"}
                 variant="secondary"
-                onPress={copyAccountNumber}
+                onPress={() => {
+                  void copyAccountNumber();
+                }}
+              />
+
+              <Button
+                title="Share Account Details"
+                variant="ghost"
+                onPress={() => {
+                  void shareAccountDetails();
+                }}
+                style={styles.shareButton}
               />
 
               <Text style={styles.helperText}>
@@ -287,10 +399,12 @@ export function FundWalletScreen({ navigation }: any) {
                 wallet is credited automatically within a few minutes.
               </Text>
 
+              <Button title="Done" onPress={() => navigation.goBack()} />
+
               <Button
                 title="Get a New Account Number"
                 variant="ghost"
-                onPress={handleNewNumber}
+                onPress={confirmNewNumber}
                 loading={rotating}
                 style={styles.verifyButton}
               />
@@ -303,12 +417,6 @@ export function FundWalletScreen({ navigation }: any) {
 }
 
 const styles = StyleSheet.create({
-  title: {
-    fontSize: typography.sizes.xxl,
-    fontWeight: typography.weights.bold,
-    color: colors.forestLightInk,
-    marginBottom: spacing.xs,
-  },
   subtitle: {
     fontSize: typography.sizes.base,
     color: colors.forestLightInkSoft,
@@ -324,6 +432,12 @@ const styles = StyleSheet.create({
   },
   verifyButton: {
     marginBottom: spacing.sm,
+  },
+  retryButton: {
+    marginBottom: spacing.md,
+  },
+  shareButton: {
+    marginTop: spacing.sm,
   },
   tabs: {
     flexDirection: "row",

@@ -22,6 +22,16 @@ export class Wallet {
   @Prop({ required: true, default: 0, min: 0 })
   balance!: number;
 
+  /**
+   * Cashback the member has earned on bill purchases. Kept separate from
+   * `balance` so it can be surfaced as its own wallet on the profile screen,
+   * and so a bill can be paid straight out of it (`paymentSource:
+   * 'cashback'`). Funded only by `WalletService.creditBillCashback`, never by
+   * Paystack.
+   */
+  @Prop({ type: Number, default: 0, min: 0 })
+  cashbackBalance!: number;
+
   @Prop({ default: 'NGN' })
   currency!: string;
 }

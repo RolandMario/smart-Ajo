@@ -4,6 +4,7 @@ import { Model, Types } from 'mongoose';
 import { User, UserDocument } from './schemas/user.schema';
 import { BankAccount } from './schemas/bank-account.schema';
 import { Role } from '../common/enums/role.enum';
+import { ngPhoneVariants } from '../common/utils/phone';
 
 @Injectable()
 export class UsersService {
@@ -23,6 +24,53 @@ export class UsersService {
 
   findById(id: string) {
     return this.userModel.findById(id);
+  }
+
+  /**
+   * Resolves the member who owns an inbound Dedicated Virtual Account
+   * transfer, using whichever identifiers the Paystack webhook carried.
+   *
+   * Order of reliability: the Paystack customer code is stored on the member's
+   * `dedicatedAccount` sub-document, the account number is assigned by
+   * Paystack, and the phone is the fallback Paystack echoes back. The phone is
+   * matched on ALL its Nigerian formats (`+2348012345678`, `08012345678`,
+   * `2348012345678`, `8012345678`) because Paystack sends the local format
+   * while members may have been stored in E.164 — a plain equality check
+   * silently drops every transfer.
+   *
+   * Returns `null` when nothing matches (e.g. a transfer into a group escrow
+   * account, or an unknown member).
+   */
+  findByDedicatedAccountIdentity(params: {
+    customerCode?: string;
+    accountNumber?: string;
+    phone?: string;
+  }): Promise<UserDocument | null> {
+    const identities: Record<string, unknown>[] = [];
+
+    if (params.customerCode) {
+      identities.push({
+        'dedicatedAccount.paystackCustomerCode': params.customerCode,
+      });
+    }
+
+    if (params.accountNumber) {
+      identities.push({
+        'dedicatedAccount.accountNumber': params.accountNumber,
+      });
+    }
+
+    const phoneVariants = ngPhoneVariants(params.phone);
+
+    if (phoneVariants.length > 0) {
+      identities.push({ phone: { $in: phoneVariants } });
+    }
+
+    if (identities.length === 0) {
+      return Promise.resolve(null);
+    }
+
+    return this.userModel.findOne({ $or: identities });
   }
 
   /**

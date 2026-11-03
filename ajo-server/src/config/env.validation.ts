@@ -39,12 +39,13 @@ export const envValidationSchema = Joi.object({
   PAYSTACK_TRANSFER_OTP: Joi.string().default('123456'),
   // Dedicated Virtual Account (DVA) — lets members fund their wallet by bank
   // transferring into a personal virtual account number. DVA must be enabled
-  // on the Paystack business (Settings > Payment channels). Bank options
-  // (NG): wema | providus | sterling (titan-paystack for Titan live). Wema is
-  // live-only: in test mode Paystack only accepts providus/sterling, so the
-  // service automatically retries with the next supported bank rather than
-  // failing on `... is not available in test mode`.
-  PAYSTACK_DVA_PREFERRED_BANK: Joi.string().default('wema'),
+  // on the Paystack business (Settings > Payment channels). Values are
+  // Paystack `provider_slug`s, NOT bank names: wema-bank (live), providus,
+  // sterling, titan-paystack. The service asks
+  // `/dedicated_account/available_providers` which ones this business can
+  // actually use, and falls back through the rest rather than failing on
+  // `Invalid bank` / `... is not available in test mode`.
+  PAYSTACK_DVA_PREFERRED_BANK: Joi.string().default('wema-bank'),
   WALLET_CURRENCY: Joi.string().default('NGN'),
 
   // Firebase Admin (push notifications). Optional — if omitted, push is
@@ -62,23 +63,17 @@ export const envValidationSchema = Joi.object({
   OTP_EXPIRY_MINUTES: Joi.number().default(10),
   OTP_MAX_ATTEMPTS: Joi.number().default(5),
 
-  // VTpass (bill payments)
-  VTPASS_API_KEY: Joi.string().default('55e5a3a8edce6f92723a167859022d26'),
-  VTPASS_PUBLIC_KEY: Joi.string().default(
-    'your-vtpass-public-key',
-  ),
-  VTPASS_SECRET_KEY: Joi.string().default(
-    'your-vtpass-secret-key',
-  ),
+  // VTpass (bill payments — the only VTU provider)
+  //
+  // Deliberately has NO defaults. Committed key pairs here went stale and made
+  // every bills endpoint fail with VTpass' opaque "087 INVALID CREDENTIALS",
+  // which looks like an application bug. Leave them blank when bills are not
+  // needed: VTPassService warns at boot and BillsService answers 503 naming the
+  // missing variables (same pattern as PAYSTACK_SECRET_KEY above).
+  VTPASS_API_KEY: Joi.string().allow('').optional(),
+  VTPASS_PUBLIC_KEY: Joi.string().allow('').optional(),
+  VTPASS_SECRET_KEY: Joi.string().allow('').optional(),
   VTPASS_BASE_URL: Joi.string().default('https://vtpass.com/api/'),
-
-  // Gladtidings (bill payments — second provider)
-  GLADTIDINGS_API_KEY: Joi.string().default(
-    '019471cb4ca75dee7de39307aed863dcc2282fef',
-  ),
-  GLADTIDINGS_BASE_URL: Joi.string().default(
-    'https://www.gladtidingsdata.com/api/',
-  ),
 
   // Cron jobs (Vercel Cron, see vercel.json)
   // Shared secret Vercel sends as `Authorization: Bearer <CRON_SECRET>` on

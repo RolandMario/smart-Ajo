@@ -7,28 +7,9 @@ import type { BillsStackParamList } from "../../navigation/types";
 import { Screen } from "../../components/Screen";
 import { Button } from "../../components/Button";
 import { colors, radii, spacing, typography } from "../../theme";
+import { billReceiptRows } from "../../utils/bill-details";
 
 type Props = NativeStackScreenProps<BillsStackParamList, "BillSuccess">;
-
-const SERVICE_LABELS: Record<string, string> = {
-  airtime: "Airtime",
-  data: "Data",
-  cable: "Cable TV",
-  electricity: "Electricity",
-};
-
-function toTitleCase(value: string): string {
-  return value.charAt(0).toUpperCase() + value.slice(1);
-}
-
-/** Resolves the Service label. For cable, show the cable brand (Dstv/Gotv/
- * Startimes) rather than the generic "Cable TV". */
-function serviceLabel(serviceType: string, provider?: string): string {
-  if (serviceType === "cable") {
-    return provider ? toTitleCase(provider) : "Cable TV";
-  }
-  return SERVICE_LABELS[serviceType] ?? serviceType.toUpperCase();
-}
 
 function formatDate(value?: string): string {
   if (!value) return "—";
@@ -44,17 +25,16 @@ function formatDate(value?: string): string {
 }
 
 export function BillSuccessScreen({ navigation, route }: Props) {
-  const {
-    serviceType,
-    amount,
-    recipient,
-    provider,
-    reference,
-    externalReference,
-    createdAt,
-  } = route.params;
+  const { serviceType, amount, recipient, metadata, reference, createdAt } =
+    route.params;
   const receiptRef = useRef<View>(null);
   const [sharing, setSharing] = useState(false);
+
+  // Same type-specific rows the wallet receipt renders (network, data plan,
+  // cable package/subscriber, electricity product/meter/token/units/phone), so
+  // the receipt a member shares right after paying matches the one they can
+  // reopen later from history.
+  const rows = billReceiptRows({ type: serviceType, recipient, metadata });
 
   async function handleShare() {
     if (!receiptRef.current) return;
@@ -92,13 +72,13 @@ export function BillSuccessScreen({ navigation, route }: Props) {
       <View style={styles.container}>
         {/* Receipt — captured as the shared image */}
         <View ref={receiptRef} collapsable={false} style={styles.receipt}>
-          {/* Sm@rtAjo header */}
+          {/* SmartThrift header */}
           <View style={styles.brandRow}>
             <View style={styles.logoCircle}>
-              <Text style={styles.logoText}>A</Text>
+              <Text style={styles.logoText}>S</Text>
             </View>
             <View style={styles.brandTextWrap}>
-              <Text style={styles.brandName}>Sm@rtAjo</Text>
+              <Text style={styles.brandName}>SmartThrift</Text>
               <Text style={styles.brandTagline}>Save Together, Grow Together</Text>
             </View>
           </View>
@@ -109,16 +89,12 @@ export function BillSuccessScreen({ navigation, route }: Props) {
             <Text style={styles.statusText}>SUCCESSFUL</Text>
           </View>
 
-          <View style={styles.detailRow}>
-            <Text style={styles.label}>Service</Text>
-            <Text style={styles.value}>
-              {serviceLabel(serviceType, provider)}
-            </Text>
-          </View>
-          <View style={styles.detailRow}>
-            <Text style={styles.label}>Recipient</Text>
-            <Text style={styles.value}>{recipient}</Text>
-          </View>
+          {rows.map((row) => (
+            <View key={row.label} style={styles.detailRow}>
+              <Text style={styles.label}>{row.label}</Text>
+              <Text style={styles.value}>{row.value}</Text>
+            </View>
+          ))}
           <View style={styles.amountRow}>
             <Text style={styles.label}>Amount</Text>
             <Text style={styles.amount}>₦{amount.toLocaleString()}</Text>
@@ -127,12 +103,6 @@ export function BillSuccessScreen({ navigation, route }: Props) {
             <Text style={styles.label}>Reference</Text>
             <Text style={styles.value}>{reference}</Text>
           </View>
-          {externalReference ? (
-            <View style={styles.detailRow}>
-              <Text style={styles.label}>External Ref</Text>
-              <Text style={styles.value}>{externalReference}</Text>
-            </View>
-          ) : null}
           <View style={styles.detailRow}>
             <Text style={styles.label}>Date</Text>
             <Text style={styles.value}>{formatDate(createdAt)}</Text>

@@ -7,10 +7,16 @@ import type {
   SetBankAccountPayload,
   PaginatedWalletTransactions,
   DedicatedAccount,
+  CashbackWallet,
 } from "../types/api";
 
 export async function getWalletSummary(): Promise<WalletSummary> {
   return authedFetch<WalletSummary>("/wallet/me");
+}
+
+/** The member's cashback wallet: balance + every cashback ledger row. */
+export async function getCashbackWallet(): Promise<CashbackWallet> {
+  return authedFetch<CashbackWallet>("/wallet/cashback");
 }
 
 export async function listWalletTransactions(

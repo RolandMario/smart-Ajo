@@ -118,7 +118,7 @@ export function AccountMenu({ style }: AccountMenuProps) {
               <Avatar name={user?.name} tone="green" size={38} />
               <View style={styles.menuIdentityText}>
                 <Text style={styles.menuName} numberOfLines={1}>
-                  {user?.name ? displayName(user.name) : "Ajo member"}
+                  {user?.name ? displayName(user.name) : "SmartThrift member"}
                 </Text>
                 <Text style={styles.menuPhone} numberOfLines={1}>
                   {user ? formatPhoneForDisplay(user.phone) : ""}

@@ -10,6 +10,7 @@ import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useFocusEffect } from "@react-navigation/native";
 import type { WalletStackParamList } from "../../navigation/types";
 import { Screen } from "../../components/Screen";
+import { SubpageHeader } from "../../components/SubpageHeader";
 import { Button } from "../../components/Button";
 import { ErrorBanner } from "../../components/ErrorBanner";
 import { LoadingScreen } from "../../components/LoadingScreen";
@@ -75,9 +76,9 @@ export function TransactionsScreen({ navigation }: Props) {
   return (
     <Screen scrollable={false}>
       <View style={styles.header}>
-        <Text style={styles.title}>Transactions</Text>
+        <SubpageHeader title="Transactions" onBack={() => navigation.goBack()} />
         <Text style={styles.subtitle}>
-          Every debit and credit on your Ajo wallet.
+          Every debit and credit on your SmartThrift wallet.
         </Text>
       </View>
 
@@ -181,11 +182,6 @@ function TransactionRow({
 const styles = StyleSheet.create({
   header: {
     marginBottom: spacing.lg,
-  },
-  title: {
-    fontSize: typography.sizes.xxl,
-    fontWeight: typography.weights.bold,
-    color: colors.forestLightInk,
   },
   subtitle: {
     fontSize: typography.sizes.sm,

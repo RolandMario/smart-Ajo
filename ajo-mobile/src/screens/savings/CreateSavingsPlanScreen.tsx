@@ -3,6 +3,7 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import type { SavingsStackParamList } from "../../navigation/types";
 import { Screen } from "../../components/Screen";
+import { SubpageHeader } from "../../components/SubpageHeader";
 import { TextField } from "../../components/TextField";
 import { Button } from "../../components/Button";
 import { ErrorBanner } from "../../components/ErrorBanner";
@@ -115,10 +116,10 @@ export function CreateSavingsPlanScreen({ navigation }: Props) {
 
   return (
     <Screen>
-      <Text style={styles.title}>Create a Savings Plan</Text>
+      <SubpageHeader title="Create a Savings Plan" onBack={() => navigation.goBack()} />
       <Text style={styles.subtitle}>
         {
-          "You fund this plan yourself: pay each interval from your Ajo wallet whenever you're ready — nothing is debited automatically. When the cycle finishes, you can withdraw it to your bank."
+          "You fund this plan yourself: pay each interval from your SmartThrift wallet whenever you're ready — nothing is debited automatically. When the cycle finishes, you can withdraw it to your bank."
         }
       </Text>
 
@@ -250,12 +251,6 @@ export function CreateSavingsPlanScreen({ navigation }: Props) {
 }
 
 const styles = StyleSheet.create({
-  title: {
-    fontSize: typography.sizes.xxl,
-    fontWeight: typography.weights.bold,
-    color: colors.forestLightInk,
-    marginBottom: spacing.xs,
-  },
   subtitle: {
     fontSize: typography.sizes.base,
     color: colors.forestLightInkSoft,

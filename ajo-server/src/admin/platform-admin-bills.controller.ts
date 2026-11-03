@@ -9,42 +9,32 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { BillsService } from '../bills/bills.service';
-import { SetBillProviderDto } from './dto/set-bill-provider.dto';
 import { SetBillPlanActiveDto } from './dto/set-bill-plan-active.dto';
+import { SetBillPlanCashbackDto } from './dto/set-bill-plan-cashback.dto';
 import { ListBillPlansQueryDto } from './dto/list-bill-plans-query.dto';
 import { ListBillTransactionsQueryDto } from './dto/list-bill-transactions-query.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { PlatformAdminGuard } from '../common/guards/platform-admin.guard';
 
 /**
- * Platform-admin-only bills configuration for ajo-admin-web. Lets an admin
- * choose which VTU provider is active per service category, sync the provider's
- * plan catalog into the database, toggle individual plans on/off so they
- * show (or hide) in the member app, and review every bill transaction made
- * on the platform (via the Bills → Transactions screen).
+ * Platform-admin-only bills configuration for ajo-admin-web. VTPass is the
+ * single VTU provider, so the console can only synchronise its plan catalogue
+ * into the database, toggle individual plans on/off (control over what shows in
+ * the member app), and review every bill transaction on the platform.
  */
 @UseGuards(JwtAuthGuard, PlatformAdminGuard)
 @Controller('admin/bills')
 export class PlatformAdminBillsController {
   constructor(private billsService: BillsService) {}
 
-  /** Active provider + sync status for every service category. */
-  @Get('providers')
-  listProviders() {
-    return this.billsService.listProviderConfigs();
+  /** Sync status + plan counts for every service category. */
+  @Get('catalog')
+  listCatalog() {
+    return this.billsService.listCatalogStatus();
   }
 
-  /** Set which provider is active for a service category. */
-  @Post('providers/:serviceType')
-  setProvider(
-    @Param('serviceType') serviceType: string,
-    @Body() dto: SetBillProviderDto,
-  ) {
-    return this.billsService.setProvider(serviceType, dto.provider);
-  }
-
-  /** Pull & persist the active provider's plans for a category. */
-  @Post('providers/:serviceType/sync')
+  /** Pull & persist the VTpass plan catalogue for a category. */
+  @Post('catalog/:serviceType/sync')
   sync(@Param('serviceType') serviceType: string) {
     return this.billsService.syncPlans(serviceType);
   }
@@ -59,6 +49,18 @@ export class PlatformAdminBillsController {
   @Patch('plans/:id/active')
   setPlanActive(@Param('id') id: string, @Body() dto: SetBillPlanActiveDto) {
     return this.billsService.setPlanActive(id, dto.isActive);
+  }
+
+  /**
+   * Set the cashback percentage for a single plan — data bundles, airtime
+   * networks, cable bouquets and electricity discos all use this one route.
+   */
+  @Patch('plans/:id/cashback')
+  setPlanCashback(
+    @Param('id') id: string,
+    @Body() dto: SetBillPlanCashbackDto,
+  ) {
+    return this.billsService.setPlanCashback(id, dto.cashbackPercent);
   }
 
   /** Every bill transaction on the platform (all users), newest first. */

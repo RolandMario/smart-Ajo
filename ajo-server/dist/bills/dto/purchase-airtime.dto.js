@@ -15,12 +15,15 @@ class PurchaseAirtimeDto {
     amount;
     phone;
     network;
+    paymentSource;
 }
 exports.PurchaseAirtimeDto = PurchaseAirtimeDto;
 __decorate([
     (0, class_validator_1.IsDefined)(),
     (0, class_validator_1.IsNumber)(),
-    (0, class_validator_1.Min)(10),
+    (0, class_validator_1.IsInt)(),
+    (0, class_validator_1.Min)(50),
+    (0, class_validator_1.Max)(50_000),
     __metadata("design:type", Number)
 ], PurchaseAirtimeDto.prototype, "amount", void 0);
 __decorate([
@@ -33,4 +36,9 @@ __decorate([
     (0, class_validator_1.IsIn)(['mtn', 'glo', 'airtel', '9mobile']),
     __metadata("design:type", String)
 ], PurchaseAirtimeDto.prototype, "network", void 0);
+__decorate([
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsIn)(['main', 'cashback']),
+    __metadata("design:type", String)
+], PurchaseAirtimeDto.prototype, "paymentSource", void 0);
 //# sourceMappingURL=purchase-airtime.dto.js.map

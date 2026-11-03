@@ -19,7 +19,6 @@ const mongoose_1 = require("@nestjs/mongoose");
 const mongoose_2 = require("mongoose");
 const crypto_1 = require("crypto");
 const vtpass_service_1 = require("../payments/vtpass.service");
-const gladtidings_service_1 = require("../payments/gladtidings.service");
 const wallet_service_1 = require("../wallet/wallet.service");
 const notifications_service_1 = require("../notifications/notifications.service");
 const notification_events_1 = require("../notifications/notification-events");
@@ -40,10 +39,46 @@ const AIRTIME_NETWORK_SERVICE = {
     glo: 'glo',
     '9mobile': 'etisalat',
 };
-const CABLE_PROVIDERS = ['dstv', 'gotv', 'startimes'];
+const CABLE_PROVIDER_SERVICE_IDS = {
+    dstv: 'dstv',
+    gotv: 'gotv',
+    startimes: 'startimes',
+};
+const CABLE_PROVIDERS = Object.keys(CABLE_PROVIDER_SERVICE_IDS);
+const PRICE_ONLY_SEGMENT = /^(?:₦|NGN|N)?\s?\d[\d,]*(?:\.\d{1,2})?\s*(?:naira|ngn)?$/i;
+const TRAILING_PRICE = /(?:\s+[-–—]\s+|\s+)\(?(?:₦|NGN|N)?\s?\d[\d,]*(?:\.\d{1,2})?\s*(?:naira|ngn)?\)?$/i;
+function stripPlanPrice(rawName) {
+    const kept = rawName
+        .split(/\s+[-–—]\s+/)
+        .filter((segment) => !PRICE_ONLY_SEGMENT.test(segment.trim()));
+    const stripped = kept.join(' - ').replace(TRAILING_PRICE, '');
+    return (stripped.trim() || rawName).replace(/\s+/g, ' ').trim();
+}
+function bouquetKey(name) {
+    return (name ?? '')
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, ' ')
+        .trim();
+}
+const CATALOGUE_CACHE_TTL_MS = 5 * 60_000;
+function cashbackFor(amount, percent) {
+    const rate = typeof percent === 'number' && Number.isFinite(percent)
+        ? Math.min(Math.max(percent, 0), 100)
+        : 0;
+    if (rate <= 0 || amount <= 0)
+        return 0;
+    return Math.round(((amount * rate) / 100) * 100) / 100;
+}
+function clampCashbackPercent(percent) {
+    if (typeof percent !== 'number' || !Number.isFinite(percent))
+        return 0;
+    return Math.min(Math.max(percent, 0), 100);
+}
+const ELECTRICITY_MIN_AMOUNT = 500;
+const ELECTRICITY_MAX_AMOUNT = 500_000;
+const BILLS_PROVIDER = 'vtpass';
 let BillsService = BillsService_1 = class BillsService {
     vtpass;
-    gladtidings;
     walletService;
     usersService;
     notificationsService;
@@ -52,9 +87,9 @@ let BillsService = BillsService_1 = class BillsService {
     servicePlanModel;
     billTransactionModel;
     logger = new common_1.Logger(BillsService_1.name);
-    constructor(vtpass, gladtidings, walletService, usersService, notificationsService, connection, providerConfigModel, servicePlanModel, billTransactionModel) {
+    catalogueCache = new Map();
+    constructor(vtpass, walletService, usersService, notificationsService, connection, providerConfigModel, servicePlanModel, billTransactionModel) {
         this.vtpass = vtpass;
-        this.gladtidings = gladtidings;
         this.walletService = walletService;
         this.usersService = usersService;
         this.notificationsService = notificationsService;
@@ -63,24 +98,22 @@ let BillsService = BillsService_1 = class BillsService {
         this.servicePlanModel = servicePlanModel;
         this.billTransactionModel = billTransactionModel;
     }
-    async onModuleInit() {
-        try {
-            const { modifiedCount } = await this.servicePlanModel.updateMany({ provider: 'gladtidings', isActive: true }, { $set: { isActive: false } });
-            if (modifiedCount > 0) {
-                this.logger.warn(`[BillsService] Startup backfill: switched off ${modifiedCount} gladtidings plan(s)`);
-            }
-        }
-        catch (e) {
-            this.logger.error(`[BillsService] Failed to backfill gladtidings plans off: ${e instanceof Error ? e.message : String(e)}`);
-        }
+    assertBillsConfigured() {
+        if (this.vtpass.isConfigured())
+            return;
+        throw new common_1.ServiceUnavailableException(`Bill payments are not configured on this server: ${this.vtpass.missingConfig().join(', ')} missing. Add the VTpass key pair to ajo-server/.env and restart the server.`);
     }
     async getPlatformAdminUserId() {
         const admin = await this.usersService.findPlatformAdmin();
         return admin._id.toString();
     }
-    async resolveProvider(serviceType) {
-        const cfg = await this.providerConfigModel.findOne({ serviceType }).lean();
-        return cfg?.activeProvider ?? 'vtpass';
+    async planCashbackPercent(serviceType, externalId) {
+        if (!externalId)
+            return 0;
+        const row = await this.servicePlanModel
+            .findOne({ serviceType, provider: BILLS_PROVIDER, externalId })
+            .lean();
+        return clampCashbackPercent(row?.cashbackPercent);
     }
     async vtpassCatalog(serviceType) {
         if (serviceType === 'data') {
@@ -153,61 +186,96 @@ let BillsService = BillsService_1 = class BillsService {
         aba: 'aba-electric',
         yedc: 'yola-electric',
     };
+    async resolveLiveCablePlan(provider, variationCode) {
+        const { key, bucket } = this.cableProviderEntry(provider);
+        const { plans: live, cashback } = await this.liveCablePlans(key);
+        const match = live.find((v) => v.variationCode === variationCode);
+        if (match)
+            return {
+                name: stripPlanPrice(match.name),
+                amount: match.amount,
+                cashbackPercent: cashback.get(match.variationCode) ?? 0,
+            };
+        const stored = await this.servicePlanModel
+            .findOne({
+            serviceType: 'cable',
+            provider: BILLS_PROVIDER,
+            externalId: variationCode,
+            bucket: { $regex: `^${bucket}$`, $options: 'i' },
+        })
+            .lean();
+        if (stored && !stored.isActive) {
+            throw new common_1.BadRequestException(`${stripPlanPrice(stored.name)} is currently unavailable`);
+        }
+        throw new common_1.BadRequestException('Invalid cable plan selected');
+    }
     async validateMeter(disco, meterNumber, meterType) {
+        this.assertBillsConfigured();
         const discoServiceId = this.DISCO_SERVICE_ID_MAP[disco.toLowerCase()] ??
             disco.toLowerCase().replace(/\s+/g, '');
-        console.log('[BillsService] validateMeter params:', {
-            disco,
-            discoServiceId,
-            meterNumber,
-            meterType,
-        });
         const result = await this.vtpass.verifyProduct({
             serviceID: discoServiceId,
             billersCode: meterNumber,
         });
-        console.log('[BillsService] validateMeter vtpass result:', result);
         if (!result.valid)
             throw new common_1.BadRequestException(result.message || 'Meter number could not be verified');
-        return {
-            valid: true,
-            customerName: result.name,
-            address: result.address,
-            packageInfo: result.packageInfo,
-            outstanding: result.outstanding,
-        };
+        return { meterType, ...this.toValidationResult(result) };
     }
     async validateSmartCard(serviceProvider, smartCardNumber) {
-        console.log('[BillsService] validateSmartCard raw vtpass response:', serviceProvider, smartCardNumber);
+        this.assertBillsConfigured();
         const result = await this.vtpass.verifyProduct({
             serviceID: serviceProvider,
             billersCode: smartCardNumber,
         });
-        console.log('[BillsService] validateSmartCard processed result:', result);
         if (!result.valid)
             throw new common_1.BadRequestException(result.message || 'Smart card could not be verified');
+        const validation = this.toValidationResult(result);
+        return validation.packageInfo
+            ? { ...validation, packageInfo: stripPlanPrice(validation.packageInfo) }
+            : validation;
+    }
+    toValidationResult(result) {
         return {
             valid: true,
+            name: result.name,
             customerName: result.name,
             address: result.address,
             packageInfo: result.packageInfo,
             outstanding: result.outstanding,
         };
     }
-    async executeBillTransaction(userId, amount, provider, metadata, purchaseFn) {
+    async executeBillTransaction(userId, amount, provider, metadata, purchaseFn, options = {}) {
         const user = await this.usersService.findById(userId);
         if (!user)
             throw new common_1.NotFoundException('User not found');
+        const paymentSource = options.paymentSource === 'cashback' ? 'cashback' : 'main';
+        const cashbackPercent = clampCashbackPercent(options.cashbackPercent);
+        const cashbackEarned = cashbackFor(amount, cashbackPercent);
         const reference = `bill_${(0, crypto_1.randomUUID)()}`;
         const session = await this.connection.startSession();
         try {
             const result = await session.withTransaction(async () => {
-                const debitResult = await this.walletService.debitForBillPayment(new mongoose_2.Types.ObjectId(userId), amount, reference, metadata, session);
+                const debitResult = await this.walletService.debitForBillPayment(new mongoose_2.Types.ObjectId(userId), amount, reference, metadata, session, { source: paymentSource });
                 if (!debitResult)
-                    throw new common_1.BadRequestException('Insufficient wallet balance');
+                    throw new common_1.BadRequestException(paymentSource === 'cashback'
+                        ? 'Insufficient cashback balance'
+                        : 'Insufficient wallet balance');
                 try {
                     const purchaseResult = await purchaseFn();
                     await this.walletService.confirmBillPayment(reference, session);
+                    if (cashbackEarned > 0) {
+                        try {
+                            await this.walletService.creditBillCashback(userId, cashbackEarned, {
+                                billReference: reference,
+                                billType: metadata.type || 'unknown',
+                                cashbackPercent,
+                                purchaseAmount: amount,
+                            }, session);
+                        }
+                        catch (cashbackError) {
+                            this.logger.error(`Failed to credit cashback for ${reference}: ${cashbackError instanceof Error ? cashbackError.message : String(cashbackError)}`);
+                        }
+                    }
                     const commission = purchaseResult.commission;
                     if (commission > 0) {
                         try {
@@ -230,6 +298,8 @@ let BillsService = BillsService_1 = class BillsService {
                         ...(Object.keys(providerDetails).length > 0
                             ? { providerDetails }
                             : {}),
+                        providerRequestId: purchaseResult.requestId,
+                        ...(cashbackEarned > 0 ? { cashbackEarned, cashbackPercent } : {}),
                     };
                     const [billTx] = await this.billTransactionModel.create([
                         {
@@ -257,6 +327,7 @@ let BillsService = BillsService_1 = class BillsService {
                         recipient: metadata.recipient || '',
                         metadata: receiptMetadata,
                         walletTransaction: debitResult._id.toString(),
+                        createdAt: billTx.createdAt,
                     });
                 }
                 catch (externalError) {
@@ -279,22 +350,10 @@ let BillsService = BillsService_1 = class BillsService {
         }
     }
     async purchaseAirtime(userId, dto) {
-        const provider = await this.resolveProvider('airtime');
-        if (provider === 'gladtidings') {
-            return this.executeBillTransaction(userId, dto.amount, 'gladtidings', {
-                type: 'airtime',
-                network: dto.network,
-                phone: dto.phone,
-                recipient: dto.phone,
-            }, () => this.gladtidings.purchaseAirtime({
-                network: dto.network,
-                amount: dto.amount,
-                phone: dto.phone,
-                ported: false,
-            }));
-        }
+        this.assertBillsConfigured();
         const serviceId = AIRTIME_NETWORK_SERVICE[dto.network] || dto.network;
-        return this.executeBillTransaction(userId, dto.amount, 'vtpass', {
+        const cashbackPercent = await this.planCashbackPercent('airtime', serviceId);
+        return this.executeBillTransaction(userId, dto.amount, BILLS_PROVIDER, {
             type: 'airtime',
             network: dto.network,
             phone: dto.phone,
@@ -303,46 +362,16 @@ let BillsService = BillsService_1 = class BillsService {
             serviceID: serviceId,
             phone: dto.phone,
             amount: dto.amount,
-        }));
+        }), { paymentSource: dto.paymentSource, cashbackPercent });
     }
     async purchaseData(userId, dto) {
-        const provider = await this.resolveProvider('data');
-        if (provider === 'gladtidings') {
-            const plan = await this.servicePlanModel
-                .findOne({
-                serviceType: 'data',
-                provider: 'gladtidings',
-                externalId: dto.dataPlanId,
-                isActive: true,
-            })
-                .lean();
-            if (!plan)
-                throw new common_1.BadRequestException('Invalid data plan selected');
-            return this.executeBillTransaction(userId, plan.amount, 'gladtidings', {
-                type: 'data',
-                variationCode: dto.dataPlanId,
-                planName: plan.name,
-                network: dto.network,
-                phone: dto.phone,
-                recipient: dto.phone,
-            }, () => this.gladtidings.purchaseData({
-                network: dto.network,
-                planId: plan.externalId,
-                planAmount: plan.amount,
-                phone: dto.phone,
-                ported: false,
-            }));
-        }
-        const dataNetwork = DATA_NETWORKS[dto.network];
-        const serviceId = dataNetwork?.serviceId || 'mtn-data';
-        const variations = await this.vtpass.getServiceVariations(serviceId);
-        const variation = variations.find((v) => v.variationCode === dto.dataPlanId);
-        if (!variation)
-            throw new common_1.BadRequestException('Invalid data plan selected');
-        return this.executeBillTransaction(userId, variation.amount, 'vtpass', {
+        this.assertBillsConfigured();
+        const { serviceId } = this.dataNetworkEntry(dto.network);
+        const plan = await this.resolveLiveDataPlan(dto.network, dto.dataPlanId);
+        return this.executeBillTransaction(userId, plan.amount, BILLS_PROVIDER, {
             type: 'data',
             variationCode: dto.dataPlanId,
-            planName: variation.name,
+            planName: plan.name,
             network: dto.network,
             phone: dto.phone,
             recipient: dto.phone,
@@ -350,178 +379,344 @@ let BillsService = BillsService_1 = class BillsService {
             serviceID: serviceId,
             phone: dto.phone,
             variationCode: dto.dataPlanId,
-        }));
+        }), {
+            paymentSource: dto.paymentSource,
+            cashbackPercent: plan.cashbackPercent,
+        });
     }
     async purchaseCable(userId, dto) {
+        this.assertBillsConfigured();
         const user = await this.usersService.findById(userId);
         if (!user)
             throw new common_1.NotFoundException('User not found');
-        const provider = await this.resolveProvider('cable');
-        if (provider === 'gladtidings') {
-            if (!dto.variationCode)
-                throw new common_1.BadRequestException('A cable plan must be selected');
-            const plan = await this.servicePlanModel
-                .findOne({
-                serviceType: 'cable',
-                provider: 'gladtidings',
-                externalId: dto.variationCode,
-                isActive: true,
-            })
-                .lean();
-            if (!plan)
-                throw new common_1.BadRequestException('Invalid cable plan selected');
-            return this.executeBillTransaction(userId, plan.amount, 'gladtidings', {
-                type: 'cable',
-                serviceProvider: dto.serviceProvider,
-                smartCardNumber: dto.smartCardNumber,
-                variationCode: dto.variationCode,
-                packageName: plan.name,
-                ...(dto.customerName ? { customerName: dto.customerName } : {}),
-                recipient: dto.smartCardNumber,
-            }, () => this.gladtidings.purchaseCable({
-                provider: plan.bucket,
-                planId: plan.externalId,
-                planAmount: plan.amount,
-                smartCardNumber: dto.smartCardNumber,
-                phone: user.phone,
-            }));
+        if (!dto.variationCode) {
+            throw new common_1.BadRequestException('A cable/bouquet plan must be selected');
         }
-        return this.executeBillTransaction(userId, dto.amount, 'vtpass', {
+        const plan = await this.resolveLiveCablePlan(dto.serviceProvider, dto.variationCode);
+        return this.executeBillTransaction(userId, plan.amount, BILLS_PROVIDER, {
             type: 'cable',
             serviceProvider: dto.serviceProvider,
             smartCardNumber: dto.smartCardNumber,
             variationCode: dto.variationCode,
+            planName: plan.name,
             ...(dto.customerName ? { customerName: dto.customerName } : {}),
             recipient: dto.smartCardNumber,
         }, () => this.vtpass.purchaseCable({
             serviceID: dto.serviceProvider,
             billersCode: dto.smartCardNumber,
-            amount: dto.amount,
+            amount: plan.amount,
             phone: user.phone,
             variationCode: dto.variationCode,
-        }));
+        }), {
+            paymentSource: dto.paymentSource,
+            cashbackPercent: plan.cashbackPercent,
+        });
+    }
+    async renewCable(userId, dto) {
+        this.assertBillsConfigured();
+        const user = await this.usersService.findById(userId);
+        if (!user)
+            throw new common_1.NotFoundException('User not found');
+        const { key, serviceId } = this.cableProviderEntry(dto.serviceProvider);
+        const verified = await this.vtpass.verifyProduct({
+            serviceID: serviceId,
+            billersCode: dto.smartCardNumber,
+        });
+        if (!verified.valid) {
+            throw new common_1.BadRequestException(verified.message || 'Smart card could not be verified');
+        }
+        const currentBouquet = (verified.packageInfo ?? '').trim();
+        const outstanding = Math.round(Number(verified.outstanding ?? 0));
+        const { plans, cashback } = await this.liveCablePlans(key);
+        const current = this.matchCurrentBouquet(plans, currentBouquet, key === 'startimes', outstanding);
+        if (key === 'startimes' && !current) {
+            throw new common_1.BadRequestException(`Could not find your current StartTimes bouquet (${currentBouquet || 'not reported'}) in the VTpass catalogue. Choose a plan instead.`);
+        }
+        const renewalAmount = outstanding > 0 ? outstanding : (current?.amount ?? 0);
+        if (renewalAmount <= 0) {
+            throw new common_1.BadRequestException('This smart card has no active subscription to renew. Choose a plan to start one.');
+        }
+        if (dto.expectedAmount != null &&
+            Math.round(dto.expectedAmount) !== renewalAmount) {
+            throw new common_1.BadRequestException(`The renewal price has changed to ₦${renewalAmount.toLocaleString('en-NG')}. Verify the smart card again to continue.`);
+        }
+        const customerName = dto.customerName ?? verified.name;
+        return this.executeBillTransaction(userId, renewalAmount, BILLS_PROVIDER, {
+            type: 'cable',
+            serviceProvider: key,
+            smartCardNumber: dto.smartCardNumber,
+            planName: stripPlanPrice(current?.name ||
+                currentBouquet ||
+                `${key.toUpperCase()} subscription`),
+            renewal: true,
+            ...(current ? { variationCode: current.variationCode } : {}),
+            ...(customerName ? { customerName } : {}),
+            recipient: dto.smartCardNumber,
+        }, () => this.vtpass.purchaseCable({
+            serviceID: serviceId,
+            billersCode: dto.smartCardNumber,
+            amount: renewalAmount,
+            phone: user.phone,
+            ...(key === 'startimes' && current
+                ? { variationCode: current.variationCode }
+                : {}),
+            renewCurrentBouquet: true,
+        }), {
+            paymentSource: dto.paymentSource,
+            cashbackPercent: current
+                ? (cashback.get(current.variationCode) ?? 0)
+                : 0,
+        });
     }
     async purchaseElectricity(userId, dto) {
-        const provider = await this.resolveProvider('electricity');
-        if (provider === 'gladtidings') {
-            return this.executeBillTransaction(userId, dto.amount, 'gladtidings', {
-                type: 'electricity',
-                disco: dto.disco,
-                meterNumber: dto.meterNumber,
-                meterType: dto.meterType,
-                ...(dto.customerName ? { customerName: dto.customerName } : {}),
-                recipient: dto.meterNumber,
-                phone: dto.phone,
-            }, () => this.gladtidings.purchaseElectricity(dto.disco, dto.meterNumber, dto.amount, dto.phone));
+        this.assertBillsConfigured();
+        const amount = Math.round(dto.amount);
+        if (amount < ELECTRICITY_MIN_AMOUNT || amount > ELECTRICITY_MAX_AMOUNT) {
+            throw new common_1.BadRequestException(`Electricity payments must be between ₦${ELECTRICITY_MIN_AMOUNT} and ₦${ELECTRICITY_MAX_AMOUNT.toLocaleString('en-NG')}`);
+        }
+        const user = await this.usersService.findById(userId);
+        if (!user)
+            throw new common_1.NotFoundException('User not found');
+        const accountPhone = user.phone?.trim() ?? '';
+        const phone = accountPhone || (dto.phone ?? '').trim();
+        if (!phone) {
+            throw new common_1.BadRequestException('Your profile has no phone number on file. Add one to pay electricity bills.');
         }
         const discoServiceId = this.DISCO_SERVICE_ID_MAP[dto.disco.toLowerCase()] ??
             dto.disco.toLowerCase().replace(/\s+/g, '');
-        return this.executeBillTransaction(userId, dto.amount, 'vtpass', {
+        return this.executeBillTransaction(userId, amount, BILLS_PROVIDER, {
             type: 'electricity',
             disco: dto.disco,
             meterNumber: dto.meterNumber,
             meterType: dto.meterType,
             ...(dto.customerName ? { customerName: dto.customerName } : {}),
             recipient: dto.meterNumber,
-            phone: dto.phone,
+            phone,
         }, () => this.vtpass.purchaseElectricity({
             serviceID: discoServiceId,
             billersCode: dto.meterNumber,
-            amount: dto.amount,
-            phone: dto.phone,
+            amount,
+            phone,
             variationCode: dto.meterType,
-        }));
+        }), {
+            paymentSource: dto.paymentSource,
+            cashbackPercent: await this.planCashbackPercent('electricity', discoServiceId),
+        });
+    }
+    dataNetworkEntry(network) {
+        const key = (network ?? '').trim().toLowerCase();
+        const entry = DATA_NETWORKS[key];
+        if (!entry) {
+            throw new common_1.BadRequestException(`Unknown data network "${network}". Supported networks: ${Object.keys(DATA_NETWORKS).join(', ')}`);
+        }
+        return { key, ...entry };
+    }
+    cableProviderEntry(provider) {
+        const key = (provider ?? '').trim().toLowerCase();
+        const serviceId = CABLE_PROVIDER_SERVICE_IDS[key];
+        if (!serviceId) {
+            throw new common_1.BadRequestException(`Unknown cable provider "${provider}". Supported providers: ${CABLE_PROVIDERS.join(', ')}`);
+        }
+        return { key, serviceId, bucket: key.toUpperCase() };
+    }
+    async liveCatalogue(params) {
+        const cacheKey = `${params.serviceType}:${params.key}`;
+        const cached = this.catalogueCache.get(cacheKey);
+        let variations;
+        if (cached && Date.now() - cached.fetchedAt < CATALOGUE_CACHE_TTL_MS) {
+            variations = cached.plans;
+        }
+        else {
+            variations = await this.vtpass.getServiceVariations(params.serviceId);
+            this.catalogueCache.set(cacheKey, {
+                fetchedAt: Date.now(),
+                plans: variations,
+            });
+        }
+        const { offIds, cashback } = await this.planOverlay(params.serviceType, params.bucket);
+        const plans = variations
+            .filter((variation) => !offIds.has(variation.variationCode))
+            .sort((a, b) => a.amount - b.amount);
+        return { plans, cashback };
+    }
+    async planOverlay(serviceType, bucket) {
+        const rows = await this.servicePlanModel
+            .find({
+            serviceType,
+            provider: BILLS_PROVIDER,
+            bucket: { $regex: `^${bucket}$`, $options: 'i' },
+        })
+            .lean();
+        return {
+            offIds: new Set(rows
+                .filter((row) => row.isActive === false)
+                .map((row) => row.externalId)),
+            cashback: new Map(rows.map((row) => [
+                row.externalId,
+                clampCashbackPercent(row.cashbackPercent),
+            ])),
+        };
+    }
+    liveDataPlans(network) {
+        const { key, serviceId, bucket } = this.dataNetworkEntry(network);
+        return this.liveCatalogue({ serviceType: 'data', key, serviceId, bucket });
+    }
+    liveCablePlans(provider) {
+        const { key, serviceId, bucket } = this.cableProviderEntry(provider);
+        return this.liveCatalogue({ serviceType: 'cable', key, serviceId, bucket });
+    }
+    matchCurrentBouquet(plans, currentBouquet, requireExact = false, amountHint = 0) {
+        const target = bouquetKey(currentBouquet);
+        if (!target)
+            return undefined;
+        const keyed = plans
+            .map((plan) => ({ plan, key: bouquetKey(stripPlanPrice(plan.name)) }))
+            .filter((entry) => entry.key.length > 0);
+        const exact = keyed.find((entry) => entry.key === target);
+        if (exact)
+            return exact.plan;
+        let candidates = keyed.filter((entry) => entry.key.includes(target) || target.includes(entry.key));
+        if (candidates.length > 1 && amountHint > 0) {
+            const byAmount = candidates.filter((entry) => Math.round(entry.plan.amount) === Math.round(amountHint));
+            if (byAmount.length > 0)
+                candidates = byAmount;
+        }
+        if (requireExact && candidates.length !== 1)
+            return undefined;
+        return candidates[0]?.plan;
+    }
+    async resolveLiveDataPlan(network, variationCode) {
+        if (!variationCode) {
+            throw new common_1.BadRequestException('A data plan must be selected');
+        }
+        const { bucket } = this.dataNetworkEntry(network);
+        const { plans: live, cashback } = await this.liveDataPlans(network);
+        const match = live.find((variation) => variation.variationCode === variationCode);
+        if (match)
+            return {
+                name: match.name,
+                amount: match.amount,
+                cashbackPercent: cashback.get(match.variationCode) ?? 0,
+            };
+        const stored = await this.servicePlanModel
+            .findOne({
+            serviceType: 'data',
+            provider: BILLS_PROVIDER,
+            externalId: variationCode,
+            bucket: { $regex: `^${bucket}$`, $options: 'i' },
+        })
+            .lean();
+        if (stored && !stored.isActive) {
+            throw new common_1.BadRequestException(`${stored.name} is currently unavailable`);
+        }
+        throw new common_1.BadRequestException('Invalid data plan selected');
     }
     async getDataPlans(network) {
-        const bucket = network === '9mobile' ? '9MOBILE' : network.toUpperCase();
-        const dataNetwork = DATA_NETWORKS[network];
-        const provider = await this.resolveProvider('data');
-        const bucketFilter = { $regex: `^${bucket}$`, $options: 'i' };
-        const synced = await this.servicePlanModel
-            .find({
-            serviceType: 'data',
-            provider,
-            bucket: bucketFilter,
-            isActive: true,
-        })
-            .sort({ amount: 1 })
-            .lean();
-        if (synced.length) {
-            return synced.map((p) => ({
-                variationCode: p.externalId,
-                name: p.name,
-                amount: p.amount,
-                fixedPrice: p.fixedPrice,
-            }));
-        }
-        const everSynced = await this.servicePlanModel.exists({
-            serviceType: 'data',
-            provider,
-            bucket: bucketFilter,
-        });
-        if (everSynced)
-            return [];
-        const serviceId = dataNetwork?.serviceId || 'mtn-data';
-        return this.vtpass.getServiceVariations(serviceId);
+        this.assertBillsConfigured();
+        const { plans, cashback } = await this.liveDataPlans(network);
+        return plans.map((plan) => ({
+            variationCode: plan.variationCode,
+            name: plan.name,
+            amount: plan.amount,
+            fixedPrice: plan.fixedPrice,
+            cashbackPercent: cashback.get(plan.variationCode) ?? 0,
+            cashback: cashbackFor(plan.amount, cashback.get(plan.variationCode)),
+        }));
     }
     async getCablePlans(provider) {
-        const activeProvider = await this.resolveProvider('cable');
-        const synced = await this.servicePlanModel
-            .find({
-            serviceType: 'cable',
-            provider: activeProvider,
-            bucket: provider.toUpperCase(),
-            isActive: true,
-        })
-            .sort({ amount: 1 })
-            .lean();
-        if (synced.length) {
-            return synced.map((p) => ({
-                variationCode: p.externalId,
-                name: p.name,
-                amount: p.amount,
-                fixedPrice: p.fixedPrice,
-            }));
+        this.assertBillsConfigured();
+        const { plans, cashback } = await this.liveCablePlans(provider);
+        return plans.map((plan) => ({
+            variationCode: plan.variationCode,
+            name: stripPlanPrice(plan.name),
+            amount: plan.amount,
+            fixedPrice: plan.fixedPrice,
+            cashbackPercent: cashback.get(plan.variationCode) ?? 0,
+            cashback: cashbackFor(plan.amount, cashback.get(plan.variationCode)),
+        }));
+    }
+    async estimateCashback(params) {
+        this.assertBillsConfigured();
+        const requested = Math.round(Number(params.amount ?? 0) || 0);
+        const provider = (params.provider ?? '').trim();
+        let purchaseAmount = requested;
+        let cashbackPercent = 0;
+        if (params.serviceType === 'data') {
+            const plan = await this.resolveLiveDataPlan(provider, params.variationCode ?? '');
+            purchaseAmount = plan.amount;
+            cashbackPercent = plan.cashbackPercent;
         }
-        const everSynced = await this.servicePlanModel.exists({
-            serviceType: 'cable',
-            provider: activeProvider,
-            bucket: provider.toUpperCase(),
-        });
-        if (everSynced)
-            return [];
-        return this.vtpass.getServiceVariations(provider.toLowerCase());
+        else if (params.serviceType === 'cable') {
+            if (params.variationCode) {
+                const plan = await this.resolveLiveCablePlan(provider, params.variationCode);
+                purchaseAmount = plan.amount;
+                cashbackPercent = plan.cashbackPercent;
+            }
+            else {
+                const { plans, cashback } = await this.liveCablePlans(provider);
+                const current = this.matchCurrentBouquet(plans, params.packageName, false, requested);
+                cashbackPercent = current
+                    ? (cashback.get(current.variationCode) ?? 0)
+                    : 0;
+            }
+        }
+        else if (params.serviceType === 'airtime') {
+            const serviceId = AIRTIME_NETWORK_SERVICE[provider] || provider;
+            cashbackPercent = await this.planCashbackPercent('airtime', serviceId);
+        }
+        else {
+            const discoServiceId = this.DISCO_SERVICE_ID_MAP[provider.toLowerCase()] ??
+                provider.toLowerCase().replace(/\s+/g, '');
+            cashbackPercent = await this.planCashbackPercent('electricity', discoServiceId);
+        }
+        return {
+            serviceType: params.serviceType,
+            purchaseAmount,
+            cashbackPercent,
+            cashback: cashbackFor(purchaseAmount, cashbackPercent),
+        };
     }
     async getActiveServiceTypes() {
-        return [...BILL_SERVICE_TYPES];
-    }
-    async listProviderConfigs() {
-        const configs = await this.providerConfigModel.find({}).lean();
-        const counts = await this.servicePlanModel.aggregate([
+        const stats = await this.servicePlanModel.aggregate([
+            {
+                $match: { provider: BILLS_PROVIDER },
+            },
             {
                 $group: {
-                    _id: { serviceType: '$serviceType', provider: '$provider' },
+                    _id: '$serviceType',
                     total: { $sum: 1 },
                     active: { $sum: { $cond: ['$isActive', 1, 0] } },
                 },
             },
+        ]);
+        const byType = new Map(stats.map((stat) => [stat._id, stat]));
+        return BILL_SERVICE_TYPES.filter((serviceType) => {
+            const stat = byType.get(serviceType);
+            if (!stat)
+                return true;
+            return stat.active > 0;
+        });
+    }
+    async listCatalogStatus() {
+        const configs = await this.providerConfigModel.find({}).lean();
+        const counts = await this.servicePlanModel.aggregate([
             {
-                $project: {
-                    _id: 0,
-                    serviceType: '$_id.serviceType',
-                    provider: '$_id.provider',
-                    total: 1,
-                    active: 1,
+                $match: { provider: BILLS_PROVIDER },
+            },
+            {
+                $group: {
+                    _id: '$serviceType',
+                    total: { $sum: 1 },
+                    active: { $sum: { $cond: ['$isActive', 1, 0] } },
                 },
             },
         ]);
+        const byType = new Map(counts.map((count) => [count._id, count]));
         return BILL_SERVICE_TYPES.map((serviceType) => {
             const cfg = configs.find((c) => c.serviceType === serviceType);
-            const activeProvider = cfg?.activeProvider ?? 'vtpass';
-            const stat = counts.find((c) => c.serviceType === serviceType && c.provider === activeProvider);
+            const stat = byType.get(serviceType);
             return {
                 serviceType,
-                activeProvider,
                 lastSyncedAt: cfg?.lastSyncedAt ?? undefined,
                 lastSyncStatus: cfg?.lastSyncStatus ?? 'never',
                 planTotal: stat?.total ?? 0,
@@ -530,15 +725,10 @@ let BillsService = BillsService_1 = class BillsService {
             };
         });
     }
-    async setProvider(serviceType, provider) {
-        await this.providerConfigModel.updateOne({ serviceType }, { $set: { serviceType, activeProvider: provider } }, { upsert: true });
-        return this.listProviderConfigs();
-    }
     async syncPlans(serviceType) {
-        const provider = await this.resolveProvider(serviceType);
-        const plans = provider === 'gladtidings'
-            ? await this.gladtidings.getCatalogPlans(serviceType)
-            : await this.vtpassCatalog(serviceType);
+        this.assertBillsConfigured();
+        const provider = BILLS_PROVIDER;
+        const plans = await this.vtpassCatalog(serviceType);
         let created = 0;
         let updated = 0;
         for (const p of plans) {
@@ -553,7 +743,7 @@ let BillsService = BillsService_1 = class BillsService {
                     fixedPrice: p.fixedPrice ?? true,
                     ...(p.meta ? { meta: p.meta } : {}),
                 },
-                $setOnInsert: { isActive: provider === 'gladtidings' ? false : true },
+                $setOnInsert: { isActive: true },
             }, { upsert: true });
             if (result.upsertedCount === 1)
                 created += 1;
@@ -586,11 +776,9 @@ let BillsService = BillsService_1 = class BillsService {
         const page = query.page ?? 1;
         const limit = query.limit ?? 50;
         const skip = (page - 1) * limit;
-        const filter = {};
+        const filter = { provider: BILLS_PROVIDER };
         if (query.serviceType)
             filter.serviceType = query.serviceType;
-        if (query.provider)
-            filter.provider = query.provider;
         if (query.bucket)
             filter.bucket = query.bucket;
         const [total, plans] = await Promise.all([
@@ -608,11 +796,12 @@ let BillsService = BillsService_1 = class BillsService {
                 serviceType: p.serviceType,
                 provider: p.provider,
                 externalId: p.externalId,
-                name: p.name,
+                name: p.serviceType === 'cable' ? stripPlanPrice(p.name) : p.name,
                 bucket: p.bucket,
                 amount: p.amount,
                 fixedPrice: p.fixedPrice,
                 isActive: p.isActive,
+                cashbackPercent: clampCashbackPercent(p.cashbackPercent),
                 updatedAt: p.updatedAt,
             })),
             page,
@@ -634,6 +823,29 @@ let BillsService = BillsService_1 = class BillsService {
             isActive: plan.isActive,
         };
     }
+    async setPlanCashback(id, cashbackPercent) {
+        if (!Number.isFinite(cashbackPercent)) {
+            throw new common_1.BadRequestException('Cashback percentage must be a number');
+        }
+        if (cashbackPercent < 0 || cashbackPercent > 100) {
+            throw new common_1.BadRequestException('Cashback percentage must be between 0 and 100');
+        }
+        const plan = await this.servicePlanModel.findById(id);
+        if (!plan)
+            throw new common_1.NotFoundException('Plan not found');
+        if (plan.provider !== BILLS_PROVIDER) {
+            throw new common_1.BadRequestException(`This plan belongs to a retired provider (${plan.provider}) and is not sold to members`);
+        }
+        plan.cashbackPercent = Math.round(cashbackPercent * 100) / 100;
+        await plan.save();
+        return {
+            id: plan._id.toString(),
+            serviceType: plan.serviceType,
+            name: plan.name,
+            bucket: plan.bucket,
+            cashbackPercent: plan.cashbackPercent,
+        };
+    }
     toBillReceipt(raw) {
         return {
             _id: raw._id,
@@ -647,11 +859,17 @@ let BillsService = BillsService_1 = class BillsService {
             recipient: raw.recipient,
             metadata: raw.metadata,
             walletTransaction: raw.walletTransaction?.toString(),
+            createdAt: raw.createdAt?.toISOString(),
         };
     }
-    async getHistory(userId) {
+    async getHistory(userId, query = {}) {
+        const filter = {
+            user: new mongoose_2.Types.ObjectId(userId),
+        };
+        if (query.serviceType)
+            filter.type = query.serviceType;
         const txns = await this.billTransactionModel
-            .find({ user: userId })
+            .find(filter)
             .sort({ createdAt: -1 })
             .limit(100)
             .lean();
@@ -669,11 +887,12 @@ let BillsService = BillsService_1 = class BillsService {
             walletTransaction: t.walletTransaction
                 ? t.walletTransaction.toString()
                 : undefined,
+            createdAt: t.createdAt,
         }));
     }
     async getReceipt(userId, reference) {
         const txn = await this.billTransactionModel
-            .findOne({ user: userId, reference })
+            .findOne({ user: new mongoose_2.Types.ObjectId(userId), reference })
             .lean();
         if (!txn)
             throw new common_1.NotFoundException('Receipt not found');
@@ -691,6 +910,7 @@ let BillsService = BillsService_1 = class BillsService {
             walletTransaction: txn.walletTransaction
                 ? txn.walletTransaction.toString()
                 : undefined,
+            createdAt: txn.createdAt,
         });
     }
     toAdminBillTransaction(raw, user) {
@@ -762,12 +982,11 @@ let BillsService = BillsService_1 = class BillsService {
 exports.BillsService = BillsService;
 exports.BillsService = BillsService = BillsService_1 = __decorate([
     (0, common_1.Injectable)(),
-    __param(5, (0, mongoose_1.InjectConnection)()),
-    __param(6, (0, mongoose_1.InjectModel)(bill_provider_config_schema_1.BillProviderConfig.name)),
-    __param(7, (0, mongoose_1.InjectModel)(bill_service_plan_schema_1.BillServicePlan.name)),
-    __param(8, (0, mongoose_1.InjectModel)(bill_transaction_schema_1.BillTransaction.name)),
+    __param(4, (0, mongoose_1.InjectConnection)()),
+    __param(5, (0, mongoose_1.InjectModel)(bill_provider_config_schema_1.BillProviderConfig.name)),
+    __param(6, (0, mongoose_1.InjectModel)(bill_service_plan_schema_1.BillServicePlan.name)),
+    __param(7, (0, mongoose_1.InjectModel)(bill_transaction_schema_1.BillTransaction.name)),
     __metadata("design:paramtypes", [vtpass_service_1.VTPassService,
-        gladtidings_service_1.GladTidingsService,
         wallet_service_1.WalletService,
         users_service_1.UsersService,
         notifications_service_1.NotificationsService,

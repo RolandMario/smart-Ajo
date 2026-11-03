@@ -8,6 +8,7 @@ export declare class WalletController {
     constructor(walletService: WalletService);
     getWallet(user: RequestUser): Promise<{
         balance: number;
+        cashbackBalance: number;
         currency: string;
         recentTransactions: (import("./schemas/wallet-transaction.schema").WalletTransaction & import("mongoose").Document<import("mongoose").Types.ObjectId, any, any, Record<string, any>, {}> & Required<{
             _id: import("mongoose").Types.ObjectId;
@@ -25,12 +26,22 @@ export declare class WalletController {
         } | null;
     }>;
     listTransactions(user: RequestUser, query: ListTransactionsQueryDto): Promise<import("./wallet.service").PaginatedWalletTransactions>;
+    getCashbackWallet(user: RequestUser): Promise<{
+        balance: number;
+        currency: string;
+        transactions: (import("./schemas/wallet-transaction.schema").WalletTransaction & import("mongoose").Document<import("mongoose").Types.ObjectId, any, any, Record<string, any>, {}> & Required<{
+            _id: import("mongoose").Types.ObjectId;
+        }> & {
+            __v: number;
+        })[];
+    }>;
     initializeFunding(user: RequestUser, dto: FundWalletDto): Promise<{
         authorizationUrl: string;
         reference: string;
     }>;
     verifyFunding(user: RequestUser, reference: string): Promise<{
         balance: number;
+        cashbackBalance: number;
         currency: string;
         recentTransactions: (import("./schemas/wallet-transaction.schema").WalletTransaction & import("mongoose").Document<import("mongoose").Types.ObjectId, any, any, Record<string, any>, {}> & Required<{
             _id: import("mongoose").Types.ObjectId;

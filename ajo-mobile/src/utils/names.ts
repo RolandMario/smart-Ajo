@@ -17,7 +17,7 @@ export function initials(name?: string | null): string {
 /** "Chidinma Amara Nnamdi" → "Chidinma N." (the mock's "Chidinma A." style). */
 export function displayName(name?: string | null): string {
   const parts = (name ?? "").trim().split(/\s+/).filter(Boolean);
-  if (parts.length === 0) return "Ajo member";
+  if (parts.length === 0) return "SmartThrift member";
   if (parts.length === 1) return parts[0];
   return `${parts[0]} ${parts[parts.length - 1][0].toUpperCase()}.`;
 }
