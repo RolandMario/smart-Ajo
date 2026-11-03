@@ -6,20 +6,22 @@ export const envValidationSchema = Joi.object({
     .default('development'),
   PORT: Joi.number().default(5010),
 
+  // No credentials in source — always supply MONGODB_URI through the
+  // environment (local .env or the host's env vars). The default below is a
+  // shape-only placeholder and cannot connect anywhere.
   MONGODB_URI: Joi.string().default(
     'mongodb+srv://<user>:<pass>@<cluster>.mongodb.net/vtu?retryWrites=true&w=majority',
   ),
 
   // JWT
-  JWT_ACCESS_SECRET: Joi.string().default(
-    'change-this-to-a-long-random-string',
-  ),
+  // No credentials in source — supply JWT_ACCESS_SECRET through the
+  // environment. Generate one with:  openssl rand -hex 32
+  JWT_ACCESS_SECRET: Joi.string().default('change-this-to-a-long-random-string'),
   JWT_ACCESS_EXPIRES_IN: Joi.string().default('7d'),
 
   // Termii
-  TERMII_API_KEY: Joi.string().default(
-    'your-termii-api-key',
-  ),
+  // No credentials in source — supply TERMII_API_KEY through the environment.
+  TERMII_API_KEY: Joi.string().default('your-termii-api-key'),
   TERMII_SENDER_ID: Joi.string().default('OE Alert'),
   TERMII_BASE_URL: Joi.string().default('https://v4.api.termii.com/'),
 
@@ -91,6 +93,10 @@ export const envValidationSchema = Joi.object({
 
   // Seed script
   SEED_PLATFORM_ADMIN_EMAIL: Joi.string().email().default('admin@ajo.app'),
-  SEED_PLATFORM_ADMIN_PASSWORD: Joi.string().min(8).default('change-this-strong-password'),
+  // No credentials in source — supply SEED_PLATFORM_ADMIN_PASSWORD through the
+  // environment when running `npm run seed:platform-admin`.
+  SEED_PLATFORM_ADMIN_PASSWORD: Joi.string()
+    .min(8)
+    .default('change-this-strong-password'),
   SEED_PLATFORM_ADMIN_PHONE: Joi.string().default('+2347068497569'),
 });
